@@ -408,13 +408,25 @@ function resoudreProjet(config, projet) {
   };
 }
 
-/** Jointure de chemins Windows, valable quel que soit l'OS courant. */
+/**
+ * Jointure d'une racine et d'un dossier de projet.
+ *
+ * Une racine Windows (`Z:\…`, `\\serveur\…`) est jointe à la mode Windows quel
+ * que soit l'OS courant — c'est le cas réel d'exploitation. Une racine POSIX est
+ * jointe avec `/`, ce qui permet d'exercer ces modules depuis un script en ligne
+ * de commande sur un autre système.
+ */
 function joindreWin(racine, relatif) {
   const base = texte(racine);
   const suite = texte(relatif);
   if (!base) return suite;
   if (!suite) return base;
-  return path.win32.join(base, suite);
+  return styleWindows(base) ? path.win32.join(base, suite) : path.posix.join(base, suite);
+}
+
+/** La racine est-elle exprimée à la mode Windows ? */
+function styleWindows(chemin) {
+  return /^[a-z]:/i.test(chemin) || chemin.startsWith('\\\\') || chemin.includes('\\');
 }
 
 /** Retrouve un projet par identifiant, ou le premier projet actif. */

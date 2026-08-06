@@ -42,12 +42,20 @@ electron/
   main.js       fenêtre et handlers IPC — aucune logique métier
   preload.js    pont contextBridge ; le renderer n'a aucun accès direct au disque
   core/         logique métier en modules Node purs (aucun require('electron'))
-    config.js   réglages : valeurs par défaut, contrôle de cohérence, lecture/écriture
+    config.js   réglages : défauts, normalisation, contrôle de cohérence, écriture atomique
+    fsindex.js  parcours récursif, empreintes SHA-256, cache, concurrence bornée
+    compare.js  appariement des deux arbres, statuts, compteurs agrégés
+    search.js   recherche et filtrage, occurrences dans le contenu
+    textdiff.js encodage (BOM → UTF-8 strict → Windows-1252) et diff ligne à ligne
+    avmdf.js    tickets, conventions de sprint, résolution de destination
+    deploy.js   préflight, archivage, copie, manifeste, récapitulatif, retour arrière
+    journal.js  journal quotidien en texte
 renderer/
   index.html    page unique
   styles.css    thème sombre, jeu de couleurs des statuts et du diff
   app.js        montage racine et état global
-  components/   un fichier par composant
+  components/   un fichier par composant (arbre, diff, filtres, destination,
+                confirmation, rapport, historique, journal, réglages…)
   vendor/       Preact, hooks et htm en ESM, copiés localement
 ```
 
@@ -87,8 +95,8 @@ rouge et chaque mise en production qui le concerne affichera un avertissement.
 
 ## Format du manifeste
 
-À venir avec l'étape 6. Chaque déploiement réel écrira dans le dossier de sprint un fichier
-`_deploiement_<horodatage>.json` :
+Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<horodatage>.json`
+(horodatage à la milliseconde, pour que deux passages rapprochés ne se marchent pas dessus) :
 
 ```json
 {
@@ -118,23 +126,57 @@ rouge et chaque mise en production qui le concerne affichera un avertissement.
 }
 ```
 
+Champs propres à l'outil : `operation` vaut `deploiement`, `suppression` ou `restauration` ;
+`archiveNonRemplace` signale un fichier archivé dont la copie a échoué ; `sauvegardeConservee`
+signale une archive héritée d'un passage précédent dans le même sprint.
+
 C'est ce fichier que relit l'écran Historique pour proposer le retour arrière. Un
-`_recapitulatif.md` lisible est écrit dans le même dossier pour la traçabilité.
+`_recapitulatif.md` lisible est complété dans le même dossier à chaque passage : c'est lui qu'on
+transmet pour la traçabilité.
 
 ---
 
-## Avancement
+## Décisions prises
 
-| # | Étape | État |
-|---|-------|------|
-| 1 | Squelette : fenêtre, preload, `config.js`, écran Réglages | **fait** |
-| 2 | Scan et comparaison : `fsindex.js`, `compare.js`, arbre et statuts | à faire |
-| 3 | Recherche et filtres : `search.js` | à faire |
-| 4 | Diff : `textdiff.js`, vue côte à côte, encodage | à faire |
-| 5 | AVMDF : `avmdf.js`, tickets, conventions de sprint | à faire |
-| 6 | Déploiement : `deploy.js`, préflight, simulation, manifeste | à faire |
-| 7 | Historique et retour arrière | à faire |
-| 8 | Journal, packaging, documentation | à faire |
+Deux points laissés ouverts par la spécification ont été tranchés ainsi. Ils se changent sans
+difficulté si vous préférez l'inverse.
 
-Les emplacements encore vides portent une pastille « Étape N » dans l'interface (classe CSS
-`note-chantier`) : elles disparaissent au fur et à mesure.
+**Fichiers orphelins.** Présents en production seulement, ils ne partent jamais avec une mise en
+production : c'est une opération distincte. On les coche seuls, le bouton du bandeau devient
+« Supprimer en production », la version supprimée est archivée dans le sprint **avant** d'être
+retirée, et l'opération produit son propre manifeste — donc elle est réversible comme les autres.
+Cocher un dossier ne mélange jamais les deux natures.
+
+**Pools IIS.** L'outil ne pilote pas le serveur. S'il détecte un fichier verrouillé, il bloque
+avant la première écriture et dit quoi faire : recycler le pool ou déposer un `app_offline.htm`.
+Le dépôt automatique de `app_offline.htm` reste disponible en option dans les réglages, désactivé
+par défaut.
+
+## Ce que l'outil ne fait jamais
+
+- déployer sans avoir archivé la version écrasée ;
+- écraser une archive déjà présente dans un sprint — la version « avant modification » d'origine
+  gagne toujours, un second passage la conserve ;
+- ré-encoder, reformater ou normaliser les fins de ligne : la copie est binaire, octet pour octet ;
+- écrire hors des racines configurées : chaque destination est résolue en absolu et vérifiée ;
+- conclure à l'égalité sur la date ou la taille seules ;
+- interrompre un scan parce qu'un dossier est inaccessible.
+
+## Raccourcis
+
+| Touche | Action |
+|---|---|
+| `F5` | Analyser |
+| `F8` / `Maj+F8` | Changement suivant / précédent dans la comparaison |
+| `Ctrl+F` | Chercher dans la comparaison affichée |
+| `Ctrl+Entrée` | Mettre en production |
+| `Échap` | Fermer l'écran ouvert |
+| `↑` `↓` `←` `→` `Espace` `Entrée` | Naviguer, plier, cocher, ouvrir dans l'arborescence |
+
+## Fichiers produits dans `%APPDATA%\avmdf-deploy`
+
+| Fichier | Rôle |
+|---|---|
+| `config.json` | réglages ; `config.precedent.json` garde la version d'avant |
+| `cache-hash.json` | empreintes connues, indexées sur chemin + taille + date |
+| `logs\journal-AAAA-MM-JJ.log` | une ligne par événement horodaté |

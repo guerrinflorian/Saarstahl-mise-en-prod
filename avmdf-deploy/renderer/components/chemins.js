@@ -6,13 +6,19 @@
  * Les deux implémentations doivent donner le même résultat.
  */
 
-/** Joint une racine et un dossier relatif avec des séparateurs Windows. */
+/**
+ * Joint une racine et un dossier de projet. Une racine Windows (`Z:\…`) reçoit
+ * des séparateurs Windows ; une racine POSIX garde les siens, pour que l'outil
+ * reste exerçable ailleurs que sur le poste de production.
+ */
 export function joindreChemin(racine, relatif) {
-  const base = String(racine || '').trim().replace(/[\\/]+$/, '');
-  const suite = String(relatif || '').trim().replace(/^[\\/]+/, '').replace(/\//g, '\\');
+  const brut = String(racine || '').trim();
+  const base = brut.replace(/[\\/]+$/, '');
+  const suite = String(relatif || '').trim().replace(/^[\\/]+/, '');
   if (!base) return suite;
-  if (!suite) return String(racine || '').trim();
-  return base + '\\' + suite;
+  if (!suite) return brut;
+  const windows = /^[a-z]:/i.test(brut) || brut.startsWith('\\\\') || brut.includes('\\');
+  return base + (windows ? '\\' + suite.replace(/\//g, '\\') : '/' + suite.replace(/\\/g, '/'));
 }
 
 /**

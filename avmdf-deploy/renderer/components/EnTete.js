@@ -6,14 +6,34 @@ const html = htm.bind(h);
 
 /**
  * Barre du haut : cible de la comparaison (projet ou dossiers libres),
- * chemins résolus, lancement de l'analyse, accès aux réglages.
+ * chemins résolus, lancement de l'analyse, accès aux écrans annexes.
  */
-export function EnTete({ config, projet, cible, onChangerProjet, onQuitterModeLibre, onAnalyser, onOuvrirReglages }) {
+export function EnTete({
+  config,
+  projet,
+  cible,
+  analyseEnCours,
+  onChangerProjet,
+  onQuitterModeLibre,
+  onAnalyser,
+  onAnnuler,
+  onOuvrirReglages,
+  onOuvrirHistorique,
+  onOuvrirJournal
+}) {
   const projetsActifs = config.projets.filter((p) => p.actif);
   const modeLibre = cible.mode === 'libre';
 
-  const gauche = modeLibre ? cible.dossierA : projet ? joindreChemin(config.racines.locale, projet.dossierLocal) : '';
-  const droite = modeLibre ? cible.dossierB : projet ? joindreChemin(config.racines.prod, projet.dossierProd) : '';
+  const gauche = modeLibre
+    ? cible.dossierB
+    : projet
+      ? joindreChemin(config.racines.locale, projet.dossierLocal)
+      : '';
+  const droite = modeLibre
+    ? cible.dossierA
+    : projet
+      ? joindreChemin(config.racines.prod, projet.dossierProd)
+      : '';
 
   return html`
     <header class="entete">
@@ -25,9 +45,7 @@ export function EnTete({ config, projet, cible, onChangerProjet, onQuitterModeLi
       ${modeLibre
         ? html`
             <span class="etiquette-mode">Comparaison libre</span>
-            <button type="button" class="btn btn-plat" onClick=${onQuitterModeLibre}>
-              Revenir aux projets
-            </button>
+            <button type="button" class="btn btn-plat" onClick=${onQuitterModeLibre}>Revenir aux projets</button>
           `
         : html`
             <label for="choix-projet">Projet</label>
@@ -39,9 +57,7 @@ export function EnTete({ config, projet, cible, onChangerProjet, onQuitterModeLi
             >
               ${projetsActifs.length === 0
                 ? html`<option value="">Aucun projet actif</option>`
-                : projetsActifs.map(
-                    (p) => html`<option value=${p.id} key=${p.id}>${p.nom || '(sans nom)'}</option>`
-                  )}
+                : projetsActifs.map((p) => html`<option value=${p.id} key=${p.id}>${p.nom || '(sans nom)'}</option>`)}
             </select>
           `}
 
@@ -56,14 +72,22 @@ export function EnTete({ config, projet, cible, onChangerProjet, onQuitterModeLi
       </div>
 
       <div class="entete-actions">
-        <button
-          type="button"
-          class="btn"
-          disabled=${!gauche || !droite || !onAnalyser}
-          title=${onAnalyser ? 'Comparer les deux arborescences (F5)' : 'Analyse récursive : étape suivante du chantier'}
-          onClick=${onAnalyser || undefined}
-        >
-          Analyser
+        ${analyseEnCours
+          ? html`<button type="button" class="btn" onClick=${onAnnuler}>Annuler l'analyse</button>`
+          : html`<button
+              type="button"
+              class="btn"
+              disabled=${!gauche || !droite}
+              title="Comparer les deux arborescences (F5)"
+              onClick=${onAnalyser}
+            >
+              Analyser
+            </button>`}
+        <button type="button" class="btn btn-plat" title="Déploiements passés et retour arrière" onClick=${onOuvrirHistorique}>
+          Historique
+        </button>
+        <button type="button" class="btn btn-plat" title="Journal des événements" onClick=${onOuvrirJournal}>
+          Journal
         </button>
         <button type="button" class="btn" title="Réglages" onClick=${onOuvrirReglages}>⚙ Réglages</button>
       </div>

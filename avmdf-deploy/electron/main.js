@@ -3,57 +3,57 @@
 /**
  * main.js — fenêtre principale et handlers IPC.
  *
- * Ce fichier ne contient aucune logique métier : elle vit dans `core/`.
+ * Ce fichier n'orchestre que des appels : la logique vit dans `core/`.
  * Toute écriture sur le disque passe par ici ; le renderer n'a aucun accès
- * direct au système de fichiers.
+ * direct au système de fichiers et ne manipule jamais de chemin absolu qu'il
+ * aurait fabriqué lui-même — il désigne les fichiers par leur clé d'analyse.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
+const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
 
 const config = require('./core/config');
+const fsindex = require('./core/fsindex');
+const compare = require('./core/compare');
+const search = require('./core/search');
+const textdiff = require('./core/textdiff');
+const avmdf = require('./core/avmdf');
+const deploy = require('./core/deploy');
+const journal = require('./core/journal');
 
 const MODE_DEV = process.argv.includes('--dev');
 
 /** @type {BrowserWindow | null} */
 let fenetre = null;
-/** @type {ReturnType<typeof config.creerDepot> | null} */
 let depotConfig = null;
-/** Avertissements produits au premier chargement (fichier corrompu, droits…). */
+let cacheHash = null;
+let carnet = null;
 let avertissementsDemarrage = [];
 
+/** Analyse en cours et dernier résultat connu, qui fait autorité côté serveur. */
+let analyseEnCours = null;
+let dernierScan = null;
+let rechercheEnCours = null;
+let operationEnCours = null;
+
 // ---------------------------------------------------------------------------
-// Réponses IPC : une forme unique, jamais d'exception qui traverse le pont
+// Réponses IPC
 // ---------------------------------------------------------------------------
 
 function succes(donnees) {
   return Object.assign({ ok: true }, donnees);
 }
 
-/**
- * @param {string} message ce qui s'est passé
- * @param {string} conseil ce qu'il faut faire
- * @param {Error} [cause]
- */
 function echec(message, conseil, cause) {
-  if (cause) {
-    console.error('[avmdf]', message, cause);
-  }
+  if (cause) console.error('[avmdf]', message, cause);
   return {
     ok: false,
-    erreur: {
-      message,
-      conseil,
-      code: cause && cause.code ? cause.code : null
-    }
+    erreur: { message, conseil, code: cause && cause.code ? cause.code : null }
   };
 }
 
-/**
- * Enregistre un handler IPC en le protégeant : une exception inattendue
- * devient une réponse d'échec lisible au lieu d'une promesse rejetée.
- */
 function gerer(canal, handler) {
   ipcMain.handle(canal, async (evenement, ...arguments_) => {
     if (!expediteurAutorise(evenement)) {
@@ -65,25 +65,37 @@ function gerer(canal, handler) {
     try {
       return await handler(...arguments_);
     } catch (err) {
+      if (carnet) carnet.ecrire('ERREUR', `${canal} : ${err.message}`);
       return echec(
         `Erreur inattendue pendant « ${canal} » : ${err.message}`,
-        'Relancez l\'application ; si le problème persiste, consultez la console (Ctrl+Maj+I).',
+        'Relancez l\'application ; si le problème persiste, consultez le journal.',
         err
       );
     }
   });
 }
 
-/** Seule la fenêtre de l'application peut appeler les handlers. */
 function expediteurAutorise(evenement) {
   return Boolean(fenetre) && evenement.sender === fenetre.webContents;
 }
 
+function emettre(canal, donnees) {
+  if (fenetre && !fenetre.isDestroyed()) fenetre.webContents.send(canal, donnees);
+}
+
+function contexteConfig() {
+  return { utilisateur: process.env.USERNAME || process.env.USER || '' };
+}
+
+function reglages() {
+  return depotConfig.charger().config;
+}
+
 // ---------------------------------------------------------------------------
-// Handlers
+// Réglages
 // ---------------------------------------------------------------------------
 
-function enregistrerHandlers() {
+function handlersConfig() {
   gerer('systeme:infos', () => {
     const avertissements = avertissementsDemarrage;
     avertissementsDemarrage = [];
@@ -96,6 +108,7 @@ function enregistrerHandlers() {
         utilisateur: process.env.USERNAME || process.env.USER || os.userInfo().username || '',
         cheminConfig: depotConfig.chemin,
         dossierDonnees: app.getPath('userData'),
+        dossierJournaux: carnet.dossier,
         modeDev: MODE_DEV
       },
       avertissements
@@ -103,26 +116,19 @@ function enregistrerHandlers() {
   });
 
   gerer('config:lire', () => {
-    const { config: reglages, existait, avertissements } = depotConfig.charger();
-    return succes({
-      config: reglages,
-      existait,
-      avertissements,
-      controle: config.verifier(reglages)
-    });
+    const { config: lus, existait, avertissements } = depotConfig.charger();
+    return succes({ config: lus, existait, avertissements, controle: config.verifier(lus) });
   });
 
-  gerer('config:defauts', () => {
-    return succes({ config: config.reglagesParDefaut(contexteConfig()) });
-  });
+  gerer('config:defauts', () => succes({ config: config.reglagesParDefaut(contexteConfig()) }));
 
-  gerer('config:verifier', (reglages) => {
-    const propre = config.normaliser(reglages, contexteConfig());
+  gerer('config:verifier', (brut) => {
+    const propre = config.normaliser(brut, contexteConfig());
     return succes({ controle: config.verifier(propre) });
   });
 
-  gerer('config:enregistrer', (reglages) => {
-    const propre = config.normaliser(reglages, contexteConfig());
+  gerer('config:enregistrer', (brut) => {
+    const propre = config.normaliser(brut, contexteConfig());
     const controle = config.verifier(propre);
     if (controle.erreurs.length) {
       return Object.assign(
@@ -158,7 +164,19 @@ function enregistrerHandlers() {
     }
   });
 
-  gerer('config:revelerFichier', async () => {
+  gerer('config:exclureFichier', (nom) => {
+    const actuels = reglages();
+    const motif = String(nom || '').trim();
+    if (!motif) return echec('Aucun fichier à exclure.', 'Réessayez depuis le menu contextuel.');
+    if (actuels.exclusions.fichiers.some((m) => m.toLowerCase() === motif.toLowerCase())) {
+      return succes({ config: actuels, deja: true });
+    }
+    actuels.exclusions.fichiers.push(motif);
+    const { config: enregistre } = depotConfig.enregistrer(actuels);
+    return succes({ config: enregistre, deja: false });
+  });
+
+  gerer('config:revelerFichier', () => {
     shell.showItemInFolder(depotConfig.chemin);
     return succes({});
   });
@@ -170,19 +188,714 @@ function enregistrerHandlers() {
       properties: ['openDirectory', 'createDirectory'],
       buttonLabel: 'Choisir ce dossier'
     });
-    if (resultat.canceled || !resultat.filePaths.length) {
-      return succes({ annule: true, chemin: '' });
-    }
+    if (resultat.canceled || !resultat.filePaths.length) return succes({ annule: true, chemin: '' });
     return succes({ annule: false, chemin: resultat.filePaths[0] });
   });
 }
 
-function contexteConfig() {
-  return { utilisateur: process.env.USERNAME || process.env.USER || '' };
+// ---------------------------------------------------------------------------
+// Analyse
+// ---------------------------------------------------------------------------
+
+function handlersAnalyse() {
+  gerer('analyse:demarrer', async (parametres) => {
+    if (analyseEnCours) {
+      return echec('Une analyse est déjà en cours.', 'Attendez sa fin ou annulez-la.');
+    }
+
+    const actuels = reglages();
+    const cheminLocal = String(parametres.cheminLocal || '');
+    const cheminProd = String(parametres.cheminProd || '');
+    if (!cheminLocal || !cheminProd) {
+      return echec(
+        'Aucune cible à comparer.',
+        'Choisissez un projet, ou renseignez deux dossiers dans les réglages.'
+      );
+    }
+
+    const signal = fsindex.creerSignal();
+    analyseEnCours = signal;
+    const debut = Date.now();
+    carnet.ecrire('INFO', `analyse lancée : ${cheminLocal} ↔ ${cheminProd}`);
+
+    try {
+      const optionsParcours = {
+        dossiersExclus: actuels.exclusions.dossiers,
+        fichiersExclus: actuels.exclusions.fichiers,
+        concurrence: actuels.options.lecturesSimultanees,
+        signal
+      };
+
+      emettre('analyse:progression', { phase: 'local', libelle: 'Analyse locale', fichiers: 0 });
+      const local = await fsindex.parcourir(cheminLocal, {
+        ...optionsParcours,
+        surProgression: (avancement) =>
+          emettre('analyse:progression', { phase: 'local', libelle: 'Analyse locale', ...avancement })
+      });
+
+      if (signal.annule) return succes({ annule: true });
+
+      emettre('analyse:progression', { phase: 'prod', libelle: 'Analyse production', fichiers: 0 });
+      const prod = await fsindex.parcourir(cheminProd, {
+        ...optionsParcours,
+        surProgression: (avancement) =>
+          emettre('analyse:progression', { phase: 'prod', libelle: 'Analyse production', ...avancement })
+      });
+
+      if (signal.annule) return succes({ annule: true });
+
+      const resultat = await compare.comparer(local.entrees, prod.entrees, {
+        hasher: (cote) => cacheHash.obtenir(cote.absolu, cote.taille, cote.mtimeMs),
+        concurrence: actuels.options.lecturesSimultanees,
+        signal,
+        surProgression: (avancement) =>
+          emettre('analyse:progression', {
+            phase: 'contenu',
+            libelle: 'Vérification du contenu',
+            ...avancement
+          })
+      });
+
+      cacheHash.enregistrer();
+
+      const ignores = [...local.ignores.map((i) => ({ ...i, cote: 'local' })), ...prod.ignores.map((i) => ({ ...i, cote: 'prod' })), ...resultat.incidents.map((i) => ({ ...i, cote: 'contenu' }))];
+
+      dernierScan = {
+        cheminLocal,
+        cheminProd,
+        modeLibre: Boolean(parametres.modeLibre),
+        projet: parametres.projet || null,
+        date: new Date().toISOString(),
+        duree: Date.now() - debut,
+        fichiers: resultat.fichiers,
+        parCle: new Map(resultat.fichiers.map((f) => [f.cle, f])),
+        compteurs: resultat.compteurs,
+        extensions: resultat.extensions,
+        ignores,
+        annule: signal.annule
+      };
+
+      carnet.ecrire(
+        signal.annule ? 'ALERTE' : 'INFO',
+        `analyse ${signal.annule ? 'annulée' : 'terminée'} en ${Math.round((Date.now() - debut) / 1000)} s — ` +
+          `${resultat.fichiers.length} fichiers, ${resultat.compteurs.modifie} modifiés, ` +
+          `${resultat.compteurs.nouveau} nouveaux, ${resultat.compteurs.orphelin} orphelins, ` +
+          `${ignores.length} ignorés`
+      );
+
+      return succes({ annule: signal.annule, resultat: pourLeRenderer(dernierScan) });
+    } finally {
+      analyseEnCours = null;
+    }
+  });
+
+  gerer('analyse:annuler', () => {
+    if (analyseEnCours) analyseEnCours.annuler();
+    return succes({});
+  });
+
+  gerer('recherche:contenu', async (parametres) => {
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    if (rechercheEnCours) rechercheEnCours.annuler();
+
+    const actuels = reglages();
+    const requete = String(parametres.requete || '').trim();
+    if (!requete) return succes({ occurrences: [] });
+
+    const signal = fsindex.creerSignal();
+    rechercheEnCours = signal;
+    const extensions = new Set(actuels.extensionsTexte);
+    const candidats = dernierScan.fichiers.filter((fichier) => extensions.has(fichier.extension));
+    const occurrences = [];
+    let faits = 0;
+
+    try {
+      await fsindex.pool(
+        candidats,
+        actuels.options.lecturesSimultanees,
+        async (fichier) => {
+          let total = 0;
+          for (const cote of [fichier.local, fichier.prod]) {
+            if (!cote || cote.taille > textdiff.TAILLE_MAX_DIFF) continue;
+            try {
+              const tampon = await fsp.readFile(fsindex.cheminLong(cote.absolu));
+              if (textdiff.estBinaire(tampon)) continue;
+              total += search.compterOccurrences(textdiff.decoder(tampon).texte, requete, parametres.mode);
+            } catch (err) {
+              /* fichier illisible : il ne remonte simplement pas dans les résultats */
+            }
+          }
+          if (total > 0) occurrences.push([fichier.cle, total]);
+          faits += 1;
+          if (faits % 25 === 0) {
+            emettre('recherche:progression', { faits, total: candidats.length });
+          }
+        },
+        signal
+      );
+      emettre('recherche:progression', { faits, total: candidats.length });
+      return succes({ occurrences, annule: signal.annule, examines: faits });
+    } finally {
+      if (rechercheEnCours === signal) rechercheEnCours = null;
+    }
+  });
+
+  gerer('recherche:annuler', () => {
+    if (rechercheEnCours) rechercheEnCours.annuler();
+    return succes({});
+  });
+}
+
+/** Le renderer n'a pas besoin des index internes ; la Map n'est pas sérialisable. */
+function pourLeRenderer(scan) {
+  return {
+    cheminLocal: scan.cheminLocal,
+    cheminProd: scan.cheminProd,
+    modeLibre: scan.modeLibre,
+    projet: scan.projet,
+    date: scan.date,
+    duree: scan.duree,
+    fichiers: scan.fichiers,
+    compteurs: scan.compteurs,
+    extensions: scan.extensions,
+    ignores: scan.ignores,
+    arbre: compare.construireArbre(scan.fichiers)
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Fenêtre
+// Comparaison ligne à ligne
+// ---------------------------------------------------------------------------
+
+function handlersDiff() {
+  gerer('fichier:diff', async (parametres) => {
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    const fichier = dernierScan.parCle.get(String(parametres.cle || ''));
+    if (!fichier) {
+      return echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.');
+    }
+
+    const actuels = reglages();
+    const extensionTexte = actuels.extensionsTexte.includes(fichier.extension);
+
+    const lire = async (cote) => {
+      if (!cote) return null;
+      try {
+        return await fsp.readFile(fsindex.cheminLong(cote.absolu));
+      } catch (err) {
+        throw Object.assign(new Error(fsindex.raisonLisible(err)), { code: err.code, chemin: cote.absolu });
+      }
+    };
+
+    let tamponProd = null;
+    let tamponLocal = null;
+    try {
+      [tamponProd, tamponLocal] = await Promise.all([lire(fichier.prod), lire(fichier.local)]);
+    } catch (err) {
+      return echec(
+        `Fichier illisible (${err.message}) : ${err.chemin}`,
+        'Le fichier a peut-être été déplacé ou verrouillé depuis l\'analyse. Relancez une analyse.',
+        err
+      );
+    }
+
+    const resultat = textdiff.comparerTampons(tamponProd, tamponLocal, {
+      ignorerEspaces: actuels.options.ignorerEspaces,
+      extensionTexte
+    });
+
+    const enveloppe = {
+      cle: fichier.cle,
+      chemin: fichier.chemin,
+      statut: fichier.statut,
+      local: fichier.local && { ...fichier.local, hash: fichier.local.hash || null },
+      prod: fichier.prod && { ...fichier.prod, hash: fichier.prod.hash || null },
+      ...resultat
+    };
+
+    if (resultat.type === 'texte') {
+      enveloppe.groupes = textdiff.grouper(resultat.lignes);
+      delete enveloppe.lignes;
+    }
+    if (resultat.type === 'binaire') {
+      enveloppe.hashLocal = fichier.local ? await empreinteSure(fichier.local.absolu) : null;
+      enveloppe.hashProd = fichier.prod ? await empreinteSure(fichier.prod.absolu) : null;
+    }
+
+    return succes({ diff: enveloppe });
+  });
+}
+
+async function empreinteSure(chemin) {
+  try {
+    return await fsindex.hashFichier(chemin);
+  } catch (err) {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AVMDF
+// ---------------------------------------------------------------------------
+
+function handlersAvmdf() {
+  gerer('avmdf:tickets', async () => {
+    const actuels = reglages();
+    const { tickets, erreur } = await avmdf.listerTickets(actuels.racines.avmdf);
+    if (erreur) {
+      return echec(erreur, 'Vérifiez la racine des archives dans les réglages.');
+    }
+    return succes({ tickets, racine: actuels.racines.avmdf });
+  });
+
+  gerer('avmdf:inspecter', async (parametres) => {
+    const actuels = reglages();
+    const ticket = avmdf.normaliserTicket(parametres.ticket);
+    if (!ticket) {
+      return echec(
+        'Numéro de ticket incompréhensible.',
+        'Saisissez un numéro seul (4611) ou un nom complet (AVMDF4611).'
+      );
+    }
+    const cheminTicket = path.join(actuels.racines.avmdf, ticket.nom);
+    const inspection = await avmdf.inspecterTicket(cheminTicket, ticket.nom);
+    return succes({ ticket: { ...ticket, chemin: cheminTicket }, inspection });
+  });
+
+  gerer('avmdf:inspecterSprint', async (parametres) => {
+    const actuels = reglages();
+    const destination = avmdf.resoudreDestination(
+      actuels.racines.avmdf,
+      parametres.ticket,
+      parametres.sprint
+    );
+    if (!destination.valide) return echec(destination.erreur, 'Corrigez le nom du dossier de sprint.');
+
+    const ticket = avmdf.normaliserTicket(parametres.ticket);
+    const inspection = await avmdf.inspecterTicket(
+      path.join(actuels.racines.avmdf, ticket.nom),
+      ticket.nom
+    );
+    const etat = await avmdf.inspecterSprint(destination.chemin);
+    return succes({
+      chemin: destination.chemin,
+      etat,
+      convention: inspection.convention,
+      compatible: avmdf.verifierConvention(inspection.convention, ticket.nom, parametres.sprint.trim())
+    });
+  });
+
+  gerer('avmdf:creerTicket', async (parametres) => {
+    const actuels = reglages();
+    const ticket = avmdf.normaliserTicket(parametres.ticket);
+    if (!ticket) return echec('Numéro de ticket incompréhensible.', 'Saisissez un numéro, par exemple 4611.');
+    const cheminTicket = path.join(actuels.racines.avmdf, ticket.nom);
+    if (!avmdf.estSousRacine(cheminTicket, actuels.racines.avmdf)) {
+      return echec('Destination hors du dossier d\'archives.', 'Vérifiez la racine AVMDF dans les réglages.');
+    }
+    try {
+      await fsp.mkdir(fsindex.cheminLong(cheminTicket), { recursive: true });
+      carnet.ecrire('INFO', `ticket créé : ${cheminTicket}`);
+      return succes({ ticket: { ...ticket, chemin: cheminTicket } });
+    } catch (err) {
+      return echec(
+        `Création du ticket impossible (${fsindex.raisonLisible(err)}) : ${cheminTicket}`,
+        'Vérifiez vos droits sur le dossier d\'archives.',
+        err
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mise en production
+// ---------------------------------------------------------------------------
+
+/** Construit le plan à partir des clés désignées par le renderer. */
+function construirePlan(parametres) {
+  const actuels = reglages();
+  if (!dernierScan) {
+    return { erreur: echec('Aucune analyse en mémoire.', 'Lancez une analyse avant de déployer.') };
+  }
+  if (dernierScan.modeLibre) {
+    return {
+      erreur: echec(
+        'La comparaison libre ne permet pas de mise en production.',
+        'Revenez à un projet configuré : l\'archivage AVMDF a besoin des racines de production.'
+      )
+    };
+  }
+
+  const cles = Array.isArray(parametres.cles) ? parametres.cles : [];
+  const fichiers = cles.map((cle) => dernierScan.parCle.get(cle)).filter(Boolean);
+  if (!fichiers.length) {
+    return { erreur: echec('Aucun fichier sélectionné.', 'Cochez au moins un fichier dans l\'arborescence.') };
+  }
+
+  const operation = parametres.operation === deploy.OPERATION_SUPPRESSION
+    ? deploy.OPERATION_SUPPRESSION
+    : deploy.OPERATION_DEPLOIEMENT;
+
+  const mauvaisStatut = fichiers.filter((fichier) =>
+    operation === deploy.OPERATION_SUPPRESSION
+      ? fichier.statut !== compare.ORPHELIN
+      : !compare.DEPLOYABLES.has(fichier.statut)
+  );
+  if (mauvaisStatut.length) {
+    return {
+      erreur: echec(
+        `${mauvaisStatut.length} fichier(s) sélectionnés ne correspondent pas à cette opération.`,
+        'Relancez une analyse : la sélection ne colle plus aux statuts relevés.'
+      )
+    };
+  }
+
+  const ticket = avmdf.normaliserTicket(parametres.ticket);
+  if (!ticket) {
+    return { erreur: echec('Aucun ticket choisi.', 'Choisissez ou créez un ticket AVMDF dans le panneau de destination.') };
+  }
+  const destination = avmdf.resoudreDestination(actuels.racines.avmdf, ticket.nom, parametres.sprint);
+  if (!destination.valide) {
+    return { erreur: echec(destination.erreur, 'Corrigez le nom du dossier de sprint.') };
+  }
+
+  return {
+    plan: {
+      projet: dernierScan.projet || '(dossiers libres)',
+      racineLocale: dernierScan.cheminLocal,
+      racineProd: dernierScan.cheminProd,
+      racineAvmdf: actuels.racines.avmdf,
+      ticket: ticket.nom,
+      sprint: parametres.sprint.trim(),
+      dossierSauvegarde: destination.chemin,
+      auteur: actuels.options.auteur,
+      simulation: Boolean(parametres.simulation),
+      operation,
+      appOffline: actuels.options.appOffline,
+      fichiers
+    },
+    actuels
+  };
+}
+
+function handlersDeploiement() {
+  gerer('deploiement:preflight', async (parametres) => {
+    const { plan, erreur, actuels } = construirePlan(parametres);
+    if (erreur) return erreur;
+
+    const signal = fsindex.creerSignal();
+    operationEnCours = signal;
+    try {
+      const controle = await deploy.preflight(plan, {
+        concurrence: actuels.options.lecturesSimultanees,
+        signal,
+        surProgression: (avancement) => emettre('deploiement:progression', avancement)
+      });
+      return succes({
+        controle: {
+          ok: controle.ok,
+          bloquants: controle.bloquants,
+          avertissements: controle.avertissements
+        },
+        resume: resumePlan(plan)
+      });
+    } finally {
+      operationEnCours = null;
+    }
+  });
+
+  gerer('deploiement:executer', async (parametres) => {
+    const { plan, erreur, actuels } = construirePlan(parametres);
+    if (erreur) return erreur;
+
+    // Le préflight est rejoué juste avant d'écrire : entre la fenêtre de
+    // confirmation et le clic, la production a pu bouger.
+    const controle = await deploy.preflight(plan, {
+      concurrence: actuels.options.lecturesSimultanees
+    });
+    if (!controle.ok) {
+      return Object.assign(
+        echec(
+          'Mise en production interrompue : ' + controle.bloquants.length + ' point(s) bloquant(s).',
+          'Corrigez-les puis relancez une analyse.'
+        ),
+        { controle: { ok: false, bloquants: controle.bloquants, avertissements: controle.avertissements } }
+      );
+    }
+
+    const signal = fsindex.creerSignal();
+    operationEnCours = signal;
+    carnet.ecrire(
+      'INFO',
+      `${plan.simulation ? 'simulation' : 'mise en production'} : ${plan.fichiers.length} fichier(s) ` +
+        `vers ${plan.dossierSauvegarde} (${plan.operation})`
+    );
+
+    try {
+      const resultat = await deploy.executer(plan, {
+        signal,
+        extensionsTexte: actuels.extensionsTexte,
+        ignorerEspaces: actuels.options.ignorerEspaces,
+        invaliderCache: (chemin) => cacheHash.invalider(chemin),
+        surProgression: (avancement) => emettre('deploiement:progression', avancement)
+      });
+      cacheHash.enregistrer();
+
+      const r = resultat.rapport;
+      carnet.ecrire(
+        r.echecs ? 'ERREUR' : 'INFO',
+        `${plan.simulation ? 'simulation' : 'mise en production'} terminée — ` +
+          `${r.remplacements} remplacé(s), ${r.creations} créé(s), ${r.suppressions} supprimé(s), ` +
+          `${r.echecs} échec(s)` +
+          (resultat.chemins.manifeste ? ` — manifeste ${resultat.chemins.manifeste}` : '')
+      );
+
+      return succes({
+        manifeste: resultat.manifeste,
+        chemins: resultat.chemins,
+        rapport: resultat.rapport,
+        avertissements: controle.avertissements
+      });
+    } finally {
+      operationEnCours = null;
+    }
+  });
+
+  gerer('deploiement:annuler', () => {
+    if (operationEnCours) operationEnCours.annuler();
+    return succes({});
+  });
+}
+
+function resumePlan(plan) {
+  const parStatut = { modifie: 0, nouveau: 0, orphelin: 0 };
+  let octets = 0;
+  for (const fichier of plan.fichiers) {
+    if (parStatut[fichier.statut] !== undefined) parStatut[fichier.statut] += 1;
+    if (fichier.local) octets += fichier.local.taille;
+  }
+  return {
+    projet: plan.projet,
+    ticket: plan.ticket,
+    sprint: plan.sprint,
+    dossierSauvegarde: plan.dossierSauvegarde,
+    racineProd: plan.racineProd,
+    auteur: plan.auteur,
+    operation: plan.operation,
+    simulation: plan.simulation,
+    parStatut,
+    octets,
+    fichiers: plan.fichiers.map((fichier) => ({
+      chemin: fichier.chemin,
+      statut: fichier.statut,
+      taille: fichier.local ? fichier.local.taille : fichier.prod ? fichier.prod.taille : 0
+    }))
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Historique et retour arrière
+// ---------------------------------------------------------------------------
+
+function handlersHistorique() {
+  gerer('historique:lister', async () => {
+    const actuels = reglages();
+    const { manifestes, erreurs } = await deploy.listerManifestes(actuels.racines.avmdf);
+    return succes({ manifestes, erreurs, racine: actuels.racines.avmdf });
+  });
+
+  gerer('historique:comparer', async (parametres) => {
+    const actuels = reglages();
+    const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);
+    if (manifeste.erreur) return manifeste.erreur;
+
+    const entree = manifeste.contenu.fichiers.find((f) => f.chemin === parametres.chemin);
+    if (!entree) return echec('Ce fichier ne figure pas dans le manifeste.', 'Rechargez l\'historique.');
+
+    const cheminSauvegarde = entree.sauvegarde
+      ? fsindex.joindreRelatif(manifeste.contenu.dossierSauvegarde, entree.sauvegarde)
+      : null;
+    const cheminProd = fsindex.joindreRelatif(manifeste.contenu.racineProd, entree.chemin);
+
+    const lire = async (chemin) => {
+      if (!chemin) return null;
+      try {
+        return await fsp.readFile(fsindex.cheminLong(chemin));
+      } catch (err) {
+        return null;
+      }
+    };
+
+    const [sauvegarde, actuel] = await Promise.all([lire(cheminSauvegarde), lire(cheminProd)]);
+    const extension = path.extname(entree.chemin).toLowerCase();
+    const resultat = textdiff.comparerTampons(sauvegarde, actuel, {
+      ignorerEspaces: actuels.options.ignorerEspaces,
+      extensionTexte: actuels.extensionsTexte.includes(extension)
+    });
+
+    const enveloppe = {
+      cle: entree.chemin.toLowerCase(),
+      chemin: entree.chemin,
+      statut: 'modifie',
+      titreGauche: 'Sauvegarde',
+      titreDroite: 'Production actuelle',
+      absent: { sauvegarde: !sauvegarde, prod: !actuel },
+      ...resultat
+    };
+    if (resultat.type === 'texte') {
+      enveloppe.groupes = textdiff.grouper(resultat.lignes);
+      delete enveloppe.lignes;
+    }
+    return succes({ diff: enveloppe });
+  });
+
+  gerer('historique:preparerRestauration', async (parametres) => {
+    const actuels = reglages();
+    const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);
+    if (manifeste.erreur) return manifeste.erreur;
+
+    const preparation = await deploy.preparerRestauration(manifeste.contenu, {
+      concurrence: actuels.options.lecturesSimultanees
+    });
+    return succes({
+      manifeste: manifeste.contenu,
+      preparation: {
+        ok: preparation.ok,
+        operations: preparation.operations.map((o) => ({ chemin: o.chemin, action: o.action })),
+        bloquants: preparation.bloquants,
+        avertissements: preparation.avertissements
+      }
+    });
+  });
+
+  gerer('historique:restaurer', async (parametres) => {
+    const actuels = reglages();
+    const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);
+    if (manifeste.erreur) return manifeste.erreur;
+
+    const preparation = await deploy.preparerRestauration(manifeste.contenu, {
+      concurrence: actuels.options.lecturesSimultanees
+    });
+    if (!preparation.ok) {
+      return Object.assign(
+        echec(
+          'Retour arrière interrompu : ' + preparation.bloquants.length + ' point(s) bloquant(s).',
+          'Corrigez-les avant de réessayer.'
+        ),
+        { preparation: { ok: false, bloquants: preparation.bloquants, avertissements: preparation.avertissements } }
+      );
+    }
+
+    const signal = fsindex.creerSignal();
+    operationEnCours = signal;
+    carnet.ecrire('ALERTE', `retour arrière demandé sur ${parametres.cheminManifeste}`);
+    try {
+      const resultat = await deploy.restaurer(manifeste.contenu, preparation, {
+        simulation: Boolean(parametres.simulation),
+        auteur: actuels.options.auteur,
+        signal,
+        invaliderCache: (chemin) => cacheHash.invalider(chemin),
+        surProgression: (avancement) => emettre('deploiement:progression', avancement)
+      });
+      cacheHash.enregistrer();
+      carnet.ecrire(
+        resultat.rapport.echecs ? 'ERREUR' : 'INFO',
+        `retour arrière terminé — ${resultat.rapport.total} fichier(s), ${resultat.rapport.echecs} échec(s)`
+      );
+      return succes({ manifeste: resultat.manifeste, chemins: resultat.chemins, rapport: resultat.rapport });
+    } finally {
+      operationEnCours = null;
+    }
+  });
+}
+
+/** Relit un manifeste depuis le disque en vérifiant qu'il est bien sous la racine d'archives. */
+async function lireManifesteSur(chemin, actuels) {
+  const cible = String(chemin || '');
+  if (!cible || !avmdf.estSousRacine(cible, actuels.racines.avmdf)) {
+    return {
+      erreur: echec(
+        'Ce manifeste est hors du dossier d\'archives.',
+        'Rechargez l\'historique depuis la racine AVMDF configurée.'
+      )
+    };
+  }
+  try {
+    const contenu = JSON.parse(await fsp.readFile(fsindex.cheminLong(cible), 'utf8'));
+    return { contenu: { ...contenu, chemin: cible } };
+  } catch (err) {
+    return {
+      erreur: echec(
+        `Manifeste illisible (${fsindex.raisonLisible(err)}) : ${cible}`,
+        'Le fichier a peut-être été déplacé ou modifié à la main.',
+        err
+      )
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Journal et actions système
+// ---------------------------------------------------------------------------
+
+function handlersSysteme() {
+  gerer('journal:lister', async () => succes({ fichiers: await carnet.lister(), dossier: carnet.dossier }));
+
+  gerer('journal:lire', async (nom) => {
+    const resultat = await carnet.lire(nom);
+    if (!resultat.ok) {
+      return echec(`Journal illisible (${resultat.erreur}).`, 'Choisissez un autre jour dans la liste.');
+    }
+    return succes(resultat);
+  });
+
+  gerer('journal:ouvrirDossier', async () => {
+    await fsp.mkdir(carnet.dossier, { recursive: true });
+    shell.openPath(carnet.dossier);
+    return succes({});
+  });
+
+  gerer('systeme:ouvrir', async (parametres) => {
+    const chemin = cheminAutorise(parametres.chemin);
+    if (!chemin) return echec('Chemin hors du périmètre de l\'application.', 'Relancez une analyse.');
+    const erreur = await shell.openPath(chemin);
+    if (erreur) {
+      return echec(
+        `Ouverture impossible : ${erreur}`,
+        'Aucun programme n\'est peut-être associé à ce type de fichier.'
+      );
+    }
+    return succes({});
+  });
+
+  gerer('systeme:reveler', (parametres) => {
+    const chemin = cheminAutorise(parametres.chemin);
+    if (!chemin) return echec('Chemin hors du périmètre de l\'application.', 'Relancez une analyse.');
+    shell.showItemInFolder(chemin);
+    return succes({});
+  });
+
+  gerer('systeme:copier', (texte) => {
+    clipboard.writeText(String(texte || ''));
+    return succes({});
+  });
+}
+
+/**
+ * N'autorise l'ouverture que de chemins issus de la dernière analyse ou situés
+ * sous les racines configurées : le renderer ne choisit pas ce qu'il ouvre.
+ */
+function cheminAutorise(chemin) {
+  const cible = String(chemin || '');
+  if (!cible) return null;
+  const actuels = reglages();
+  const racines = [actuels.racines.locale, actuels.racines.prod, actuels.racines.avmdf];
+  if (dernierScan) racines.push(dernierScan.cheminLocal, dernierScan.cheminProd);
+  return racines.some((racine) => racine && avmdf.estSousRacine(cible, racine)) ? cible : null;
+}
+
+// ---------------------------------------------------------------------------
+// Fenêtre et cycle de vie
 // ---------------------------------------------------------------------------
 
 function creerFenetre() {
@@ -213,16 +926,11 @@ function creerFenetre() {
     fenetre = null;
   });
 
-  // Aucune navigation ni fenêtre secondaire : l'application est locale.
   fenetre.webContents.on('will-navigate', (evenement) => evenement.preventDefault());
   fenetre.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
   fenetre.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 }
-
-// ---------------------------------------------------------------------------
-// Cycle de vie
-// ---------------------------------------------------------------------------
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -236,29 +944,45 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     app.setAppUserModelId('fr.process.avmdf-deploy');
 
-    depotConfig = config.creerDepot(path.join(app.getPath('userData'), 'config.json'), contexteConfig());
+    const donnees = app.getPath('userData');
+    depotConfig = config.creerDepot(path.join(donnees, 'config.json'), contexteConfig());
+    cacheHash = fsindex.creerCacheHash(path.join(donnees, 'cache-hash.json'));
+    carnet = journal.creerJournal(path.join(donnees, 'logs'));
 
     const { existait, avertissements } = depotConfig.charger();
     avertissementsDemarrage = avertissements;
     if (!existait) {
-      // Premier lancement : on matérialise le fichier pour que l'utilisateur
-      // puisse le voir et l'éditer, avec le mode simulation actif par défaut.
       try {
         depotConfig.reinitialiser();
       } catch (err) {
         avertissementsDemarrage.push(
           `Réglages non enregistrés au premier lancement (${err.code || err.message}) : ` +
-            `ils resteront valables pour cette session seulement.`
+            'ils resteront valables pour cette session seulement.'
         );
       }
     }
 
-    enregistrerHandlers();
+    carnet.ecrire('INFO', `application démarrée (version ${app.getVersion()})`);
+
+    handlersConfig();
+    handlersAnalyse();
+    handlersDiff();
+    handlersAvmdf();
+    handlersDeploiement();
+    handlersHistorique();
+    handlersSysteme();
     creerFenetre();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) creerFenetre();
     });
+  });
+
+  app.on('before-quit', () => {
+    if (analyseEnCours) analyseEnCours.annuler();
+    if (operationEnCours) operationEnCours.annuler();
+    if (cacheHash) cacheHash.enregistrer();
+    if (carnet) carnet.ecrire('INFO', 'application fermée');
   });
 
   app.on('window-all-closed', () => {

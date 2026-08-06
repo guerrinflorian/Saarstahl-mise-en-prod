@@ -1,28 +1,77 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { Case } from './Champs.js';
+import { LIBELLES, MARQUEURS, formaterNombre } from './arborescence.js';
 
 const html = htm.bind(h);
 
 /**
  * Bandeau bas : l'état exact de ce qui part et où, visible en permanence.
  * Il change de teinte dès que la simulation est désactivée.
+ *
+ * La suppression d'orphelins est une opération distincte de la mise en
+ * production : on ne mélange pas les deux dans un même passage.
  */
-export function BandeauDeploiement({ simulation, onSimulation, nombreSelection, destination, onDeployer }) {
+export function BandeauDeploiement({
+  simulation,
+  onSimulation,
+  selection,
+  destination,
+  modeLibre,
+  operation,
+  occupe,
+  onChoisirDestination,
+  onDeployer
+}) {
   const reel = !simulation;
+  const total = selection.deployables + selection.orphelins;
+  const mixte = operation === 'mixte';
+
+  const raisonBlocage = modeLibre
+    ? 'La comparaison libre ne permet pas de mise en production.'
+    : total === 0
+      ? 'Cochez au moins un fichier dans l\'arborescence.'
+      : mixte
+        ? 'Ne mélangez pas déploiement et suppression : traitez les orphelins à part.'
+        : !destination
+          ? 'Choisissez d\'abord le ticket et le dossier de sprint.'
+          : '';
+
+  const libelleAction = operation === 'suppression' ? 'Supprimer en production' : 'Mettre en production';
 
   return html`
     <footer class=${'bandeau' + (reel ? ' reel' : '')}>
       <div class="bandeau-resume">
-        <span class="bandeau-nombre">${nombreSelection}</span>
-        <span>${nombreSelection > 1 ? 'fichiers sélectionnés' : 'fichier sélectionné'}</span>
+        <span class="bandeau-nombre">${formaterNombre(total)}</span>
+        <span>${total > 1 ? 'fichiers sélectionnés' : 'fichier sélectionné'}</span>
+        ${selection.deployables && selection.orphelins
+          ? html`<span class="attenue mono">
+              (${formaterNombre(selection.deployables)} à déployer, ${formaterNombre(selection.orphelins)} orphelins)
+            </span>`
+          : null}
         <span class="fleche">→</span>
         ${destination
-          ? html`<span class="bandeau-destination mono" title=${destination}>${destination}</span>`
-          : html`<span class="rien">aucune destination choisie</span>`}
+          ? html`<button
+              type="button"
+              class="bandeau-destination mono"
+              title="Changer la destination"
+              onClick=${onChoisirDestination}
+            >
+              ${destination.chemin}
+            </button>`
+          : html`<button
+              type="button"
+              class="btn btn-mini"
+              disabled=${modeLibre}
+              title=${modeLibre ? 'Indisponible en comparaison libre' : 'Choisir le ticket et le sprint'}
+              onClick=${onChoisirDestination}
+            >
+              Choisir la destination…
+            </button>`}
       </div>
 
       <div class="bandeau-actions">
+        ${raisonBlocage ? html`<span class="attenue bandeau-raison">${raisonBlocage}</span>` : null}
         <span class=${'bandeau-etat ' + (reel ? 'reel' : 'simulation')}>
           ${reel ? 'Écriture réelle' : 'Simulation'}
         </span>
@@ -34,14 +83,36 @@ export function BandeauDeploiement({ simulation, onSimulation, nombreSelection, 
         />
         <button
           type="button"
-          class="btn btn-accent"
-          disabled=${!onDeployer || nombreSelection === 0}
-          title=${onDeployer ? 'Mettre en production (Ctrl+Entrée)' : 'Mise en production : étape ultérieure du chantier'}
-          onClick=${onDeployer || undefined}
+          class=${'btn ' + (operation === 'suppression' ? 'btn-danger' : 'btn-accent')}
+          disabled=${Boolean(raisonBlocage) || occupe}
+          title=${raisonBlocage || 'Ctrl+Entrée'}
+          onClick=${onDeployer}
         >
-          Mettre en production
+          ${occupe ? 'En cours…' : libelleAction}
         </button>
       </div>
     </footer>
   `;
 }
+
+/** Compte la sélection par nature, pour le bandeau et le choix d'opération. */
+export function resumerSelection(fichiers, selection) {
+  let deployables = 0;
+  let orphelins = 0;
+  const parStatut = {};
+  for (const fichier of fichiers) {
+    if (!selection.has(fichier.cle)) continue;
+    parStatut[fichier.statut] = (parStatut[fichier.statut] || 0) + 1;
+    if (fichier.statut === 'orphelin') orphelins += 1;
+    else deployables += 1;
+  }
+  return { deployables, orphelins, parStatut };
+}
+
+export function operationDe(selection) {
+  if (selection.deployables && selection.orphelins) return 'mixte';
+  if (selection.orphelins) return 'suppression';
+  return 'deploiement';
+}
+
+export { LIBELLES, MARQUEURS };

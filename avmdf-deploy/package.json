@@ -4,6 +4,7 @@
   "private": true,
   "description": "Comparaison des sources locales et de la production IIS, archivage AVMDF et mise en production assistée.",
   "main": "electron/main.js",
+  "repository": "https://github.com/guerrinflorian/Saarstahl-mise-en-prod",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
@@ -32,7 +33,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
