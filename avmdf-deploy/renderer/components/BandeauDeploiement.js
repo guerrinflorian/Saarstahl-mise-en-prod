@@ -34,7 +34,7 @@ export function BandeauDeploiement({
       : mixte
         ? 'Ne mélangez pas déploiement et suppression : traitez les orphelins à part.'
         : !destination
-          ? 'Choisissez d\'abord le ticket et le dossier de sprint.'
+          ? 'Choisissez d\'abord la demande et le dossier de sprint.'
           : '';
 
   const libelleAction = operation === 'suppression' ? 'Supprimer en production' : 'Mettre en production';
@@ -63,7 +63,7 @@ export function BandeauDeploiement({
               type="button"
               class="btn btn-mini"
               disabled=${modeLibre}
-              title=${modeLibre ? 'Indisponible en comparaison libre' : 'Choisir le ticket et le sprint'}
+              title=${modeLibre ? 'Indisponible en comparaison libre' : 'Choisir la demande et le sprint'}
               onClick=${onChoisirDestination}
             >
               Choisir la destination…

@@ -14,7 +14,7 @@ const LIBELLES_ACTION = {
 };
 
 /**
- * Toutes les versions « avant modification » d'un fichier, tous tickets et
+ * Toutes les versions « avant modification » d'un fichier, tous demandes et
  * sprints confondus : on les compare à la production actuelle et on peut en
  * remettre une en place.
  *
@@ -75,7 +75,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
     const reponse = await window.avmdf.fichier.restaurerVersion({
       cle: fichier.cle,
       cheminVersion: choisie.chemin,
-      ticket: destination.ticket,
+      demande: destination.demande,
       sprint: destination.sprint,
       simulation
     });
@@ -88,7 +88,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
     onRapport(reponse);
   }
 
-  const numero = destination ? String(destination.ticket || '').replace(/\D/g, '') : '';
+  const numero = destination ? String(destination.demande || '').replace(/\D/g, '') : '';
 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Versions archivées du fichier">
@@ -123,7 +123,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
                         onClick=${() => choisir(version)}
                       >
                         <div class="historique-ligne1">
-                          <span class="mono">${version.ticket}${version.sprint ? ' / ' + version.sprint : ''}</span>
+                          <span class="mono">${version.demande}${version.sprint ? ' / ' + version.sprint : ''}</span>
                           ${version.action
                             ? html`<span class="etiquette">${LIBELLES_ACTION[version.action] || version.action}</span>`
                             : html`<span class="etiquette">ancienne organisation</span>`}
@@ -194,7 +194,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
                       <tr><th>Fichier</th><td class="mono">${fichier.chemin}</td></tr>
                       <tr>
                         <th>Version choisie</th>
-                        <td class="mono">${choisie.ticket}${choisie.sprint ? ' / ' + choisie.sprint : ''}</td>
+                        <td class="mono">${choisie.demande}${choisie.sprint ? ' / ' + choisie.sprint : ''}</td>
                       </tr>
                       <tr>
                         <th>Datée du</th>
@@ -213,7 +213,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
                 </div>
                 <div class="modale-pied">
                   <label for="confirmation-version">
-                    Saisissez le numéro du ticket (<span class="mono">${numero}</span>) :
+                    Saisissez le numéro de la demande (<span class="mono">${numero}</span>) :
                   </label>
                   <input
                     type="text"

@@ -405,7 +405,7 @@ async function executer(plan, options = {}) {
   }
 
   const manifeste = {
-    ticket: plan.ticket,
+    demande: plan.demande,
     sprint: plan.sprint,
     auteur: plan.auteur,
     date: debut.toISOString(),
@@ -470,7 +470,7 @@ async function traiterFichier(fichier, plan, contexte) {
 
       // Un sprint peut être complété en plusieurs passages. La version « avant
       // modification » du sprint est celle du premier passage : on ne l'écrase
-      // jamais, sinon l'état d'origine du ticket serait définitivement perdu.
+      // jamais, sinon l'état d'origine de la demande serait définitivement perdu.
       const dejaArchive = await existe(cheminSauvegarde);
       if (!simulation && !dejaArchive) {
         await copierAvecDate(cheminProd, cheminSauvegarde);
@@ -596,7 +596,7 @@ function redigerRecapitulatif(manifeste) {
 
   lignes.push(`## ${date.toLocaleString('fr-FR')} - ${manifeste.projet}`);
   lignes.push('');
-  lignes.push(`- **Ticket** : ${manifeste.ticket}`);
+  lignes.push(`- **Demande** : ${manifeste.demande}`);
   lignes.push(`- **Sprint** : ${manifeste.sprint}`);
   lignes.push(`- **Auteur** : ${manifeste.auteur || '-'}`);
   lignes.push(`- **Opération** : ${libelleOperation(manifeste)}`);
@@ -636,7 +636,7 @@ function libelleOperation(manifeste) {
 async function ajouterAuRecapitulatif(chemin, manifeste) {
   let entete = '';
   if (!(await existe(chemin))) {
-    entete = `# Récapitulatif - ${manifeste.ticket} / ${manifeste.sprint}\n\n`;
+    entete = `# Récapitulatif - ${manifeste.demande} / ${manifeste.sprint}\n\n`;
   }
   await fsp.appendFile(cheminLong(chemin), entete + redigerRecapitulatif(manifeste) + '\n', 'utf8');
 }
@@ -646,8 +646,8 @@ async function ajouterAuRecapitulatif(chemin, manifeste) {
 // ---------------------------------------------------------------------------
 
 /**
- * Retrouve tous les manifestes présents sous la racine d'archives, tous tickets
- * confondus. On ne descend que de deux niveaux : ticket puis sprint.
+ * Retrouve tous les manifestes présents sous la racine d'archives, toutes demandes
+ * confondus. On ne descend que de deux niveaux : demande puis sprint.
  */
 async function listerManifestes(racineAvmdf) {
   const manifestes = [];
@@ -860,7 +860,7 @@ async function restaurer(manifeste, preparation, options = {}) {
   }
 
   const manifesteRestauration = {
-    ticket: manifeste.ticket,
+    demande: manifeste.demande,
     sprint: manifeste.sprint,
     auteur,
     date: debut.toISOString(),
@@ -973,7 +973,7 @@ async function restaurerVersion(plan, options = {}) {
   }
 
   const manifeste = {
-    ticket: plan.ticket,
+    demande: plan.demande,
     sprint: plan.sprint,
     auteur: plan.auteur,
     date: debut.toISOString(),

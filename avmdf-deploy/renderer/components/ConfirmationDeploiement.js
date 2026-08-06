@@ -9,7 +9,7 @@ const html = htm.bind(h);
  * Récapitulatif des contrôles préalables, puis confirmation.
  *
  * Un bloquant empêche le déploiement, point. Et pour valider, il faut saisir le
- * numéro du ticket : pas de simple bouton « OK », c'est une mise en production.
+ * numéro de la demande : pas de simple bouton « OK », c'est une mise en production.
  */
 export function ConfirmationDeploiement({ etape, controle, resume, occupe, progression, onConfirmer, onFermer }) {
   const [saisie, setSaisie] = useState('');
@@ -37,7 +37,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
     `;
   }
 
-  const numero = String(resume.ticket || '').replace(/\D/g, '');
+  const numero = String(resume.demande || '').replace(/\D/g, '');
   const saisieCorrecte = saisie.trim() === numero;
   const suppression = resume.operation === 'suppression';
   const peutPartir = controle.ok && saisieCorrecte && !occupe;
@@ -157,12 +157,12 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
         </div>
 
         <div class="modale-pied">
-          <label for="confirmation-ticket" class=${controle.ok ? '' : 'attenue'}>
-            Saisissez le numéro du ticket (<span class="mono">${numero}</span>) pour confirmer :
+          <label for="confirmation-demande" class=${controle.ok ? '' : 'attenue'}>
+            Saisissez le numéro de la demande (<span class="mono">${numero}</span>) pour confirmer :
           </label>
           <input
             type="text"
-            id="confirmation-ticket"
+            id="confirmation-demande"
             class=${'mono' + (saisie && !saisieCorrecte ? ' invalide' : '')}
             style="width:90px"
             autocomplete="off"

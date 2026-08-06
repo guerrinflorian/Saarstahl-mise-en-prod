@@ -15,7 +15,7 @@ Les noms ne correspondent pas un pour un (GPNET en local ↔ GPNet en prod ; Out
 
 Ce que je déploie : les sources telles quelles. C'est un projet ASP.NET WebForms : GPNET\GPNET.sln avec des sous-dossiers (Principal\, etc.) contenant des .aspx, .ascx, .master, .js, .css, .cs. Les fichiers déployés sont les fichiers sources — pas de résultat de publication.
 
-Organisation de Z:\AvMdf : un dossier par ticket, nommé AVMDF + numéro (AVMDF4611). À l'intérieur, trois conventions coexistent selon l'ancienneté :
+Organisation de Z:\AvMdf : un dossier par demande de travaux informatique, nommé AVMDF + numéro de la demande (AVMDF4611). À l'intérieur, trois conventions coexistent selon l'ancienneté :
 
 Z:\AvMdf\
 ├── AVMDF4590\                     ← ancienne façon : fichiers directement à la racine
@@ -25,7 +25,7 @@ Z:\AvMdf\
 │   ├── Sprint1\                   ← convention "Sprint N"
 │   └── Sprint2\
 └── AVMDF4611\
-    ├── AVMDF4611_1\               ← convention "<Ticket>_N"
+    ├── AVMDF4611_1\               ← convention "<Demande>_N"
     └── AVMDF4611_2\
 
 Dans un dossier de sprint, on retrouve la version d'avant modification des fichiers touchés, avec leur arborescence relative conservée.
@@ -63,7 +63,7 @@ avmdf-deploy/
 │       ├── compare.js           ← appariement des deux arbres et statuts
 │       ├── search.js            ← moteur de recherche/filtrage
 │       ├── textdiff.js          ← encodage + diff ligne à ligne
-│       ├── avmdf.js             ← détection tickets et conventions de sprint
+│       ├── avmdf.js             ← détection demandes et conventions de sprint
 │       └── deploy.js            ← préflight, sauvegarde, copie, manifeste, rollback
 └── renderer/
     ├── index.html
@@ -156,15 +156,15 @@ Lors de la copie, ne jamais ré-encoder ni normaliser quoi que ce soit : copie b
 
 Panneau de destination, alimenté par la lecture réelle de Z:\AvMdf :
 
-Liste déroulante des tickets existants, triée par numéro décroissant, avec recherche par numéro. Plus un champ libre pour saisir un nouveau numéro.
+Liste déroulante des demandes existantes, triée par numéro décroissant, avec recherche par numéro. Plus un champ libre pour saisir un nouveau numéro.
 Si je saisis un numéro qui n'existe pas : proposer explicitement de créer AVMDF<numéro>, avec confirmation.
-Une fois le ticket choisi, inspecter son contenu et détecter la convention en place :
+Une fois la demande choisie, inspecter son contenu et détecter la convention en place :
 sous-dossiers Sprint1, Sprint2… → convention sprint, proposer Sprint<max+1> ;
 sous-dossiers AVMDF4611_1, _2… → convention suffixe, proposer AVMDF4611_<max+1> ;
-fichiers directement à la racine, aucun sous-dossier → convention historique, signaler « ce ticket utilise l'ancienne organisation » et proposer de démarrer avec AVMDF4611_1 sans toucher aux fichiers déjà en place ;
+fichiers directement à la racine, aucun sous-dossier → convention historique, signaler « cette demande utilise l'ancienne organisation » et proposer de démarrer avec AVMDF4611_1 sans toucher aux fichiers déjà en place ;
 dossier vide → proposer AVMDF<numéro>_1.
 Le nom proposé est toujours modifiable dans un champ texte. On peut aussi choisir un sprint existant dans la liste (utile pour compléter un sprint en cours).
-Ne jamais mélanger deux conventions dans un même ticket : si le ticket est en Sprint N, ne pas proposer _N, et inversement.
+Ne jamais mélanger deux conventions dans une même demande : si la demande est en Sprint N, ne pas proposer _N, et inversement.
 Afficher le chemin de destination complet résolu, en clair, avant toute action : Z:\AvMdf\AVMDF4611\AVMDF4611_3
 Si le dossier de sprint visé existe déjà et contient des fichiers, avertir : est-ce que je complète ce sprint ou est-ce que je me suis trompé de numéro ?
 5.7 Mise en production
@@ -182,7 +182,7 @@ Espace disque suffisant sur la destination.
 
 Les problèmes sont listés dans une fenêtre récapitulative, séparés en bloquants et avertissements. Un bloquant empêche le déploiement, point.
 
-Écran de confirmation avant exécution, listant : le projet, le nombre de fichiers par statut, le dossier de sauvegarde cible, et le détail intégral des fichiers concernés. Pour valider, je dois saisir le numéro du ticket (4611) dans un champ. Pas de simple bouton « OK » : c'est une mise en prod.
+Écran de confirmation avant exécution, listant : le projet, le nombre de fichiers par statut, le dossier de sauvegarde cible, et le détail intégral des fichiers concernés. Pour valider, je dois saisir le numéro de la demande (4611) dans un champ. Pas de simple bouton « OK » : c'est une mise en prod.
 
 Mode simulation obligatoire, coché par défaut au premier lancement : exécute tout le processus, produit le rapport complet, mais n'écrit aucun octet.
 
@@ -202,7 +202,7 @@ Optionnel, à mettre derrière une case à cocher désactivée par défaut : dé
 
 json
 {
-  "ticket": "AVMDF4611",
+  "demande": "AVMDF4611",
   "sprint": "AVMDF4611_3",
   "auteur": "guerrin-f",
   "date": "2026-08-06T14:52:10.000Z",
@@ -229,7 +229,7 @@ json
 
 Écrire aussi un _recapitulatif.md lisible dans le même dossier : date, auteur, liste des fichiers, nombre de lignes modifiées. C'est ce que je transmets pour la traçabilité.
 
-Écran Historique listant tous les manifestes trouvés sous Z:\AvMdf (tous tickets confondus), triés par date, avec pour chacun : le détail des fichiers, un bouton « Voir ce qui a changé » (diff entre la sauvegarde et la version actuellement en prod) et un bouton « Revenir en arrière ».
+Écran Historique listant tous les manifestes trouvés sous Z:\AvMdf (toutes demandes confondues), triés par date, avec pour chacun : le détail des fichiers, un bouton « Voir ce qui a changé » (diff entre la sauvegarde et la version actuellement en prod) et un bouton « Revenir en arrière ».
 
 Le retour arrière restaure les fichiers remplacement depuis la sauvegarde et supprime les fichiers creation. Même exigence de confirmation que pour un déploiement, mêmes contrôles de verrouillage, et il produit lui-même un manifeste de restauration. Avertir si un fichier a été modifié en prod après le déploiement d'origine (hash actuel ≠ hashApres) : le retour arrière écraserait ces modifications.
 
@@ -291,7 +291,7 @@ Squelette — package.json, fenêtre Electron, preload.js, config.js avec l'écr
 Scan et comparaison — fsindex.js, compare.js, arbre affiché avec statuts et compteurs, progression et annulation. Vérifiable sur le vrai E:\ / Z:\.
 Recherche et filtres — search.js et toute la barre de filtres.
 Diff — textdiff.js et la vue côte à côte complète, y compris encodage, repliage et surlignage intra-ligne.
-AVMDF — avmdf.js, détection des tickets et des conventions, panneau de destination.
+AVMDF — avmdf.js, détection des demandes et des conventions, panneau de destination.
 Déploiement — deploy.js, préflight, confirmation, simulation, exécution, manifeste, récapitulatif.
 Historique et retour arrière.
 Journal, packaging electron-builder, README.
@@ -304,7 +304,7 @@ Ne pas ré-encoder, reformater ou normaliser les fins de ligne lors de la copie.
 Ne pas écraser web.config sans avertissement explicite.
 Ne pas déployer sans avoir archivé la version précédente. Aucune exception.
 Ne pas interrompre un scan parce qu'un dossier est inaccessible.
-Ne pas mélanger Sprint N et <Ticket>_N dans un même ticket.
+Ne pas mélanger Sprint N et <Demande>_N dans une même demande.
 Ne pas introduire de bundler, d'étape de build ou de dépendance lourde. Le front se limite à Preact + htm vendorisés en ESM : pas d'autre framework, pas de transpilation, pas de JSX.
 Ne pas masquer une erreur derrière un catch vide.
 Ne pas écrire de tests unitaires pour l'instant — je veux d'abord quelque chose que je peux lancer et essayer sur mes vrais dossiers.

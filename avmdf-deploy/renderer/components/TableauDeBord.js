@@ -134,7 +134,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
         <div class="tuile">
           <span class="tuile-valeur">${formaterNombre(t.deploiements)}</span>
           <span class="tuile-libelle">mises en production</span>
-          <span class="tuile-detail">${formaterNombre(t.tickets)} ticket${t.tickets > 1 ? 's' : ''}</span>
+          <span class="tuile-detail">${formaterNombre(t.demandes)} demande${t.demandes > 1 ? 's' : ''}</span>
         </div>
         <div class="tuile">
           <span class="tuile-valeur">${formaterNombre(t.fichiersDeployes)}</span>
@@ -165,7 +165,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
           ? html`
               <div class="tuile tuile-large">
                 <span class="tuile-libelle">dernière mise en production</span>
-                <span class="tuile-texte mono">${stats.dernier.ticket} / ${stats.dernier.sprint}</span>
+                <span class="tuile-texte mono">${stats.dernier.demande} / ${stats.dernier.sprint}</span>
                 <span class="tuile-detail">
                   ${ilYA(stats.dernier.date)} · ${stats.dernier.projet} · ${stats.dernier.auteur || '-'}
                   · ${formaterNombre(stats.dernier.fichiers)} fichier${stats.dernier.fichiers > 1 ? 's' : ''}
@@ -226,7 +226,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
                           ></div>
                         </div>
                         <div class="chaud-detail attenue">
-                          ${fichier.dernierTicket || ''} · ${ilYA(fichier.derniereFois)}
+                          ${fichier.derniereDemande || ''} · ${ilYA(fichier.derniereFois)}
                           ${fichier.lignesAjoutees || fichier.lignesSupprimees
                             ? ' · +' + formaterNombre(fichier.lignesAjoutees) + ' −' + formaterNombre(fichier.lignesSupprimees)
                             : ''}
@@ -248,7 +248,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
                   <span class=${'recent-point ' + entree.operation}></span>
                   <div class="recent-corps">
                     <div class="recent-ligne">
-                      <span class="mono">${entree.ticket} / ${entree.sprint}</span>
+                      <span class="mono">${entree.demande} / ${entree.sprint}</span>
                       <span class="etiquette">${LIBELLES_OPERATION[entree.operation] || entree.operation}</span>
                       ${entree.echecs
                         ? html`<span class="etiquette etiquette-danger">${entree.echecs} échec${entree.echecs > 1 ? 's' : ''}</span>`

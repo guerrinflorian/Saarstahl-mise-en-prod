@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * avmdf.js - lecture réelle du dossier d'archives, détection des tickets et des
+ * avmdf.js - lecture réelle du dossier d'archives, détection des demandes et des
  * conventions de sprint.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM.
  *
- * Trois conventions coexistent selon l'ancienneté du ticket :
+ * Trois conventions coexistent selon l'ancienneté de la demande :
  *   AVMDF4590\Default.aspx              → historique (fichiers à la racine)
  *   AVMDF4602\Sprint1\ Sprint2\         → sprint
  *   AVMDF4611\AVMDF4611_1\ _2\          → suffixe
- * On ne mélange jamais deux conventions dans un même ticket.
+ * On ne mélange jamais deux conventions dans une même demande.
  */
 
 const fsp = require('fs/promises');
@@ -24,23 +24,23 @@ const CONVENTION_HISTORIQUE = 'historique';
 const CONVENTION_VIDE = 'vide';
 const CONVENTION_MIXTE = 'mixte';
 
-const MOTIF_TICKET = /^AVMDF(\d+)$/i;
+const MOTIF_DEMANDE = /^AVMDF(\d+)$/i;
 const MOTIF_SPRINT = /^Sprint\s*(\d+)$/i;
 
 const LIBELLES_CONVENTION = {
   [CONVENTION_SPRINT]: 'sprints numérotés (Sprint1, Sprint2…)',
   [CONVENTION_SUFFIXE]: 'suffixe numéroté (AVMDF0000_1, _2…)',
   [CONVENTION_HISTORIQUE]: 'ancienne organisation : fichiers directement à la racine',
-  [CONVENTION_VIDE]: 'ticket vide',
+  [CONVENTION_VIDE]: 'demande vide',
   [CONVENTION_MIXTE]: 'deux conventions mélangées'
 };
 
 // ---------------------------------------------------------------------------
-// Normalisation des numéros de ticket
+// Normalisation des numéros de demande
 // ---------------------------------------------------------------------------
 
 /** « 4611 », « avmdf4611 » ou « AVMDF 4611 » donnent tous AVMDF4611. */
-function normaliserTicket(saisie) {
+function normaliserDemande(saisie) {
   const propre = String(saisie || '').trim().replace(/\s+/g, '');
   if (!propre) return null;
   const numerique = propre.match(/^(\d+)$/);
@@ -55,17 +55,17 @@ function normaliserTicket(saisie) {
 // ---------------------------------------------------------------------------
 
 /**
- * Liste les tickets existants, du numéro le plus élevé au plus bas.
+ * Liste les demandes existantes, du numéro le plus élevé au plus bas.
  * @param {string} racineAvmdf
- * @returns {Promise<{tickets:object[], erreur:string|null}>}
+ * @returns {Promise<{demandes:object[], erreur:string|null}>}
  */
-async function listerTickets(racineAvmdf) {
+async function listerDemandes(racineAvmdf) {
   let contenu;
   try {
     contenu = await fsp.readdir(cheminLong(racineAvmdf), { withFileTypes: true });
   } catch (err) {
     return {
-      tickets: [],
+      demandes: [],
       erreur:
         `Dossier d'archives illisible (${raisonLisible(err)}) : ` +
         racineAvmdf +
@@ -73,33 +73,33 @@ async function listerTickets(racineAvmdf) {
     };
   }
 
-  const tickets = [];
+  const demandes = [];
   for (const element of contenu) {
     if (!element.isDirectory()) continue;
-    const trouve = element.name.match(MOTIF_TICKET);
+    const trouve = element.name.match(MOTIF_DEMANDE);
     if (!trouve) continue;
-    tickets.push({
+    demandes.push({
       nom: element.name,
       numero: Number(trouve[1]),
       chemin: path.join(racineAvmdf, element.name)
     });
   }
 
-  tickets.sort((a, b) => b.numero - a.numero);
-  return { tickets, erreur: null };
+  demandes.sort((a, b) => b.numero - a.numero);
+  return { demandes, erreur: null };
 }
 
 /**
- * Inspecte un ticket : convention en place, sprints existants, nom proposé.
+ * Inspecte une demande : convention en place, sprints existants, nom proposé.
  *
- * @param {string} cheminTicket
- * @param {string} nomTicket
+ * @param {string} cheminDemande
+ * @param {string} nomDemande
  * @returns {Promise<object>}
  */
-async function inspecterTicket(cheminTicket, nomTicket) {
+async function inspecterDemande(cheminDemande, nomDemande) {
   let contenu;
   try {
-    contenu = await fsp.readdir(cheminLong(cheminTicket), { withFileTypes: true });
+    contenu = await fsp.readdir(cheminLong(cheminDemande), { withFileTypes: true });
   } catch (err) {
     if (err.code === 'ENOENT') {
       return {
@@ -107,16 +107,16 @@ async function inspecterTicket(cheminTicket, nomTicket) {
         convention: CONVENTION_VIDE,
         sprints: [],
         fichiersRacine: 0,
-        proposition: nomTicket + '_1'
+        proposition: nomDemande + '_1'
       };
     }
     return {
       existe: true,
-      erreur: `Ticket illisible (${raisonLisible(err)}) : ${cheminTicket}`,
+      erreur: `Demande illisible (${raisonLisible(err)}) : ${cheminDemande}`,
       convention: CONVENTION_VIDE,
       sprints: [],
       fichiersRacine: 0,
-      proposition: nomTicket + '_1'
+      proposition: nomDemande + '_1'
     };
   }
 
@@ -126,7 +126,7 @@ async function inspecterTicket(cheminTicket, nomTicket) {
   const numerosSprint = [];
   const numerosSuffixe = [];
   const autres = [];
-  const motifSuffixe = new RegExp('^' + nomTicket + '_(\\d+)$', 'i');
+  const motifSuffixe = new RegExp('^' + nomDemande + '_(\\d+)$', 'i');
 
   for (const nom of sousDossiers) {
     const sprint = nom.match(MOTIF_SPRINT);
@@ -151,7 +151,7 @@ async function inspecterTicket(cheminTicket, nomTicket) {
   else convention = CONVENTION_VIDE;
 
   const sprints = [...numerosSprint, ...numerosSuffixe, ...autres]
-    .map((s) => ({ ...s, chemin: path.join(cheminTicket, s.nom) }))
+    .map((s) => ({ ...s, chemin: path.join(cheminDemande, s.nom) }))
     .sort((a, b) => b.numero - a.numero || a.nom.localeCompare(b.nom, 'fr'));
 
   return {
@@ -160,7 +160,7 @@ async function inspecterTicket(cheminTicket, nomTicket) {
     convention,
     sprints,
     fichiersRacine,
-    proposition: proposerNom(convention, nomTicket, { numerosSprint, numerosSuffixe })
+    proposition: proposerNom(convention, nomDemande, { numerosSprint, numerosSuffixe })
   };
 }
 
@@ -168,38 +168,38 @@ async function inspecterTicket(cheminTicket, nomTicket) {
  * Nom de sprint proposé, toujours dans la convention déjà en place.
  * Le nom reste modifiable : ce n'est qu'une proposition.
  */
-function proposerNom(convention, nomTicket, { numerosSprint = [], numerosSuffixe = [] } = {}) {
+function proposerNom(convention, nomDemande, { numerosSprint = [], numerosSuffixe = [] } = {}) {
   const maximum = (liste) => liste.reduce((haut, s) => Math.max(haut, s.numero), 0);
   switch (convention) {
     case CONVENTION_SPRINT:
       return 'Sprint' + (maximum(numerosSprint) + 1);
     case CONVENTION_SUFFIXE:
-      return nomTicket + '_' + (maximum(numerosSuffixe) + 1);
+      return nomDemande + '_' + (maximum(numerosSuffixe) + 1);
     case CONVENTION_MIXTE:
       // On ne tranche pas à la place de l'utilisateur : on repart du plus récent.
       return maximum(numerosSprint) >= maximum(numerosSuffixe)
         ? 'Sprint' + (maximum(numerosSprint) + 1)
-        : nomTicket + '_' + (maximum(numerosSuffixe) + 1);
+        : nomDemande + '_' + (maximum(numerosSuffixe) + 1);
     case CONVENTION_HISTORIQUE:
     case CONVENTION_VIDE:
     default:
-      return nomTicket + '_1';
+      return nomDemande + '_1';
   }
 }
 
 /**
- * Le nom de sprint saisi respecte-t-il la convention du ticket ?
+ * Le nom de sprint saisi respecte-t-il la convention de la demande ?
  * @returns {{ compatible:boolean, message:string|null }}
  */
-function verifierConvention(convention, nomTicket, nomSprint) {
+function verifierConvention(convention, nomDemande, nomSprint) {
   const estSprint = MOTIF_SPRINT.test(nomSprint);
-  const estSuffixe = new RegExp('^' + nomTicket + '_\\d+$', 'i').test(nomSprint);
+  const estSuffixe = new RegExp('^' + nomDemande + '_\\d+$', 'i').test(nomSprint);
 
   if (convention === CONVENTION_SPRINT && estSuffixe) {
     return {
       compatible: false,
       message:
-        `Ce ticket utilise la convention « Sprint N ». Ne mélangez pas les deux : ` +
+        `Cette demande utilise la convention « Sprint N ». Ne mélangez pas les deux : ` +
         `restez sur un nom du type Sprint${'N'}.`
     };
   }
@@ -207,8 +207,8 @@ function verifierConvention(convention, nomTicket, nomSprint) {
     return {
       compatible: false,
       message:
-        `Ce ticket utilise la convention « ${nomTicket}_N ». Ne mélangez pas les deux : ` +
-        `restez sur un nom du type ${nomTicket}_N.`
+        `Cette demande utilise la convention « ${nomDemande}_N ». Ne mélangez pas les deux : ` +
+        `restez sur un nom du type ${nomDemande}_N.`
     };
   }
   return { compatible: true, message: null };
@@ -222,9 +222,9 @@ function verifierConvention(convention, nomTicket, nomSprint) {
  * Résout le dossier de sauvegarde et vérifie qu'il ne sort pas du périmètre.
  * @returns {{ chemin:string|null, valide:boolean, erreur:string|null }}
  */
-function resoudreDestination(racineAvmdf, nomTicket, nomSprint) {
-  if (!nomTicket) {
-    return { chemin: null, valide: false, erreur: 'Aucun ticket choisi.' };
+function resoudreDestination(racineAvmdf, nomDemande, nomSprint) {
+  if (!nomDemande) {
+    return { chemin: null, valide: false, erreur: 'Aucune demande choisie.' };
   }
   if (!nomSprint || !nomSprint.trim()) {
     return { chemin: null, valide: false, erreur: 'Aucun dossier de sprint indiqué.' };
@@ -237,7 +237,7 @@ function resoudreDestination(racineAvmdf, nomTicket, nomSprint) {
     };
   }
 
-  const chemin = path.join(racineAvmdf, nomTicket, nomSprint.trim());
+  const chemin = path.join(racineAvmdf, nomDemande, nomSprint.trim());
   if (!estSousRacine(chemin, racineAvmdf)) {
     return { chemin: null, valide: false, erreur: 'La destination sortirait du dossier d\'archives.' };
   }
@@ -279,10 +279,10 @@ async function inspecterSprint(cheminSprint) {
 
 /**
  * Retrouve toutes les versions « avant modification » d'un fichier, tous
- * tickets et tous sprints confondus.
+ * demandes et tous sprints confondus.
  *
  * On regarde dans chaque dossier de sprint, et aussi à la racine de chaque
- * ticket pour la convention historique. Les manifestes présents sur place
+ * demande pour la convention historique. Les manifestes présents sur place
  * fournissent la date et l'auteur ; à défaut, on se rabat sur la date du
  * fichier archivé.
  *
@@ -294,25 +294,25 @@ async function versionsArchivees(racineAvmdf, cheminRelatif, options = {}) {
   const { concurrence = 6, signal = { annule: false } } = options;
   if (!cheminRelatif) return { versions: [], erreur: null };
 
-  const { tickets, erreur } = await listerTickets(racineAvmdf);
+  const { demandes, erreur } = await listerDemandes(racineAvmdf);
   if (erreur) return { versions: [], erreur };
 
   const emplacements = [];
-  for (const ticket of tickets) {
-    emplacements.push({ ticket: ticket.nom, numero: ticket.numero, sprint: null, dossier: ticket.chemin });
+  for (const demande of demandes) {
+    emplacements.push({ demande: demande.nom, numero: demande.numero, sprint: null, dossier: demande.chemin });
     let contenu = [];
     try {
-      contenu = await fsp.readdir(cheminLong(ticket.chemin), { withFileTypes: true });
+      contenu = await fsp.readdir(cheminLong(demande.chemin), { withFileTypes: true });
     } catch (err) {
       continue;
     }
     for (const element of contenu) {
       if (!element.isDirectory()) continue;
       emplacements.push({
-        ticket: ticket.nom,
-        numero: ticket.numero,
+        demande: demande.nom,
+        numero: demande.numero,
         sprint: element.name,
-        dossier: path.join(ticket.chemin, element.name)
+        dossier: path.join(demande.chemin, element.name)
       });
     }
   }
@@ -327,7 +327,7 @@ async function versionsArchivees(racineAvmdf, cheminRelatif, options = {}) {
         const etat = await fsp.stat(cheminLong(chemin));
         if (!etat.isFile()) return;
         versions.push({
-          ticket: emplacement.ticket,
+          demande: emplacement.demande,
           numero: emplacement.numero,
           sprint: emplacement.sprint,
           dossier: emplacement.dossier,
@@ -418,9 +418,9 @@ module.exports = {
   CONVENTION_VIDE,
   CONVENTION_MIXTE,
   LIBELLES_CONVENTION,
-  normaliserTicket,
-  listerTickets,
-  inspecterTicket,
+  normaliserDemande,
+  listerDemandes,
+  inspecterDemande,
   inspecterSprint,
   proposerNom,
   verifierConvention,

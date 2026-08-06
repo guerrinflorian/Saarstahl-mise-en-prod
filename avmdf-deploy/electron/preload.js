@@ -74,10 +74,10 @@ contextBridge.exposeInMainWorld('avmdf', {
   },
 
   avmdf: {
-    tickets: () => ipcRenderer.invoke('avmdf:tickets'),
-    inspecter: (ticket) => ipcRenderer.invoke('avmdf:inspecter', { ticket }),
-    inspecterSprint: (ticket, sprint) => ipcRenderer.invoke('avmdf:inspecterSprint', { ticket, sprint }),
-    creerTicket: (ticket) => ipcRenderer.invoke('avmdf:creerTicket', { ticket })
+    demandes: () => ipcRenderer.invoke('avmdf:demandes'),
+    inspecter: (demande) => ipcRenderer.invoke('avmdf:inspecter', { demande }),
+    inspecterSprint: (demande, sprint) => ipcRenderer.invoke('avmdf:inspecterSprint', { demande, sprint }),
+    creerDemande: (demande) => ipcRenderer.invoke('avmdf:creerDemande', { demande })
   },
 
   deploiement: {

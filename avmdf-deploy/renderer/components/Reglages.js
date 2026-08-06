@@ -178,7 +178,7 @@ export function Reglages({
                 libelle="Racine des archives AVMDF"
                 valeur=${brouillon.racines.avmdf}
                 erreur=${(erreurPour('racines.avmdf') || {}).message}
-                aide="Dossier « avant modification », un sous-dossier par ticket."
+                aide="Dossier « avant modification », un sous-dossier par demande de travaux (AVMDF suivi du numéro)."
                 titreDialogue="Choisir la racine AVMDF"
                 onChange=${(valeur) => majRacine('avmdf', valeur)}
                 onErreur=${onEchec}

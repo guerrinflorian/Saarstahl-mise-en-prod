@@ -96,7 +96,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
     onRapport(reponse);
   }
 
-  const numero = choisi ? String(choisi.ticket || '').replace(/\D/g, '') : '';
+  const numero = choisi ? String(choisi.demande || '').replace(/\D/g, '') : '';
 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Historique des déploiements">
@@ -133,7 +133,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                         }}
                       >
                         <div class="historique-ligne1">
-                          <span class="mono">${manifeste.ticket} / ${manifeste.sprint}</span>
+                          <span class="mono">${manifeste.demande} / ${manifeste.sprint}</span>
                           ${manifeste.operation === 'restauration'
                             ? html`<span class="etiquette">retour arrière</span>`
                             : manifeste.operation === 'suppression'
@@ -170,7 +170,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                         <div class="modale-corps">
                           <table class="tableau tableau-resume">
                             <tbody>
-                              <tr><th>Ticket</th><td class="mono">${choisi.ticket} / ${choisi.sprint}</td></tr>
+                              <tr><th>Demande</th><td class="mono">${choisi.demande} / ${choisi.sprint}</td></tr>
                               <tr><th>Date</th><td>${formaterHorodatage(choisi.date)}</td></tr>
                               <tr><th>Auteur</th><td>${choisi.auteur || '-'}</td></tr>
                               <tr><th>Projet</th><td>${choisi.projet}</td></tr>
@@ -291,7 +291,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                 </div>
                 <div class="modale-pied">
                   <label for="confirmation-retour">
-                    Saisissez le numéro du ticket (<span class="mono">${numero}</span>) :
+                    Saisissez le numéro de la demande (<span class="mono">${numero}</span>) :
                   </label>
                   <input
                     type="text"

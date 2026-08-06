@@ -507,14 +507,14 @@ function handlersDiff() {
       return echec('Cette version est hors du dossier d\'archives.', 'Rouvrez la liste des versions.');
     }
 
-    const ticket = avmdf.normaliserTicket(parametres.ticket);
-    if (!ticket) {
+    const demande = avmdf.normaliserDemande(parametres.demande);
+    if (!demande) {
       return echec(
         'Aucune destination d\'archivage choisie.',
-        'Choisissez un ticket et un sprint dans le bandeau du bas : la version actuelle doit être archivée avant d\'être remplacée.'
+        'Choisissez une demande et un sprint dans le bandeau du bas : la version actuelle doit être archivée avant d\'être remplacée.'
       );
     }
-    const destination = avmdf.resoudreDestination(actuels.racines.avmdf, ticket.nom, parametres.sprint);
+    const destination = avmdf.resoudreDestination(actuels.racines.avmdf, demande.nom, parametres.sprint);
     if (!destination.valide) return echec(destination.erreur, 'Corrigez le nom du dossier de sprint.');
 
     const plan = {
@@ -523,7 +523,7 @@ function handlersDiff() {
       racineProd: dernierScan.cheminProd,
       racineAvmdf: actuels.racines.avmdf,
       dossierSauvegarde: destination.chemin,
-      ticket: ticket.nom,
+      demande: demande.nom,
       sprint: parametres.sprint.trim(),
       auteur: actuels.options.auteur,
       simulation: Boolean(parametres.simulation),
@@ -567,67 +567,67 @@ async function empreinteSure(chemin) {
 // ---------------------------------------------------------------------------
 
 function handlersAvmdf() {
-  gerer('avmdf:tickets', async () => {
+  gerer('avmdf:demandes', async () => {
     const actuels = reglages();
-    const { tickets, erreur } = await avmdf.listerTickets(actuels.racines.avmdf);
+    const { demandes, erreur } = await avmdf.listerDemandes(actuels.racines.avmdf);
     if (erreur) {
       return echec(erreur, 'Vérifiez la racine des archives dans les réglages.');
     }
-    return succes({ tickets, racine: actuels.racines.avmdf });
+    return succes({ demandes, racine: actuels.racines.avmdf });
   });
 
   gerer('avmdf:inspecter', async (parametres) => {
     const actuels = reglages();
-    const ticket = avmdf.normaliserTicket(parametres.ticket);
-    if (!ticket) {
+    const demande = avmdf.normaliserDemande(parametres.demande);
+    if (!demande) {
       return echec(
-        'Numéro de ticket incompréhensible.',
+        'Numéro de demande incompréhensible.',
         'Saisissez un numéro seul (4611) ou un nom complet (AVMDF4611).'
       );
     }
-    const cheminTicket = path.join(actuels.racines.avmdf, ticket.nom);
-    const inspection = await avmdf.inspecterTicket(cheminTicket, ticket.nom);
-    return succes({ ticket: { ...ticket, chemin: cheminTicket }, inspection });
+    const cheminDemande = path.join(actuels.racines.avmdf, demande.nom);
+    const inspection = await avmdf.inspecterDemande(cheminDemande, demande.nom);
+    return succes({ demande: { ...demande, chemin: cheminDemande }, inspection });
   });
 
   gerer('avmdf:inspecterSprint', async (parametres) => {
     const actuels = reglages();
     const destination = avmdf.resoudreDestination(
       actuels.racines.avmdf,
-      parametres.ticket,
+      parametres.demande,
       parametres.sprint
     );
     if (!destination.valide) return echec(destination.erreur, 'Corrigez le nom du dossier de sprint.');
 
-    const ticket = avmdf.normaliserTicket(parametres.ticket);
-    const inspection = await avmdf.inspecterTicket(
-      path.join(actuels.racines.avmdf, ticket.nom),
-      ticket.nom
+    const demande = avmdf.normaliserDemande(parametres.demande);
+    const inspection = await avmdf.inspecterDemande(
+      path.join(actuels.racines.avmdf, demande.nom),
+      demande.nom
     );
     const etat = await avmdf.inspecterSprint(destination.chemin);
     return succes({
       chemin: destination.chemin,
       etat,
       convention: inspection.convention,
-      compatible: avmdf.verifierConvention(inspection.convention, ticket.nom, parametres.sprint.trim())
+      compatible: avmdf.verifierConvention(inspection.convention, demande.nom, parametres.sprint.trim())
     });
   });
 
-  gerer('avmdf:creerTicket', async (parametres) => {
+  gerer('avmdf:creerDemande', async (parametres) => {
     const actuels = reglages();
-    const ticket = avmdf.normaliserTicket(parametres.ticket);
-    if (!ticket) return echec('Numéro de ticket incompréhensible.', 'Saisissez un numéro, par exemple 4611.');
-    const cheminTicket = path.join(actuels.racines.avmdf, ticket.nom);
-    if (!avmdf.estSousRacine(cheminTicket, actuels.racines.avmdf)) {
+    const demande = avmdf.normaliserDemande(parametres.demande);
+    if (!demande) return echec('Numéro de demande incompréhensible.', 'Saisissez un numéro, par exemple 4611.');
+    const cheminDemande = path.join(actuels.racines.avmdf, demande.nom);
+    if (!avmdf.estSousRacine(cheminDemande, actuels.racines.avmdf)) {
       return echec('Destination hors du dossier d\'archives.', 'Vérifiez la racine AVMDF dans les réglages.');
     }
     try {
-      await fsp.mkdir(fsindex.cheminLong(cheminTicket), { recursive: true });
-      carnet.ecrire('INFO', `ticket créé : ${cheminTicket}`);
-      return succes({ ticket: { ...ticket, chemin: cheminTicket } });
+      await fsp.mkdir(fsindex.cheminLong(cheminDemande), { recursive: true });
+      carnet.ecrire('INFO', `demande créée : ${cheminDemande}`);
+      return succes({ demande: { ...demande, chemin: cheminDemande } });
     } catch (err) {
       return echec(
-        `Création du ticket impossible (${fsindex.raisonLisible(err)}) : ${cheminTicket}`,
+        `Création de la demande impossible (${fsindex.raisonLisible(err)}) : ${cheminDemande}`,
         'Vérifiez vos droits sur le dossier d\'archives.',
         err
       );
@@ -678,11 +678,11 @@ function construirePlan(parametres) {
     };
   }
 
-  const ticket = avmdf.normaliserTicket(parametres.ticket);
-  if (!ticket) {
-    return { erreur: echec('Aucun ticket choisi.', 'Choisissez ou créez un ticket AVMDF dans le panneau de destination.') };
+  const demande = avmdf.normaliserDemande(parametres.demande);
+  if (!demande) {
+    return { erreur: echec('Aucune demande choisie.', 'Choisissez ou créez une demande AVMDF dans le panneau de destination.') };
   }
-  const destination = avmdf.resoudreDestination(actuels.racines.avmdf, ticket.nom, parametres.sprint);
+  const destination = avmdf.resoudreDestination(actuels.racines.avmdf, demande.nom, parametres.sprint);
   if (!destination.valide) {
     return { erreur: echec(destination.erreur, 'Corrigez le nom du dossier de sprint.') };
   }
@@ -693,7 +693,7 @@ function construirePlan(parametres) {
       racineLocale: dernierScan.cheminLocal,
       racineProd: dernierScan.cheminProd,
       racineAvmdf: actuels.racines.avmdf,
-      ticket: ticket.nom,
+      demande: demande.nom,
       sprint: parametres.sprint.trim(),
       dossierSauvegarde: destination.chemin,
       auteur: actuels.options.auteur,
@@ -804,7 +804,7 @@ function resumePlan(plan) {
   }
   return {
     projet: plan.projet,
-    ticket: plan.ticket,
+    demande: plan.demande,
     sprint: plan.sprint,
     dossierSauvegarde: plan.dossierSauvegarde,
     racineProd: plan.racineProd,

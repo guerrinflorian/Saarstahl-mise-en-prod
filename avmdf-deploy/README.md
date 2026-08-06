@@ -1,7 +1,8 @@
 # AVMDF - Mise en production
 
 Outil de bureau qui compare les sources locales et le site de production IIS, archive la version
-écrasée dans `AvMdf\AVMDF<ticket>\<sprint>` avant toute copie, et permet de revenir en arrière.
+écrasée dans `AvMdf\AVMDF<numéro>\<sprint>` avant toute copie, et permet de revenir en arrière.
+Le numéro est celui de la demande de travaux informatique (par exemple AVMDF4789).
 
 Windows, Electron, sans étape de build : le code livré est le code exécuté.
 
@@ -47,7 +48,7 @@ electron/
     compare.js  appariement des deux arbres, statuts, compteurs agrégés
     search.js   recherche et filtrage, occurrences dans le contenu
     textdiff.js encodage (BOM → UTF-8 strict → Windows-1252) et diff ligne à ligne
-    avmdf.js    tickets, conventions de sprint, résolution de destination
+    avmdf.js    demandes, conventions de sprint, résolution de destination
     deploy.js   préflight, archivage, copie, manifeste, récapitulatif, retour arrière
     journal.js  journal quotidien en texte
 renderer/
@@ -100,7 +101,7 @@ Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<hor
 
 ```json
 {
-  "ticket": "AVMDF4611",
+  "demande": "AVMDF4611",
   "sprint": "AVMDF4611_3",
   "auteur": "guerrin-f",
   "date": "2026-08-06T14:52:10.000Z",
@@ -196,7 +197,7 @@ La comparaison ligne à ligne est exacte au caractère près, blancs compris :
 
 Chaque dossier de sprint contient la version « avant modification » des fichiers touchés. L'outil
 sait les retrouver : sur un fichier, `Versions archivées` (bouton de la comparaison ou clic droit
-dans l'arborescence) liste **toutes** ses versions, tous tickets et tous sprints confondus, avec
+dans l'arborescence) liste **toutes** ses versions, toutes demandes et tous sprints confondus, avec
 leur date, leur auteur et l'action d'origine, lus dans les manifestes présents sur place.
 
 Chaque version se compare à la version actuellement en production, et se remet en place en un

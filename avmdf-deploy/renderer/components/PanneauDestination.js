@@ -9,63 +9,63 @@ const LIBELLES_CONVENTION = {
   sprint: 'sprints numérotés (Sprint1, Sprint2…)',
   suffixe: 'suffixe numéroté (_1, _2…)',
   historique: 'ancienne organisation : fichiers directement à la racine',
-  vide: 'ticket vide',
+  vide: 'demande vide',
   mixte: 'deux conventions mélangées'
 };
 
 /**
- * Choix du ticket AVMDF et du dossier de sprint qui recevra les versions
+ * Choix de la demande AVMDF et du dossier de sprint qui recevra les versions
  * écrasées. Le contenu réel de Z:\AvMdf fait foi : la convention en place est
  * détectée, jamais devinée.
  */
 export function PanneauDestination({ destination, onValider, onFermer, onEchec }) {
-  const [tickets, setTickets] = useState([]);
+  const [demandes, setDemandes] = useState([]);
   const [racine, setRacine] = useState('');
-  const [saisieTicket, setSaisieTicket] = useState(destination ? destination.ticket : '');
+  const [saisieDemande, setSaisieDemande] = useState(destination ? destination.demande : '');
   const [saisieSprint, setSaisieSprint] = useState(destination ? destination.sprint : '');
   const [inspection, setInspection] = useState(null);
   const [etatSprint, setEtatSprint] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [creationDemandee, setCreationDemandee] = useState(false);
-  const [filtreTicket, setFiltreTicket] = useState('');
+  const [filtreDemande, setFiltreDemande] = useState('');
 
   useEffect(() => {
     let abandonne = false;
     (async () => {
-      const reponse = await window.avmdf.avmdf.tickets();
+      const reponse = await window.avmdf.avmdf.demandes();
       if (abandonne) return;
       setChargement(false);
       if (!reponse.ok) {
         onEchec(reponse);
         return;
       }
-      setTickets(reponse.tickets);
+      setDemandes(reponse.demandes);
       setRacine(reponse.racine);
-      if (!saisieTicket && reponse.tickets.length) setSaisieTicket(reponse.tickets[0].nom);
+      if (!saisieDemande && reponse.demandes.length) setSaisieDemande(reponse.demandes[0].nom);
     })();
     return () => {
       abandonne = true;
     };
   }, []);
 
-  // Inspection du ticket saisi : convention en place et nom proposé.
+  // Inspection de la demande saisie : convention en place et nom proposé.
   useEffect(() => {
-    const ticket = saisieTicket.trim();
-    if (!ticket) {
+    const demande = saisieDemande.trim();
+    if (!demande) {
       setInspection(null);
       return undefined;
     }
     let abandonne = false;
     const minuteur = setTimeout(async () => {
-      const reponse = await window.avmdf.avmdf.inspecter(ticket);
+      const reponse = await window.avmdf.avmdf.inspecter(demande);
       if (abandonne) return;
       if (!reponse.ok) {
         setInspection({ erreur: reponse.erreur.message });
         return;
       }
-      setInspection({ ...reponse.inspection, ticket: reponse.ticket });
+      setInspection({ ...reponse.inspection, demande: reponse.demande });
       setCreationDemandee(false);
-      if (!destination || destination.ticket !== reponse.ticket.nom) {
+      if (!destination || destination.demande !== reponse.demande.nom) {
         setSaisieSprint(reponse.inspection.proposition);
       }
     }, 250);
@@ -73,17 +73,17 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
       abandonne = true;
       clearTimeout(minuteur);
     };
-  }, [saisieTicket]);
+  }, [saisieDemande]);
 
   // État du dossier de sprint visé.
   useEffect(() => {
-    if (!inspection || !inspection.ticket || !saisieSprint.trim()) {
+    if (!inspection || !inspection.demande || !saisieSprint.trim()) {
       setEtatSprint(null);
       return undefined;
     }
     let abandonne = false;
     const minuteur = setTimeout(async () => {
-      const reponse = await window.avmdf.avmdf.inspecterSprint(inspection.ticket.nom, saisieSprint.trim());
+      const reponse = await window.avmdf.avmdf.inspecterSprint(inspection.demande.nom, saisieSprint.trim());
       if (abandonne) return;
       setEtatSprint(reponse.ok ? reponse : { erreur: reponse.erreur.message });
     }, 250);
@@ -91,29 +91,29 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
       abandonne = true;
       clearTimeout(minuteur);
     };
-  }, [inspection && inspection.ticket && inspection.ticket.nom, saisieSprint]);
+  }, [inspection && inspection.demande && inspection.demande.nom, saisieSprint]);
 
-  async function creerTicket() {
-    const reponse = await window.avmdf.avmdf.creerTicket(saisieTicket.trim());
+  async function creerDemande() {
+    const reponse = await window.avmdf.avmdf.creerDemande(saisieDemande.trim());
     if (!reponse.ok) {
       onEchec(reponse);
       return;
     }
     setCreationDemandee(false);
-    setSaisieTicket(reponse.ticket.nom);
+    setSaisieDemande(reponse.demande.nom);
   }
 
-  const ticketExiste = inspection && inspection.existe && !inspection.erreur;
-  const ticketNom = inspection && inspection.ticket ? inspection.ticket.nom : null;
+  const demandeExiste = inspection && inspection.existe && !inspection.erreur;
+  const demandeNom = inspection && inspection.demande ? inspection.demande.nom : null;
   const cheminResolu = etatSprint && !etatSprint.erreur ? etatSprint.chemin : null;
   const incompatible = etatSprint && etatSprint.compatible && !etatSprint.compatible.compatible;
   const sprintOccupe = etatSprint && etatSprint.etat && etatSprint.etat.existe && !etatSprint.etat.vide;
 
-  const listeFiltree = filtreTicket.trim()
-    ? tickets.filter((t) => t.nom.toLowerCase().includes(filtreTicket.trim().toLowerCase()))
-    : tickets;
+  const listeFiltree = filtreDemande.trim()
+    ? demandes.filter((t) => t.nom.toLowerCase().includes(filtreDemande.trim().toLowerCase()))
+    : demandes;
 
-  const valide = Boolean(ticketNom && cheminResolu && !incompatible);
+  const valide = Boolean(demandeNom && cheminResolu && !incompatible);
 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Destination de l'archivage">
@@ -131,47 +131,47 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
           </p>
 
           <section class="section">
-            <h2>Ticket</h2>
+            <h2>Demande de travaux</h2>
             ${chargement ? html`<div class="attenue">Lecture du dossier d'archives…</div>` : null}
             <div class="champs">
               <div class="champ">
-                <label for="filtre-ticket">Tickets existants</label>
+                <label for="filtre-demande">Demandes existants</label>
                 <div class="champ-corps">
                   <input
                     type="search"
-                    id="filtre-ticket"
+                    id="filtre-demande"
                     class="mono"
                     style="max-width:140px"
                     placeholder="4611"
-                    value=${filtreTicket}
-                    onInput=${(e) => setFiltreTicket(e.target.value)}
+                    value=${filtreDemande}
+                    onInput=${(e) => setFiltreDemande(e.target.value)}
                   />
                   <select
                     size="1"
                     style="min-width:180px"
-                    value=${ticketNom || ''}
-                    aria-label="Choisir un ticket existant"
-                    onChange=${(e) => setSaisieTicket(e.target.value)}
+                    value=${demandeNom || ''}
+                    aria-label="Choisir une demande existante"
+                    onChange=${(e) => setSaisieDemande(e.target.value)}
                   >
-                    ${listeFiltree.length === 0 ? html`<option value="">aucun ticket</option>` : null}
-                    ${listeFiltree.map((ticket) => html`<option value=${ticket.nom} key=${ticket.nom}>${ticket.nom}</option>`)}
+                    ${listeFiltree.length === 0 ? html`<option value="">aucune demande</option>` : null}
+                    ${listeFiltree.map((demande) => html`<option value=${demande.nom} key=${demande.nom}>${demande.nom}</option>`)}
                   </select>
-                  <span class="attenue">${formaterNombre(tickets.length)} ticket(s)</span>
+                  <span class="attenue">${formaterNombre(demandes.length)} demande(s)</span>
                 </div>
               </div>
 
               <div class="champ">
-                <label for="saisie-ticket">Ou numéro à saisir</label>
+                <label for="saisie-demande">Ou numéro à saisir</label>
                 <div class="champ-corps">
                   <input
                     type="text"
-                    id="saisie-ticket"
+                    id="saisie-demande"
                     class="mono"
                     style="max-width:200px"
                     placeholder="4611"
                     spellcheck="false"
-                    value=${saisieTicket}
-                    onInput=${(e) => setSaisieTicket(e.target.value)}
+                    value=${saisieDemande}
+                    onInput=${(e) => setSaisieDemande(e.target.value)}
                   />
                 </div>
                 ${inspection && inspection.erreur
@@ -183,39 +183,39 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
             ${inspection && !inspection.erreur && !inspection.existe
               ? html`
                   <div class="encart encart-alerte" style="margin-top:10px">
-                    <strong>Le ticket ${ticketNom} n'existe pas encore.</strong>
+                    <strong>La demande ${demandeNom} n'existe pas encore.</strong>
                     <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
                       ${creationDemandee
                         ? html`
-                            <span>Créer le dossier ${ticketNom} dans ${racine} ?</span>
+                            <span>Créer le dossier ${demandeNom} dans ${racine} ?</span>
                             <button type="button" class="btn btn-mini" onClick=${() => setCreationDemandee(false)}>
                               Annuler
                             </button>
-                            <button type="button" class="btn btn-mini btn-accent" onClick=${creerTicket}>
-                              Créer le ticket
+                            <button type="button" class="btn btn-mini btn-accent" onClick=${creerDemande}>
+                              Créer la demande
                             </button>
                           `
                         : html`<button type="button" class="btn btn-mini" onClick=${() => setCreationDemandee(true)}>
-                            Créer ${ticketNom}
+                            Créer ${demandeNom}
                           </button>`}
                     </div>
                   </div>
                 `
               : null}
 
-            ${ticketExiste
+            ${demandeExiste
               ? html`
                   <div class=${'encart' + (inspection.convention === 'mixte' ? ' encart-alerte' : '')} style="margin-top:10px">
                     <strong>Convention détectée :</strong> ${LIBELLES_CONVENTION[inspection.convention]}.
                     ${inspection.convention === 'historique'
                       ? html`<div style="margin-top:4px">
-                          Ce ticket utilise l'ancienne organisation : ${formaterNombre(inspection.fichiersRacine)}
+                          Cette demande utilise l'ancienne organisation : ${formaterNombre(inspection.fichiersRacine)}
                           fichier(s) sont posés à sa racine. Ils ne seront pas touchés ; le nouveau dossier vient à côté.
                         </div>`
                       : null}
                     ${inspection.convention === 'mixte'
                       ? html`<div style="margin-top:4px">
-                          Les deux conventions coexistent déjà dans ce ticket. Choisissez celle que vous voulez
+                          Les deux conventions coexistent déjà dans cette demande. Choisissez celle que vous voulez
                           poursuivre, et tenez-vous-y.
                         </div>`
                       : null}
@@ -226,7 +226,7 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
 
           <section class="section">
             <h2>Dossier de sprint</h2>
-            ${ticketExiste && inspection.sprints.length
+            ${demandeExiste && inspection.sprints.length
               ? html`
                   <div class="sprints">
                     ${inspection.sprints.map(
@@ -302,8 +302,8 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
             type="button"
             class="btn btn-accent"
             disabled=${!valide}
-            title=${valide ? '' : 'Choisissez un ticket et un nom de dossier valide'}
-            onClick=${() => onValider({ ticket: ticketNom, sprint: saisieSprint.trim(), chemin: cheminResolu })}
+            title=${valide ? '' : 'Choisissez une demande et un nom de dossier valide'}
+            onClick=${() => onValider({ demande: demandeNom, sprint: saisieSprint.trim(), chemin: cheminResolu })}
           >
             Choisir cette destination
           </button>

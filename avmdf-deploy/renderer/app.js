@@ -381,7 +381,7 @@ function App() {
     setDeploiement({ etape: 'preflight', progression: null, occupe: false });
     const reponse = await window.avmdf.deploiement.preflight({
       cles: [...selection],
-      ticket: destination.ticket,
+      demande: destination.demande,
       sprint: destination.sprint,
       operation,
       simulation: config.options.simulation
@@ -404,7 +404,7 @@ function App() {
     setDeploiement((precedent) => ({ ...precedent, occupe: true }));
     const reponse = await window.avmdf.deploiement.executer({
       cles: [...selection],
-      ticket: destination.ticket,
+      demande: destination.demande,
       sprint: destination.sprint,
       operation,
       simulation: config.options.simulation

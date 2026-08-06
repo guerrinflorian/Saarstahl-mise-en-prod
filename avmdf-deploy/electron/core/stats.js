@@ -108,20 +108,20 @@ function calculer(manifestes, maintenant = new Date()) {
         lignesAjoutees: 0,
         lignesSupprimees: 0,
         derniereFois: null,
-        dernierTicket: null
+        derniereDemande: null
       };
       entree.passages += 1;
       entree.lignesAjoutees += fichier.lignesAjoutees || 0;
       entree.lignesSupprimees += fichier.lignesSupprimees || 0;
       if (!entree.derniereFois || String(manifeste.date) > String(entree.derniereFois)) {
         entree.derniereFois = manifeste.date;
-        entree.dernierTicket = manifeste.ticket;
+        entree.derniereDemande = manifeste.demande;
       }
       fichiers.set(cle, entree);
     }
   }
 
-  const tickets = new Set(deploiements.map((m) => m.ticket).filter(Boolean));
+  const demandes = new Set(deploiements.map((m) => m.demande).filter(Boolean));
   const dernier = deploiements[0] || null;
 
   return {
@@ -134,12 +134,12 @@ function calculer(manifestes, maintenant = new Date()) {
       lignesAjoutees,
       lignesSupprimees,
       echecs,
-      tickets: tickets.size
+      demandes: demandes.size
     },
     dernier: dernier
       ? {
           date: dernier.date,
-          ticket: dernier.ticket,
+          demande: dernier.demande,
           sprint: dernier.sprint,
           projet: dernier.projet,
           auteur: dernier.auteur,
@@ -156,7 +156,7 @@ function calculer(manifestes, maintenant = new Date()) {
       .slice(0, 10),
     recents: reels.slice(0, 8).map((manifeste) => ({
       date: manifeste.date,
-      ticket: manifeste.ticket,
+      demande: manifeste.demande,
       sprint: manifeste.sprint,
       projet: manifeste.projet,
       auteur: manifeste.auteur,
