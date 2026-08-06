@@ -203,6 +203,22 @@ comprises), JavaScript, CSS, HTML/XML, SQL, VB.NET et JSON, selon l'extension du
   texte, elle se coupe d'elle-même pour ne pas figer l'interface.
 - Les teintes restent dans les deux familles de l'identité (vert et gris).
 
+### Gabarits Vue entre accents graves
+
+Dans un fichier JavaScript, un gabarit `` template: `…` `` qui contient du HTML (composants
+Vue 2) est tokenisé avec la grammaire markup : balises, attributs et texte colorés comme du vrai
+HTML, interpolations `${…}` préservées en JavaScript. Visual Studio affiche tout cela d'une seule
+couleur ; ici le gabarit se lit comme une page.
+
+### Guides d'ouverture et de fermeture
+
+Chaque balise ouvrante est appariée à sa fermante et un trait vertical descend de l'une à
+l'autre, avec un petit retour horizontal sur la ligne de fermeture. Les traits suivent la
+**structure réelle** des balises, pas l'indentation : dans un gabarit indenté au pif, ils
+montrent quand même qui ouvre quoi et jusqu'où. Bouton « Guides » pour les couper, préférence
+mémorisée. Les fermetures orphelines sont ignorées, les balises vides (`<br/>`, `<img>`…) ne
+créent pas de trait.
+
 ## Interface
 
 - Les deux panneaux de l'analyse se redimensionnent à la souris (double-clic sur la poignée pour

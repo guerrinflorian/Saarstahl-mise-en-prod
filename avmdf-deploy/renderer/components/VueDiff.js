@@ -2,7 +2,7 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
 import { formaterDate, formaterNombre, formaterOctets } from './arborescence.js';
-import { calculerJetons, langueDe } from './coloration.js';
+import { calculerColoration, langueDe } from './coloration.js';
 
 const html = htm.bind(h);
 
@@ -147,6 +147,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
   const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
   const [espacesVisibles, setEspacesVisibles] = useState(() => Boolean(prefs.espaces));
   const [couleur, setCouleur] = useState(() => prefs.couleur !== false);
+  const [guidesVisibles, setGuidesVisibles] = useState(() => prefs.guides !== false);
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
@@ -164,12 +165,12 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
     try {
       localStorage.setItem(
         'avmdf.diff',
-        JSON.stringify({ unifie, synchronise, espaces: espacesVisibles, couleur })
+        JSON.stringify({ unifie, synchronise, espaces: espacesVisibles, couleur, guides: guidesVisibles })
       );
     } catch (err) {
       /* stockage local indisponible : les préférences ne survivront pas */
     }
-  }, [unifie, synchronise, espacesVisibles, couleur]);
+  }, [unifie, synchronise, espacesVisibles, couleur, guidesVisibles]);
 
   useEffect(() => {
     setReplisOuverts(new Set());
@@ -177,16 +178,19 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
     setPositionTrouvee(0);
   }, [donnees && donnees.cle]);
 
-  // Coloration syntaxique : langue déduite du chemin, jetons calculés une fois
-  // par fichier sur le texte complet de chaque côté.
+  // Coloration syntaxique et structure : langue déduite du chemin, jetons et
+  // guides calculés une fois par fichier sur le texte complet de chaque côté.
   const langue = useMemo(
     () => (donnees && donnees.type === 'texte' ? langueDe(donnees.chemin) : null),
     [donnees]
   );
-  const jetons = useMemo(
-    () => (langue && couleur ? calculerJetons(donnees.groupes, langue.id) : null),
-    [donnees, langue, couleur]
+  const coloration = useMemo(
+    () => (langue && (couleur || guidesVisibles) ? calculerColoration(donnees.groupes, langue.id) : null),
+    [donnees, langue, couleur, guidesVisibles]
   );
+  const jetons = couleur && coloration ? coloration.jetons : null;
+  const guides = guidesVisibles && coloration ? coloration.guides : null;
+  const structure = Boolean(coloration && coloration.structure);
 
   // Lignes réellement affichées, replis dépliés compris.
   const rangs = useMemo(() => {
@@ -397,6 +401,17 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                     Couleur
                   </button>`
                 : null}
+              ${structure
+                ? html`<button
+                    type="button"
+                    class=${'btn btn-mini' + (guidesVisibles ? ' btn-marque' : '')}
+                    title="Traits reliant chaque balise ouvrante à sa fermante, d'après la structure réelle du code"
+                    aria-pressed=${guidesVisibles}
+                    onClick=${() => setGuidesVisibles(!guidesVisibles)}
+                  >
+                    Guides
+                  </button>`
+                : null}
               <button
                 type="button"
                 class="btn btn-mini"
@@ -536,6 +551,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       ligne=${rang.ligne}
                                       espaces=${espacesVisibles}
                                       cartes=${jetons}
+                                      cartesGuides=${guides}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
                                     />`
@@ -562,6 +578,9 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       jetons=${jetons && rang.ligne.gauche
                                         ? jetons.gauche.get(rang.ligne.gauche.numero)
                                         : null}
+                                      guides=${guides && rang.ligne.gauche
+                                        ? guides.gauche.get(rang.ligne.gauche.numero)
+                                        : null}
                                       espacesSeuls=${rang.ligne.espacesUniquement}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
@@ -587,6 +606,9 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       espaces=${espacesVisibles}
                                       jetons=${jetons && rang.ligne.droite
                                         ? jetons.droite.get(rang.ligne.droite.numero)
+                                        : null}
+                                      guides=${guides && rang.ligne.droite
+                                        ? guides.droite.get(rang.ligne.droite.numero)
                                         : null}
                                       espacesSeuls=${rang.ligne.espacesUniquement}
                                       surligne=${trouvees[positionTrouvee] === index}
@@ -625,7 +647,7 @@ function Repli({ rang, onOuvrir }) {
   `;
 }
 
-function LigneCote({ cote, type, espaces, jetons, espacesSeuls, surligne, courante }) {
+function LigneCote({ cote, type, espaces, jetons, guides, espacesSeuls, surligne, courante }) {
   // Une ligne absente d'un côté garde sa place, pour que les deux panneaux
   // restent alignés.
   const vide = !cote;
@@ -645,13 +667,14 @@ function LigneCote({ cote, type, espaces, jetons, espacesSeuls, surligne, couran
       >
         ${signe}
       </span>
-      <span class="diff-texte">${vide ? '' : contenu(cote, espaces, jetons)}</span>
+      <span class="diff-texte">${!vide && guides ? guides.map((guide) => html`<span class=${'guide' + (guide.fin ? ' guide-fin' : '')} style=${'left:' + (espaces ? guide.colonneGlyphes : guide.colonne) + 'ch'}></span>`) : null}${vide ? '' : contenu(cote, espaces, jetons)}</span>
     </div>
   `;
 }
 
-function LignesUnifiees({ ligne, espaces, cartes, surligne, courante }) {
+function LignesUnifiees({ ligne, espaces, cartes, cartesGuides, surligne, courante }) {
   const jetonsDe = (cote, nom) => (cartes && cote ? cartes[nom].get(cote.numero) : null);
+  const guidesDe = (cote, nom) => (cartesGuides && cote ? cartesGuides[nom].get(cote.numero) : null);
   if (ligne.type === 'modification') {
     return html`
       <div>
@@ -660,6 +683,7 @@ function LignesUnifiees({ ligne, espaces, cartes, surligne, courante }) {
           type="suppression"
           espaces=${espaces}
           jetons=${jetonsDe(ligne.gauche, 'gauche')}
+          guides=${guidesDe(ligne.gauche, 'gauche')}
           espacesSeuls=${ligne.espacesUniquement}
           surligne=${surligne}
           courante=${courante}
@@ -669,6 +693,7 @@ function LignesUnifiees({ ligne, espaces, cartes, surligne, courante }) {
           type="ajout"
           espaces=${espaces}
           jetons=${jetonsDe(ligne.droite, 'droite')}
+          guides=${guidesDe(ligne.droite, 'droite')}
           espacesSeuls=${ligne.espacesUniquement}
           surligne=${surligne}
           courante=${courante}
@@ -683,6 +708,7 @@ function LignesUnifiees({ ligne, espaces, cartes, surligne, courante }) {
     type=${ligne.type}
     espaces=${espaces}
     jetons=${jetonsDe(cote, nom)}
+    guides=${guidesDe(cote, nom)}
     surligne=${surligne}
     courante=${courante}
   />`;
