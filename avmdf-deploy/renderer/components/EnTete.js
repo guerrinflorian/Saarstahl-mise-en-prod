@@ -5,13 +5,15 @@ import { joindreChemin } from './chemins.js';
 const html = htm.bind(h);
 
 /**
- * Barre du haut : cible de la comparaison (projet ou dossiers libres),
- * chemins résolus, lancement de l'analyse, accès aux écrans annexes.
+ * Barre du haut : navigation entre l'analyse et le tableau de bord, cible de
+ * la comparaison, lancement de l'analyse, accès aux écrans annexes.
  */
 export function EnTete({
   config,
   projet,
   cible,
+  vue,
+  onVue,
   analyseEnCours,
   onChangerProjet,
   onQuitterModeLibre,
@@ -40,50 +42,74 @@ export function EnTete({
       <div class="entete-titre">
         <img class="entete-logo" src="assets/marque.png" alt="Saarstahl Rail" />
         <span class="entete-marque">AVMDF</span>
-        <span>Mise en production</span>
       </div>
 
-      ${modeLibre
+      <nav class="onglets" aria-label="Vues principales">
+        <button
+          type="button"
+          class=${'onglet' + (vue === 'analyse' ? ' actif' : '')}
+          aria-current=${vue === 'analyse' ? 'page' : 'false'}
+          onClick=${() => onVue('analyse')}
+        >
+          Analyse
+        </button>
+        <button
+          type="button"
+          class=${'onglet' + (vue === 'bord' ? ' actif' : '')}
+          aria-current=${vue === 'bord' ? 'page' : 'false'}
+          onClick=${() => onVue('bord')}
+        >
+          Tableau de bord
+        </button>
+      </nav>
+
+      ${vue === 'analyse'
         ? html`
-            <span class="etiquette-mode">Comparaison libre</span>
-            <button type="button" class="btn btn-plat" onClick=${onQuitterModeLibre}>Revenir aux projets</button>
-          `
-        : html`
-            <label for="choix-projet">Projet</label>
-            <select
-              id="choix-projet"
-              value=${projet ? projet.id : ''}
-              disabled=${projetsActifs.length === 0}
-              onChange=${(evenement) => onChangerProjet(evenement.target.value)}
-            >
-              ${projetsActifs.length === 0
-                ? html`<option value="">Aucun projet actif</option>`
-                : projetsActifs.map((p) => html`<option value=${p.id} key=${p.id}>${p.nom || '(sans nom)'}</option>`)}
-            </select>
-          `}
+            ${modeLibre
+              ? html`
+                  <span class="etiquette-mode">Comparaison libre</span>
+                  <button type="button" class="btn btn-plat" onClick=${onQuitterModeLibre}>Revenir aux projets</button>
+                `
+              : html`
+                  <label for="choix-projet">Projet</label>
+                  <select
+                    id="choix-projet"
+                    value=${projet ? projet.id : ''}
+                    disabled=${projetsActifs.length === 0}
+                    onChange=${(evenement) => onChangerProjet(evenement.target.value)}
+                  >
+                    ${projetsActifs.length === 0
+                      ? html`<option value="">Aucun projet actif</option>`
+                      : projetsActifs.map((p) => html`<option value=${p.id} key=${p.id}>${p.nom || '(sans nom)'}</option>`)}
+                  </select>
+                `}
 
-      <div class="entete-chemins mono">
-        ${gauche || droite
-          ? html`
-              <span class="chemin" title=${gauche}>${gauche}</span>
-              <span class="fleche">→</span>
-              <span class="chemin" title=${droite}>${droite}</span>
-            `
-          : html`<span class="rien">Aucune cible : ajoutez un projet dans les réglages.</span>`}
-      </div>
+            <div class="entete-chemins mono">
+              ${gauche || droite
+                ? html`
+                    <span class="chemin" title=${gauche}>${gauche}</span>
+                    <span class="fleche">→</span>
+                    <span class="chemin" title=${droite}>${droite}</span>
+                  `
+                : html`<span class="rien">Aucune cible : ajoutez un projet dans les réglages.</span>`}
+            </div>
+          `
+        : html`<div style="flex:1"></div>`}
 
       <div class="entete-actions">
-        ${analyseEnCours
-          ? html`<button type="button" class="btn" onClick=${onAnnuler}>Annuler l'analyse</button>`
-          : html`<button
-              type="button"
-              class="btn"
-              disabled=${!gauche || !droite}
-              title="Comparer les deux arborescences (F5)"
-              onClick=${onAnalyser}
-            >
-              Analyser
-            </button>`}
+        ${vue === 'analyse'
+          ? analyseEnCours
+            ? html`<button type="button" class="btn" onClick=${onAnnuler}>Annuler l'analyse</button>`
+            : html`<button
+                type="button"
+                class="btn"
+                disabled=${!gauche || !droite}
+                title="Comparer les deux arborescences (F5)"
+                onClick=${onAnalyser}
+              >
+                Analyser
+              </button>`
+          : null}
         <button type="button" class="btn btn-plat" title="Déploiements passés et retour arrière" onClick=${onOuvrirHistorique}>
           Historique
         </button>

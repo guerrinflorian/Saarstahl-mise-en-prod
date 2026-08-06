@@ -22,6 +22,7 @@ const textdiff = require('./core/textdiff');
 const avmdf = require('./core/avmdf');
 const deploy = require('./core/deploy');
 const journal = require('./core/journal');
+const stats = require('./core/stats');
 
 const MODE_DEV = process.argv.includes('--dev');
 
@@ -829,6 +830,16 @@ function handlersHistorique() {
     const actuels = reglages();
     const { manifestes, erreurs } = await deploy.listerManifestes(actuels.racines.avmdf);
     return succes({ manifestes, erreurs, racine: actuels.racines.avmdf });
+  });
+
+  gerer('statistiques:calculer', async () => {
+    const actuels = reglages();
+    const { manifestes, erreurs } = await deploy.listerManifestes(actuels.racines.avmdf);
+    return succes({
+      stats: stats.calculer(manifestes),
+      erreurs,
+      racine: actuels.racines.avmdf
+    });
   });
 
   gerer('historique:comparer', async (parametres) => {

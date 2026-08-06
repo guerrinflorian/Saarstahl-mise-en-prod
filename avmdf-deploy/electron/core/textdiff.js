@@ -64,6 +64,28 @@ function estBinaire(tampon) {
   return fenetre.includes(0);
 }
 
+/**
+ * Style d'indentation dominant d'un fichier : tabulations, espaces, mixte.
+ * Échantillonné sur les 2 000 premières lignes, largement suffisant pour un
+ * fichier source.
+ */
+function detecterIndentation(texte) {
+  const lignes = texte.split(/\r\n|\n|\r/).slice(0, 2000);
+  let tabulations = 0;
+  let espaces = 0;
+  for (const ligne of lignes) {
+    if (ligne.startsWith('\t')) tabulations += 1;
+    else if (ligne.startsWith('  ')) espaces += 1;
+  }
+  if (!tabulations && !espaces) return 'aucune';
+  if (tabulations && espaces) {
+    if (tabulations >= espaces * 4) return 'tabulations';
+    if (espaces >= tabulations * 4) return 'espaces';
+    return 'mixte';
+  }
+  return tabulations ? 'tabulations' : 'espaces';
+}
+
 function detecterFinDeLigne(texte) {
   const crlf = (texte.match(/\r\n/g) || []).length;
   const total = (texte.match(/\r\n|\n|\r/g) || []).length;
@@ -89,7 +111,8 @@ function decoder(tampon) {
     texte,
     encodage: detection.encodage,
     codec: detection.codec,
-    finDeLigne: detecterFinDeLigne(texte)
+    finDeLigne: detecterFinDeLigne(texte),
+    indentation: detecterIndentation(texte)
   };
 }
 
@@ -191,6 +214,20 @@ function alignerLignes(lignesGauche, lignesDroite, { ignorerEspaces = false } = 
   }
 
   const modifications = lignes.filter((l) => l.type === 'modification');
+
+  // Une ligne dont seuls les blancs changent (indentation retouchée, espaces en
+  // fin de ligne, tabulations converties) est signalée comme telle : à l'œil nu
+  // les deux versions semblent identiques, et c'est précisément là qu'un diff
+  // imprécis fait perdre du temps.
+  const sansBlancs = (texte) => texte.replace(/[ \t\u00a0]+/g, '');
+  let modificationsEspaces = 0;
+  for (const ligne of modifications) {
+    ligne.espacesUniquement =
+      ligne.gauche.texte !== ligne.droite.texte &&
+      sansBlancs(ligne.gauche.texte) === sansBlancs(ligne.droite.texte);
+    if (ligne.espacesUniquement) modificationsEspaces += 1;
+  }
+
   const surlignageOmis = modifications.length > MAX_SURLIGNAGE;
   if (!surlignageOmis) {
     for (const ligne of modifications) {
@@ -207,7 +244,8 @@ function alignerLignes(lignesGauche, lignesDroite, { ignorerEspaces = false } = 
   const compteurs = {
     ajoutees: lignes.filter((l) => l.type === 'ajout').length + modifications.length,
     supprimees: lignes.filter((l) => l.type === 'suppression').length + modifications.length,
-    modifiees: modifications.length
+    modifiees: modifications.length,
+    modificationsEspaces
   };
 
   return { lignes, compteurs, surlignageOmis };
@@ -308,13 +346,30 @@ function comparerTampons(tamponGauche, tamponDroite, options = {}) {
   return {
     type: 'texte',
     gauche: gauche
-      ? { encodage: gauche.encodage, finDeLigne: gauche.finDeLigne, nombreLignes: lignesGauche.length }
+      ? {
+          encodage: gauche.encodage,
+          finDeLigne: gauche.finDeLigne,
+          indentation: gauche.indentation,
+          nombreLignes: lignesGauche.length
+        }
       : null,
     droite: droite
-      ? { encodage: droite.encodage, finDeLigne: droite.finDeLigne, nombreLignes: lignesDroite.length }
+      ? {
+          encodage: droite.encodage,
+          finDeLigne: droite.finDeLigne,
+          indentation: droite.indentation,
+          nombreLignes: lignesDroite.length
+        }
       : null,
     ecartEncodage: Boolean(gauche && droite && gauche.encodage !== droite.encodage),
     ecartFinDeLigne: Boolean(gauche && droite && gauche.finDeLigne !== droite.finDeLigne),
+    ecartIndentation: Boolean(
+      gauche &&
+        droite &&
+        gauche.indentation !== droite.indentation &&
+        gauche.indentation !== 'aucune' &&
+        droite.indentation !== 'aucune'
+    ),
     lignes,
     compteurs,
     surlignageOmis
@@ -336,6 +391,7 @@ module.exports = {
   detecterEncodage,
   estBinaire,
   detecterFinDeLigne,
+  detecterIndentation,
   decoder,
   decouperLignes,
   alignerLignes,

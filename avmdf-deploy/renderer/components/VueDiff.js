@@ -8,15 +8,86 @@ const html = htm.bind(h);
 const HAUTEUR_LIGNE = 18;
 const MAX_LIGNES_AFFICHEES = 6000;
 
-const SIGNES = { identique: ' ', ajout: '+', suppression: '−', modification: '~' };
+const SIGNES = { identique: ' ', ajout: '+', suppression: '−', modification: '~' };
+
+const LIBELLES_INDENTATION = {
+  tabulations: 'tabulations',
+  espaces: 'espaces',
+  mixte: 'indentation mixte',
+  aucune: null
+};
+
+function lirePrefs() {
+  try {
+    return JSON.parse(localStorage.getItem('avmdf.diff')) || {};
+  } catch (err) {
+    return {};
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rendu des blancs : chaque espace, tabulation ou espace insécable devient un
+// glyphe discret. La tabulation s'étale sur quatre colonnes pour conserver
+// l'alignement du mode normal (tab-size: 4).
+// ---------------------------------------------------------------------------
+
+function glyphes(blancs) {
+  let sortie = '';
+  for (const caractere of blancs) {
+    if (caractere === '\t') sortie += '→   ';
+    else if (caractere === ' ') sortie += '⍽';
+    else sortie += '·';
+  }
+  return sortie;
+}
+
+const MOTIF_BLANCS = /[ \t\u00a0]+/g;
+
+/** Découpe un texte en morceaux, les suites de blancs rendues en glyphes atténués. */
+function rendreBlancs(texte) {
+  const morceaux = [];
+  let position = 0;
+  MOTIF_BLANCS.lastIndex = 0;
+  let trouve;
+  while ((trouve = MOTIF_BLANCS.exec(texte))) {
+    if (trouve.index > position) morceaux.push(texte.slice(position, trouve.index));
+    const enFin = trouve.index + trouve[0].length === texte.length;
+    morceaux.push(
+      html`<span class=${'blanc' + (enFin && trouve.index > 0 ? ' blanc-fin' : '')}>${glyphes(trouve[0])}</span>`
+    );
+    position = trouve.index + trouve[0].length;
+  }
+  if (position < texte.length) morceaux.push(texte.slice(position));
+  return morceaux.length ? morceaux : ' ';
+}
+
+function contenu(cote, espacesVisibles) {
+  if (!cote) return '';
+  if (!cote.segments) {
+    const texte = cote.texte === '' ? ' ' : cote.texte;
+    return espacesVisibles ? rendreBlancs(texte) : texte;
+  }
+  return cote.segments.map((segment) => {
+    const texte = espacesVisibles ? rendreBlancs(segment.texte) : segment.texte;
+    return segment.change ? html`<span class="fragment">${texte}</span>` : texte;
+  });
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Panneau droit : comparaison ligne à ligne.
  * Production à gauche - l'existant ; local à droite - ce qui va partir.
+ *
+ * La précision sur les blancs est un point d'honneur : les lignes qui ne
+ * diffèrent que par les espaces sont signalées, et un mode d'affichage rend
+ * chaque espace, tabulation et espace insécable visible.
  */
 export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
-  const [unifie, setUnifie] = useState(false);
-  const [synchronise, setSynchronise] = useState(true);
+  const prefs = useMemo(lirePrefs, []);
+  const [unifie, setUnifie] = useState(() => Boolean(prefs.unifie));
+  const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
+  const [espacesVisibles, setEspacesVisibles] = useState(() => Boolean(prefs.espaces));
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
@@ -29,6 +100,17 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
   const enSynchronisation = useRef(false);
 
   const donnees = diff.donnees;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'avmdf.diff',
+        JSON.stringify({ unifie, synchronise, espaces: espacesVisibles })
+      );
+    } catch (err) {
+      /* stockage local indisponible : les préférences ne survivront pas */
+    }
+  }, [unifie, synchronise, espacesVisibles]);
 
   useEffect(() => {
     setReplisOuverts(new Set());
@@ -189,12 +271,22 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
 
   const titreGauche = donnees.titreGauche || 'Production';
   const titreDroite = donnees.titreDroite || 'Local';
+  const texteDiff = donnees.type === 'texte';
+  const modifsEspaces = texteDiff ? donnees.compteurs.modificationsEspaces || 0 : 0;
+
+  const sousTitre = (cote) => {
+    if (!cote) return html`<span class="attenue">absent</span>`;
+    const indentation = LIBELLES_INDENTATION[cote.indentation];
+    return html`<span class="attenue mono">
+      ${cote.encodage} · ${cote.finDeLigne}${indentation ? ' · ' + indentation : ''}
+    </span>`;
+  };
 
   return html`
     <div class="panneau panneau-droit">
       <div class="diff-entete">
         <span class="mono diff-chemin" title=${donnees.chemin}>${donnees.chemin}</span>
-        ${donnees.type === 'texte'
+        ${texteDiff
           ? html`<span class="diff-compteurs mono">
               <span class="plus">+${formaterNombre(donnees.compteurs.ajoutees)}</span>
               <span class="moins">−${formaterNombre(donnees.compteurs.supprimees)}</span>
@@ -211,8 +303,17 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
               Versions archivées
             </button>`
           : null}
-        ${donnees.type === 'texte'
+        ${texteDiff
           ? html`
+              <button
+                type="button"
+                class=${'btn btn-mini' + (espacesVisibles ? ' btn-marque' : '')}
+                title="Rendre visibles les espaces (·), tabulations (→) et espaces insécables (⍽)"
+                aria-pressed=${espacesVisibles}
+                onClick=${() => setEspacesVisibles(!espacesVisibles)}
+              >
+                ¶ Espaces
+              </button>
               <button
                 type="button"
                 class="btn btn-mini"
@@ -233,7 +334,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
           : null}
       </div>
 
-      ${donnees.type === 'texte' && (donnees.ecartEncodage || donnees.ecartFinDeLigne)
+      ${texteDiff && (donnees.ecartEncodage || donnees.ecartFinDeLigne || donnees.ecartIndentation || modifsEspaces)
         ? html`
             <div class="diff-alerte">
               ${donnees.ecartEncodage
@@ -241,6 +342,27 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                 : null}
               ${donnees.ecartFinDeLigne
                 ? html`<span>Fins de ligne différentes : ${donnees.gauche.finDeLigne} / ${donnees.droite.finDeLigne}.</span>`
+                : null}
+              ${donnees.ecartIndentation
+                ? html`<span>
+                    ${'Indentation différente : ' +
+                    LIBELLES_INDENTATION[donnees.gauche.indentation] +
+                    ' en production, ' +
+                    LIBELLES_INDENTATION[donnees.droite.indentation] +
+                    ' en local.'}
+                  </span>`
+                : null}
+              ${modifsEspaces
+                ? html`<span>
+                    ${modifsEspaces > 1
+                      ? formaterNombre(modifsEspaces) + ' lignes ne diffèrent que par les blancs (marquées ␣).'
+                      : '1 ligne ne diffère que par les blancs (marquée ␣).'}
+                    ${!espacesVisibles
+                      ? html`<button type="button" class="btn btn-mini" onClick=${() => setEspacesVisibles(true)}>
+                          Afficher les espaces
+                        </button>`
+                      : null}
+                  </span>`
                 : null}
               <span class="attenue">La copie reste binaire : rien n'est ré-encodé.</span>
             </div>
@@ -319,9 +441,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                         <div class="diff-colonne">
                           <div class="diff-titre">
                             <span>${titreGauche} → ${titreDroite}</span>
-                            ${donnees.gauche
-                              ? html`<span class="attenue mono">${donnees.gauche.encodage} · ${donnees.gauche.finDeLigne}</span>`
-                              : null}
+                            ${sousTitre(donnees.gauche)}
                           </div>
                           <div class="diff-lignes" ref=${panneauGauche}>
                             ${rangsAffiches.map(
@@ -331,6 +451,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                   : html`<${LignesUnifiees}
                                       key=${'u' + index}
                                       ligne=${rang.ligne}
+                                      espaces=${espacesVisibles}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
                                     />`
@@ -342,9 +463,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                         <div class="diff-colonne">
                           <div class="diff-titre">
                             <span>${titreGauche}</span>
-                            ${donnees.gauche
-                              ? html`<span class="attenue mono">${donnees.gauche.encodage} · ${donnees.gauche.finDeLigne}</span>`
-                              : html`<span class="attenue">absent</span>`}
+                            ${sousTitre(donnees.gauche)}
                           </div>
                           <div class="diff-lignes" ref=${panneauGauche} onScroll=${surDefilement(panneauDroit)}>
                             ${rangsAffiches.map(
@@ -355,7 +474,8 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       key=${'g' + index}
                                       cote=${rang.ligne.gauche}
                                       type=${rang.ligne.type}
-                                      camp="gauche"
+                                      espaces=${espacesVisibles}
+                                      espacesSeuls=${rang.ligne.espacesUniquement}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
                                     />`
@@ -366,9 +486,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                         <div class="diff-colonne">
                           <div class="diff-titre">
                             <span>${titreDroite}</span>
-                            ${donnees.droite
-                              ? html`<span class="attenue mono">${donnees.droite.encodage} · ${donnees.droite.finDeLigne}</span>`
-                              : html`<span class="attenue">absent</span>`}
+                            ${sousTitre(donnees.droite)}
                           </div>
                           <div class="diff-lignes" ref=${panneauDroit} onScroll=${surDefilement(panneauGauche)}>
                             ${rangsAffiches.map(
@@ -379,7 +497,8 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       key=${'d' + index}
                                       cote=${rang.ligne.droite}
                                       type=${rang.ligne.type}
-                                      camp="droite"
+                                      espaces=${espacesVisibles}
+                                      espacesSeuls=${rang.ligne.espacesUniquement}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
                                     />`
@@ -416,42 +535,62 @@ function Repli({ rang, onOuvrir }) {
   `;
 }
 
-function contenu(cote) {
-  if (!cote) return '';
-  if (!cote.segments) return cote.texte === '' ? ' ' : cote.texte;
-  return cote.segments.map((segment) =>
-    segment.change ? html`<span class="fragment">${segment.texte}</span>` : segment.texte
-  );
-}
-
-function LigneCote({ cote, type, camp, surligne, courante }) {
+function LigneCote({ cote, type, espaces, espacesSeuls, surligne, courante }) {
   // Une ligne absente d'un côté garde sa place, pour que les deux panneaux
   // restent alignés.
   const vide = !cote;
   const classes = ['diff-ligne', 'diff-' + (vide ? 'absente' : type)];
   if (surligne) classes.push('trouvee');
   if (courante) classes.push('courante');
+  if (espacesSeuls) classes.push('espaces-seuls');
+
+  const signe = vide ? '' : espacesSeuls && type === 'modification' ? '␣' : SIGNES[type];
 
   return html`
     <div class=${classes.join(' ')}>
       <span class="diff-numero">${vide ? '' : cote.numero}</span>
-      <span class="diff-signe">${vide ? '' : SIGNES[type]}</span>
-      <span class="diff-texte">${vide ? '' : contenu(cote)}</span>
+      <span
+        class="diff-signe"
+        title=${espacesSeuls ? 'Seuls les blancs changent sur cette ligne' : ''}
+      >
+        ${signe}
+      </span>
+      <span class="diff-texte">${vide ? '' : contenu(cote, espaces)}</span>
     </div>
   `;
 }
 
-function LignesUnifiees({ ligne, surligne, courante }) {
+function LignesUnifiees({ ligne, espaces, surligne, courante }) {
   if (ligne.type === 'modification') {
     return html`
       <div>
-        <${LigneCote} cote=${ligne.gauche} type="suppression" camp="gauche" surligne=${surligne} courante=${courante} />
-        <${LigneCote} cote=${ligne.droite} type="ajout" camp="droite" surligne=${surligne} courante=${courante} />
+        <${LigneCote}
+          cote=${ligne.gauche}
+          type="suppression"
+          espaces=${espaces}
+          espacesSeuls=${ligne.espacesUniquement}
+          surligne=${surligne}
+          courante=${courante}
+        />
+        <${LigneCote}
+          cote=${ligne.droite}
+          type="ajout"
+          espaces=${espaces}
+          espacesSeuls=${ligne.espacesUniquement}
+          surligne=${surligne}
+          courante=${courante}
+        />
       </div>
     `;
   }
   const cote = ligne.droite || ligne.gauche;
-  return html`<${LigneCote} cote=${cote} type=${ligne.type} camp="unifie" surligne=${surligne} courante=${courante} />`;
+  return html`<${LigneCote}
+    cote=${cote}
+    type=${ligne.type}
+    espaces=${espaces}
+    surligne=${surligne}
+    courante=${courante}
+  />`;
 }
 
 function VueBinaire({ donnees, onOuvrirExterne }) {

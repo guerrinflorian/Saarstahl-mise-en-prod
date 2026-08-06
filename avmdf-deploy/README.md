@@ -163,6 +163,35 @@ Déclinaisons produites depuis `logo-Saarstahl-Rail.jpg`, fond blanc rendu trans
 Aucun tiret cadratin dans l'application : ni dans l'interface, ni dans les messages, ni dans le
 code.
 
+## Tableau de bord
+
+L'onglet « Tableau de bord » agrège tous les manifestes du dossier d'archives : mises en
+production, fichiers déployés, lignes de code, retours arrière, échecs, activité des douze
+derniers mois, répartition par projet et par auteur, fichiers les plus souvent déployés et
+activité récente. Les chiffres viennent du disque, pas d'une base : ce sont les traces réelles.
+Les simulations sont comptées à part et n'entrent dans aucun total.
+
+## Précision sur les blancs
+
+La comparaison ligne à ligne est exacte au caractère près, blancs compris :
+
+- une ligne qui ne change que par les espaces, tabulations ou espaces insécables est marquée
+  « ␣ » et comptée dans le bandeau d'alerte du fichier ;
+- le bouton « ¶ Espaces » rend chaque blanc visible : espace `·`, tabulation `→`, insécable `⍽`,
+  avec les blancs en fin de ligne surlignés ;
+- le style d'indentation de chaque version (tabulations, espaces, mixte) est détecté et affiché
+  dans l'en-tête de colonne, et un écart entre les deux côtés est signalé ;
+- l'option « ignorer les espaces dans la comparaison » reste disponible dans les réglages pour
+  qui veut au contraire les neutraliser.
+
+## Interface
+
+- Les deux panneaux de l'analyse se redimensionnent à la souris (double-clic sur la poignée pour
+  revenir à la largeur d'origine). La largeur, le mode côte à côte ou unifié, le défilement lié
+  et l'affichage des blancs sont mémorisés d'une session à l'autre.
+- La navigation se fait par onglets : Analyse, Tableau de bord. Historique et Journal restent
+  accessibles en permanence.
+
 ## Versions archivées d'un fichier
 
 Chaque dossier de sprint contient la version « avant modification » des fichiers touchés. L'outil

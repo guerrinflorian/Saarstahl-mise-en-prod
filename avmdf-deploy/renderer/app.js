@@ -12,6 +12,7 @@ import { ConfirmationDeploiement } from './components/ConfirmationDeploiement.js
 import { RapportDeploiement } from './components/RapportDeploiement.js';
 import { Historique } from './components/Historique.js';
 import { Journal } from './components/Journal.js';
+import { TableauDeBord } from './components/TableauDeBord.js';
 import { VersionsFichier } from './components/VersionsFichier.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { joindreChemin } from './components/chemins.js';
@@ -32,6 +33,15 @@ function App() {
   const [projetId, setProjetId] = useState(null);
   const [cible, setCible] = useState({ mode: 'projet' });
   const [ecran, setEcran] = useState(null);
+  const [vue, setVue] = useState('analyse');
+  const [largeurPanneau, setLargeurPanneau] = useState(() => {
+    try {
+      const memorise = JSON.parse(localStorage.getItem('avmdf.ui')) || {};
+      return Math.min(700, Math.max(300, memorise.largeurPanneau || 380));
+    } catch (err) {
+      return 380;
+    }
+  });
 
   const [analyse, setAnalyse] = useState(ANALYSE_INACTIVE);
   const [criteres, setCriteres] = useState(criteresParDefaut);
@@ -422,17 +432,52 @@ function App() {
     }
   }, [selection, destination, operation, config, notifier, notifierEchec]);
 
+  // La largeur du panneau de gauche survit au redémarrage.
+  useEffect(() => {
+    try {
+      localStorage.setItem('avmdf.ui', JSON.stringify({ largeurPanneau }));
+    } catch (err) {
+      /* stockage local indisponible */
+    }
+  }, [largeurPanneau]);
+
+  const redimensionner = useCallback(
+    (evenement) => {
+      evenement.preventDefault();
+      const depart = evenement.clientX;
+      const base = largeurPanneau;
+      const bouger = (deplacement) => {
+        const largeur = Math.min(
+          Math.min(760, window.innerWidth * 0.6),
+          Math.max(300, base + deplacement.clientX - depart)
+        );
+        setLargeurPanneau(largeur);
+      };
+      const lacher = () => {
+        window.removeEventListener('pointermove', bouger);
+        window.removeEventListener('pointerup', lacher);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      window.addEventListener('pointermove', bouger);
+      window.addEventListener('pointerup', lacher);
+    },
+    [largeurPanneau]
+  );
+
   // -- Raccourcis clavier ---------------------------------------------------
   useEffect(() => {
     function surTouche(evenement) {
       const dansUnChamp = ['INPUT', 'TEXTAREA', 'SELECT'].includes(evenement.target.tagName);
       if (evenement.key === 'F5') {
         evenement.preventDefault();
-        if (analyse.etat !== 'encours' && !ecran) analyser();
+        if (vue === 'analyse' && analyse.etat !== 'encours' && !ecran) analyser();
       } else if (evenement.key === 'Enter' && (evenement.ctrlKey || evenement.metaKey)) {
         if (dansUnChamp) return;
         evenement.preventDefault();
-        if (!ecran && !deploiement && resumeSelection.deployables + resumeSelection.orphelins > 0) {
+        if (vue === 'analyse' && !ecran && !deploiement && resumeSelection.deployables + resumeSelection.orphelins > 0) {
           lancerPreflight();
         }
       }
@@ -473,6 +518,8 @@ function App() {
         config=${config}
         projet=${projet}
         cible=${cible}
+        vue=${vue}
+        onVue=${setVue}
         analyseEnCours=${analyse.etat === 'encours'}
         onChangerProjet=${(id) => {
           setProjetId(id);
@@ -492,7 +539,13 @@ function App() {
         onOuvrirJournal=${() => setEcran('journal')}
       />
 
-      <div class="corps">
+      ${vue === 'bord'
+        ? html`<${TableauDeBord}
+            onEchec=${(reponse) => notifierEchec(reponse, 'Statistiques indisponibles.')}
+            onOuvrirHistorique=${() => setEcran('historique')}
+          />`
+        : html`
+      <div class="corps" style=${'grid-template-columns:' + largeurPanneau + 'px 5px minmax(0, 1fr)'}>
         <${ArbreFichiers}
           analyse=${analyse}
           cheminLocal=${cheminLocal}
@@ -520,6 +573,16 @@ function App() {
           onAnnuler=${() => window.avmdf.analyse.annuler()}
         />
 
+        <div
+          class="poignee"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionner les panneaux"
+          title="Glisser pour redimensionner ; double-clic pour revenir à la largeur d'origine"
+          onPointerDown=${redimensionner}
+          onDblClick=${() => setLargeurPanneau(380)}
+        ></div>
+
         <${VueDiff}
           diff=${diff}
           onOuvrirExterne=${ouvrirExterne}
@@ -531,18 +594,43 @@ function App() {
           }
         />
       </div>
+      `}
 
-      <${BandeauDeploiement}
-        simulation=${config.options.simulation}
-        onSimulation=${changerSimulation}
-        selection=${resumeSelection}
-        destination=${destination}
-        modeLibre=${modeLibre}
-        operation=${operation}
-        occupe=${Boolean(deploiement)}
-        onChoisirDestination=${() => setEcran('destination')}
-        onDeployer=${lancerPreflight}
-      />
+      ${vue === 'analyse'
+        ? html`<${BandeauDeploiement}
+            simulation=${config.options.simulation}
+            onSimulation=${changerSimulation}
+            selection=${resumeSelection}
+            destination=${destination}
+            modeLibre=${modeLibre}
+            operation=${operation}
+            occupe=${Boolean(deploiement)}
+            onChoisirDestination=${() => setEcran('destination')}
+            onDeployer=${lancerPreflight}
+          />`
+        : null}
+
+      ${versionsDe
+        ? html`<${VersionsFichier}
+            fichier=${versionsDe}
+            destination=${destination}
+            simulation=${config.options.simulation}
+            onChoisirDestination=${() => setEcran('destination')}
+            onFermer=${() => setVersionsDe(null)}
+            onEchec=${(reponse) => notifierEchec(reponse, 'Versions archivées indisponibles.')}
+            onRapport=${(resultat) => {
+              setVersionsDe(null);
+              setRapport(resultat);
+              if (!resultat.manifeste.simulation) {
+                notifier({
+                  type: 'succes',
+                  titre: 'Version remise en production.',
+                  texte: 'Relancez une analyse pour repartir de l\'état réel.'
+                });
+              }
+            }}
+          />`
+        : null}
 
       ${ecran === 'reglages'
         ? html`<${Reglages}
@@ -611,27 +699,6 @@ function App() {
             onFermer=${() => {
               window.avmdf.deploiement.annuler();
               setDeploiement(null);
-            }}
-          />`
-        : null}
-
-      ${versionsDe
-        ? html`<${VersionsFichier}
-            fichier=${versionsDe}
-            destination=${destination}
-            simulation=${config.options.simulation}
-            onFermer=${() => setVersionsDe(null)}
-            onEchec=${(reponse) => notifierEchec(reponse, 'Versions archivées indisponibles.')}
-            onRapport=${(resultat) => {
-              setVersionsDe(null);
-              setRapport(resultat);
-              if (!resultat.manifeste.simulation) {
-                notifier({
-                  type: 'succes',
-                  titre: 'Version remise en production.',
-                  texte: 'Relancez une analyse pour repartir de l\'état réel.'
-                });
-              }
             }}
           />`
         : null}

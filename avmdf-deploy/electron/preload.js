@@ -88,6 +88,11 @@ contextBridge.exposeInMainWorld('avmdf', {
     surProgression: (rappel) => abonner('deploiement:progression', rappel)
   },
 
+  statistiques: {
+    /** Agrège tous les manifestes du dossier d'archives pour le tableau de bord. */
+    calculer: () => ipcRenderer.invoke('statistiques:calculer')
+  },
+
   historique: {
     lister: () => ipcRenderer.invoke('historique:lister'),
     comparer: (cheminManifeste, chemin) =>

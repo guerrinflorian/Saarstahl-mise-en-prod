@@ -21,7 +21,7 @@ const LIBELLES_ACTION = {
  * Remettre une ancienne version archive d'abord la version actuelle : revenir
  * en arrière ne fait jamais perdre l'état courant.
  */
-export function VersionsFichier({ fichier, destination, simulation, onFermer, onEchec, onRapport }) {
+export function VersionsFichier({ fichier, destination, simulation, onChoisirDestination, onFermer, onEchec, onRapport }) {
   const [etat, setEtat] = useState('chargement');
   const [versions, setVersions] = useState([]);
   const [choisie, setChoisie] = useState(null);
@@ -157,10 +157,14 @@ export function VersionsFichier({ fichier, destination, simulation, onFermer, on
                               >
                                 Remettre cette version en production
                               </button>`
-                            : html`<span class="attenue">
-                                Choisissez d'abord la destination d'archivage dans le bandeau du bas : la version
-                                actuelle doit être archivée avant d'être remplacée.
-                              </span>`}
+                            : html`
+                                <span class="attenue">
+                                  La version actuelle doit être archivée avant d'être remplacée.
+                                </span>
+                                <button type="button" class="btn" onClick=${onChoisirDestination}>
+                                  Choisir la destination d'archivage…
+                                </button>
+                              `}
                         </div>
                         <div class="historique-diff">
                           <${VueDiff} diff=${diff} onOuvrirExterne=${() => {}} />

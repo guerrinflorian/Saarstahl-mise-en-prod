@@ -1995,3 +1995,472 @@ button.bandeau-destination:hover {
   max-width: 560px;
   font-size: 12px;
 }
+
+/* ==========================================================================
+   Navigation par onglets
+   ========================================================================== */
+
+.onglets {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 2px;
+  background: var(--champ);
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+  flex: none;
+}
+
+.onglet {
+  height: 24px;
+  padding: 0 13px;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  color: var(--texte-attenue);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.onglet:hover {
+  color: var(--texte);
+}
+
+.onglet.actif {
+  background: var(--panneau-releve);
+  color: var(--texte);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Poignée de redimensionnement
+   ========================================================================== */
+
+.poignee {
+  cursor: col-resize;
+  background: var(--separateur);
+  transition: background-color 0.12s ease;
+  touch-action: none;
+}
+
+.poignee:hover,
+.poignee:active {
+  background: var(--accent-sourd);
+}
+
+/* ==========================================================================
+   Tableau de bord
+   ========================================================================== */
+
+.bord {
+  overflow: auto;
+  background: var(--fond);
+  padding: 18px 22px 40px;
+}
+
+.bord-entete {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.bord-entete h1 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.tuiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.tuile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-radius: 5px;
+  transition: border-color 0.12s ease;
+}
+
+.tuile:hover {
+  border-color: var(--separateur-clair);
+}
+
+.tuile-valeur {
+  font-family: var(--police-mono);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tuile-lignes {
+  display: flex;
+  gap: 10px;
+  font-size: 19px;
+}
+
+.tuile-lignes .plus {
+  color: var(--accent);
+}
+
+.tuile-lignes .moins {
+  color: var(--orphelin);
+}
+
+.tuile-libelle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texte-attenue);
+}
+
+.tuile-detail {
+  font-size: 12px;
+  color: var(--texte-faible);
+  min-height: 17px;
+}
+
+.tuile-texte {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.tuile-danger .tuile-valeur {
+  color: var(--danger);
+}
+
+.tuile-large {
+  grid-column: span 2;
+}
+
+.bord-grille {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.carte {
+  padding: 14px 16px 16px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-radius: 5px;
+  min-width: 0;
+}
+
+.carte-large {
+  grid-column: 1 / -1;
+}
+
+.carte h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texte-attenue);
+}
+
+.carte-aide {
+  margin: -6px 0 12px;
+  font-size: 12.5px;
+  color: var(--texte-faible);
+}
+
+@media (max-width: 1100px) {
+  .bord-grille {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Graphique mensuel -------------------------------------------------------- */
+
+.graphique {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.graphique-barre {
+  fill: var(--accent);
+}
+
+.graphique-barre:hover {
+  fill: var(--accent-vif);
+}
+
+.graphique-barre-vide {
+  fill: var(--separateur);
+}
+
+.graphique-trait {
+  stroke: var(--separateur);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.graphique-axe {
+  stroke: var(--separateur-clair);
+  stroke-width: 1;
+}
+
+.graphique-valeur {
+  fill: var(--texte);
+  font-family: var(--police-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.graphique-graduation {
+  fill: var(--texte-faible);
+  font-family: var(--police-mono);
+  font-size: 9px;
+}
+
+.graphique-mois {
+  fill: var(--texte-attenue);
+  font-size: 10px;
+}
+
+.graphique-annee {
+  fill: var(--texte-faible);
+  font-family: var(--police-mono);
+  font-size: 9px;
+}
+
+/* Répartitions ------------------------------------------------------------- */
+
+.repartition {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.repartition-ligne {
+  display: grid;
+  grid-template-columns: minmax(70px, 130px) 1fr 34px minmax(70px, auto);
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.repartition-libelle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repartition-piste {
+  height: 8px;
+  background: var(--champ);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.repartition-barre {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  min-width: 2px;
+}
+
+.repartition-valeur {
+  font-family: var(--police-mono);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.repartition-detail {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* Fichiers chauds ---------------------------------------------------------- */
+
+.chauds {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.chaud-ligne {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chaud-nom {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chaud-nombre {
+  font-family: var(--police-mono);
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.chaud-barre {
+  height: 5px;
+  margin: 3px 0 2px;
+  background: var(--champ);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.chaud-remplissage {
+  height: 100%;
+  background: linear-gradient(to right, var(--accent-sourd), var(--accent));
+  border-radius: 3px;
+  min-width: 3px;
+}
+
+.chaud-detail {
+  font-size: 11.5px;
+}
+
+/* Activité récente --------------------------------------------------------- */
+
+.recents {
+  display: flex;
+  flex-direction: column;
+}
+
+.recent {
+  display: flex;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px dotted var(--separateur);
+}
+
+.recent:last-child {
+  border-bottom: none;
+}
+
+.recent-point {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.recent-point.restauration {
+  background: var(--modifie);
+}
+
+.recent-point.suppression {
+  background: var(--orphelin);
+}
+
+.recent-corps {
+  min-width: 0;
+}
+
+.recent-ligne {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.recent-detail {
+  font-size: 11.5px;
+}
+
+.etiquette-danger {
+  border-color: var(--danger-bord);
+  color: var(--danger);
+}
+
+/* ==========================================================================
+   Blancs rendus visibles dans la comparaison
+   ========================================================================== */
+
+.diff-lignes {
+  tab-size: 4;
+}
+
+.blanc {
+  color: color-mix(in srgb, var(--texte-faible) 62%, transparent);
+}
+
+.fragment .blanc {
+  color: var(--sur-accent);
+  opacity: 0.75;
+}
+
+.blanc-fin {
+  background: rgba(208, 139, 128, 0.28);
+  border-radius: 2px;
+  color: var(--danger);
+}
+
+.diff-ligne.espaces-seuls .diff-signe {
+  color: var(--texte-attenue);
+}
+
+.diff-alerte .btn {
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+/* ==========================================================================
+   Polissage général
+   ========================================================================== */
+
+.btn,
+.onglet,
+.sprint,
+.historique-entree,
+.menu-entree,
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select {
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.voile {
+  backdrop-filter: blur(2px);
+}
+
+.modale {
+  animation: apparaitre 0.14s ease-out;
+}
+
+@keyframes apparaitre {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.notification {
+  animation: apparaitre 0.14s ease-out;
+}
