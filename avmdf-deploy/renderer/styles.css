@@ -2464,3 +2464,75 @@ select {
 .notification {
   animation: apparaitre 0.14s ease-out;
 }
+
+/* ==========================================================================
+   Coloration syntaxique du comparateur.
+   Palette dérivée de l'identité : familles du vert #ABD083 et du gris #8597A5,
+   aucune teinte étrangère. Les couleurs restent lisibles sur les fonds teintés
+   des lignes ajoutées ou supprimées.
+   ========================================================================== */
+
+.code-comment,
+.code-prolog,
+.code-doctype,
+.code-cdata {
+  color: var(--texte-faible);
+}
+
+.code-keyword,
+.code-atrule,
+.code-rule,
+.code-important,
+.code-boolean {
+  color: var(--accent);
+}
+
+.code-string,
+.code-char,
+.code-attr-value,
+.code-regex,
+.code-url {
+  color: #c9d2a6;
+}
+
+.code-number,
+.code-constant,
+.code-symbol,
+.code-entity {
+  color: #a5bfce;
+}
+
+.code-function,
+.code-function-name {
+  color: #e2e8ed;
+}
+
+.code-class-name,
+.code-selector,
+.code-property,
+.code-variable {
+  color: #bcd09c;
+}
+
+.code-tag {
+  color: #96bd7c;
+}
+
+.code-attr-name {
+  color: #9fb0bd;
+}
+
+.code-punctuation,
+.code-operator {
+  color: #7e8b96;
+}
+
+.code-directive,
+.code-page-directive,
+.code-directive-tag {
+  color: var(--accent-vif);
+}
+
+/* Les couches se combinent sans se gêner : le fragment mot à mot garde son
+   fond, les jetons gardent leur teinte, les glyphes de blancs gardent la leur
+   (la règle .blanc porte sa propre couleur et est plus interne). */

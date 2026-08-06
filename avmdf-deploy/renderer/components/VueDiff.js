@@ -2,6 +2,7 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
 import { formaterDate, formaterNombre, formaterOctets } from './arborescence.js';
+import { calculerJetons, langueDe } from './coloration.js';
 
 const html = htm.bind(h);
 
@@ -43,34 +44,91 @@ function glyphes(blancs) {
 
 const MOTIF_BLANCS = /[ \t\u00a0]+/g;
 
-/** Découpe un texte en morceaux, les suites de blancs rendues en glyphes atténués. */
-function rendreBlancs(texte) {
+/**
+ * Rend une tranche [debut, fin) d'une ligne, les suites de blancs en glyphes.
+ * Le marquage « blanc-fin » se décide sur la position absolue dans la ligne,
+ * pas dans la tranche : une tranche peut couper une suite de blancs en deux.
+ */
+function rendreBlancsTranche(texte, debut, fin, blancsFinaux) {
+  const tranche = texte.slice(debut, fin);
   const morceaux = [];
   let position = 0;
   MOTIF_BLANCS.lastIndex = 0;
   let trouve;
-  while ((trouve = MOTIF_BLANCS.exec(texte))) {
-    if (trouve.index > position) morceaux.push(texte.slice(position, trouve.index));
-    const enFin = trouve.index + trouve[0].length === texte.length;
-    morceaux.push(
-      html`<span class=${'blanc' + (enFin && trouve.index > 0 ? ' blanc-fin' : '')}>${glyphes(trouve[0])}</span>`
-    );
+  while ((trouve = MOTIF_BLANCS.exec(tranche))) {
+    if (trouve.index > position) morceaux.push(tranche.slice(position, trouve.index));
+    const enFin = blancsFinaux && debut + trouve.index + trouve[0].length === texte.length;
+    morceaux.push(html`<span class=${'blanc' + (enFin ? ' blanc-fin' : '')}>${glyphes(trouve[0])}</span>`);
     position = trouve.index + trouve[0].length;
   }
-  if (position < texte.length) morceaux.push(texte.slice(position));
-  return morceaux.length ? morceaux : ' ';
+  if (position < tranche.length) morceaux.push(tranche.slice(position));
+  return morceaux;
 }
 
-function contenu(cote, espacesVisibles) {
+const MOTIF_BLANCS_FINAUX = /[ \t\u00a0]+$/;
+
+/**
+ * Superpose les trois couches d'une ligne : jetons de coloration syntaxique,
+ * surlignage mot à mot du diff, et rendu des blancs. Les bornes des jetons
+ * et des segments découpent la ligne en tranches homogènes, chacune habillée
+ * de ses classes.
+ */
+function contenu(cote, espacesVisibles, jetons) {
   if (!cote) return '';
-  if (!cote.segments) {
-    const texte = cote.texte === '' ? ' ' : cote.texte;
-    return espacesVisibles ? rendreBlancs(texte) : texte;
+  const texte = cote.texte;
+  if (texte === '') return ' ';
+
+  const bornes = new Set([0, texte.length]);
+  const segments = [];
+  if (cote.segments) {
+    let position = 0;
+    for (const segment of cote.segments) {
+      segments.push({ debut: position, fin: position + segment.texte.length, change: segment.change });
+      bornes.add(position);
+      position += segment.texte.length;
+      bornes.add(position);
+    }
   }
-  return cote.segments.map((segment) => {
-    const texte = espacesVisibles ? rendreBlancs(segment.texte) : segment.texte;
-    return segment.change ? html`<span class="fragment">${texte}</span>` : texte;
-  });
+  if (jetons) {
+    for (const jeton of jetons) {
+      if (jeton.debut < texte.length) bornes.add(jeton.debut);
+      if (jeton.fin <= texte.length) bornes.add(jeton.fin);
+    }
+  }
+
+  const finaux = MOTIF_BLANCS_FINAUX.exec(texte);
+  const blancsFinaux = Boolean(finaux && finaux.index > 0);
+
+  const points = [...bornes].sort((a, b) => a - b);
+  const sortie = [];
+  let indexJeton = 0;
+  let indexSegment = 0;
+  for (let k = 0; k + 1 < points.length; k += 1) {
+    const debut = points[k];
+    const fin = points[k + 1];
+    if (fin <= debut) continue;
+
+    let classe = null;
+    if (jetons) {
+      while (indexJeton < jetons.length && jetons[indexJeton].fin <= debut) indexJeton += 1;
+      const jeton = jetons[indexJeton];
+      if (jeton && jeton.debut <= debut && jeton.fin >= fin) classe = jeton.classe;
+    }
+    let change = false;
+    if (segments.length) {
+      while (indexSegment < segments.length && segments[indexSegment].fin <= debut) indexSegment += 1;
+      const segment = segments[indexSegment];
+      if (segment && segment.debut <= debut && segment.fin >= fin) change = segment.change;
+    }
+
+    let morceau = espacesVisibles
+      ? rendreBlancsTranche(texte, debut, fin, blancsFinaux)
+      : texte.slice(debut, fin);
+    if (classe) morceau = html`<span class=${classe}>${morceau}</span>`;
+    if (change) morceau = html`<span class="fragment">${morceau}</span>`;
+    sortie.push(morceau);
+  }
+  return sortie.length ? sortie : ' ';
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +146,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
   const [unifie, setUnifie] = useState(() => Boolean(prefs.unifie));
   const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
   const [espacesVisibles, setEspacesVisibles] = useState(() => Boolean(prefs.espaces));
+  const [couleur, setCouleur] = useState(() => prefs.couleur !== false);
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
@@ -105,18 +164,29 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
     try {
       localStorage.setItem(
         'avmdf.diff',
-        JSON.stringify({ unifie, synchronise, espaces: espacesVisibles })
+        JSON.stringify({ unifie, synchronise, espaces: espacesVisibles, couleur })
       );
     } catch (err) {
       /* stockage local indisponible : les préférences ne survivront pas */
     }
-  }, [unifie, synchronise, espacesVisibles]);
+  }, [unifie, synchronise, espacesVisibles, couleur]);
 
   useEffect(() => {
     setReplisOuverts(new Set());
     setChangementCourant(-1);
     setPositionTrouvee(0);
   }, [donnees && donnees.cle]);
+
+  // Coloration syntaxique : langue déduite du chemin, jetons calculés une fois
+  // par fichier sur le texte complet de chaque côté.
+  const langue = useMemo(
+    () => (donnees && donnees.type === 'texte' ? langueDe(donnees.chemin) : null),
+    [donnees]
+  );
+  const jetons = useMemo(
+    () => (langue && couleur ? calculerJetons(donnees.groupes, langue.id) : null),
+    [donnees, langue, couleur]
+  );
 
   // Lignes réellement affichées, replis dépliés compris.
   const rangs = useMemo(() => {
@@ -314,6 +384,19 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
               >
                 ¶ Espaces
               </button>
+              ${langue
+                ? html`<button
+                    type="button"
+                    class=${'btn btn-mini' + (couleur && jetons ? ' btn-marque' : '')}
+                    title=${couleur && !jetons
+                      ? 'Fichier trop volumineux pour la coloration ' + langue.libelle
+                      : 'Coloration syntaxique ' + langue.libelle}
+                    aria-pressed=${couleur}
+                    onClick=${() => setCouleur(!couleur)}
+                  >
+                    Couleur
+                  </button>`
+                : null}
               <button
                 type="button"
                 class="btn btn-mini"
@@ -452,6 +535,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       key=${'u' + index}
                                       ligne=${rang.ligne}
                                       espaces=${espacesVisibles}
+                                      cartes=${jetons}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
                                     />`
@@ -475,6 +559,9 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       cote=${rang.ligne.gauche}
                                       type=${rang.ligne.type}
                                       espaces=${espacesVisibles}
+                                      jetons=${jetons && rang.ligne.gauche
+                                        ? jetons.gauche.get(rang.ligne.gauche.numero)
+                                        : null}
                                       espacesSeuls=${rang.ligne.espacesUniquement}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
@@ -498,6 +585,9 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                                       cote=${rang.ligne.droite}
                                       type=${rang.ligne.type}
                                       espaces=${espacesVisibles}
+                                      jetons=${jetons && rang.ligne.droite
+                                        ? jetons.droite.get(rang.ligne.droite.numero)
+                                        : null}
                                       espacesSeuls=${rang.ligne.espacesUniquement}
                                       surligne=${trouvees[positionTrouvee] === index}
                                       courante=${changementCourant === index}
@@ -535,7 +625,7 @@ function Repli({ rang, onOuvrir }) {
   `;
 }
 
-function LigneCote({ cote, type, espaces, espacesSeuls, surligne, courante }) {
+function LigneCote({ cote, type, espaces, jetons, espacesSeuls, surligne, courante }) {
   // Une ligne absente d'un côté garde sa place, pour que les deux panneaux
   // restent alignés.
   const vide = !cote;
@@ -555,12 +645,13 @@ function LigneCote({ cote, type, espaces, espacesSeuls, surligne, courante }) {
       >
         ${signe}
       </span>
-      <span class="diff-texte">${vide ? '' : contenu(cote, espaces)}</span>
+      <span class="diff-texte">${vide ? '' : contenu(cote, espaces, jetons)}</span>
     </div>
   `;
 }
 
-function LignesUnifiees({ ligne, espaces, surligne, courante }) {
+function LignesUnifiees({ ligne, espaces, cartes, surligne, courante }) {
+  const jetonsDe = (cote, nom) => (cartes && cote ? cartes[nom].get(cote.numero) : null);
   if (ligne.type === 'modification') {
     return html`
       <div>
@@ -568,6 +659,7 @@ function LignesUnifiees({ ligne, espaces, surligne, courante }) {
           cote=${ligne.gauche}
           type="suppression"
           espaces=${espaces}
+          jetons=${jetonsDe(ligne.gauche, 'gauche')}
           espacesSeuls=${ligne.espacesUniquement}
           surligne=${surligne}
           courante=${courante}
@@ -576,6 +668,7 @@ function LignesUnifiees({ ligne, espaces, surligne, courante }) {
           cote=${ligne.droite}
           type="ajout"
           espaces=${espaces}
+          jetons=${jetonsDe(ligne.droite, 'droite')}
           espacesSeuls=${ligne.espacesUniquement}
           surligne=${surligne}
           courante=${courante}
@@ -584,10 +677,12 @@ function LignesUnifiees({ ligne, espaces, surligne, courante }) {
     `;
   }
   const cote = ligne.droite || ligne.gauche;
+  const nom = ligne.droite ? 'droite' : 'gauche';
   return html`<${LigneCote}
     cote=${cote}
     type=${ligne.type}
     espaces=${espaces}
+    jetons=${jetonsDe(cote, nom)}
     surligne=${surligne}
     courante=${courante}
   />`;

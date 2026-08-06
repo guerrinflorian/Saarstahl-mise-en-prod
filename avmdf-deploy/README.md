@@ -57,7 +57,7 @@ renderer/
   app.js        montage racine et état global
   components/   un fichier par composant (arbre, diff, filtres, destination,
                 confirmation, rapport, historique, journal, réglages…)
-  vendor/       Preact, hooks et htm en ESM, copiés localement
+  vendor/       Preact, hooks, htm et Prism en ESM, copiés localement
 ```
 
 Les modules de `core/` sont utilisables en ligne de commande :
@@ -82,6 +82,11 @@ reproduire en cas de mise à jour :
 
 - l'import nu `from "preact"` de `hooks.module.js` est remplacé par `from "./preact.module.js"` ;
 - les commentaires `sourceMappingURL` sont retirés (les fichiers `.map` ne sont pas embarqués).
+
+`vendor/prism.js` vient du paquet npm `prismjs@1` : concaténation du cœur et des grammaires
+markup, css, clike, javascript, csharp, aspnet, sql, basic, vbnet et json, précédée de
+`self.Prism = { manual: true, … }` et suivie de `export default Prism;`. Seul `Prism.tokenize`
+est utilisé : jamais de HTML généré par Prism, jamais de retouche automatique du DOM.
 
 ## Réglages
 
@@ -184,6 +189,19 @@ La comparaison ligne à ligne est exacte au caractère près, blancs compris :
   dans l'en-tête de colonne, et un écart entre les deux côtés est signalé ;
 - l'option « ignorer les espaces dans la comparaison » reste disponible dans les réglages pour
   qui veut au contraire les neutraliser.
+
+## Coloration syntaxique
+
+Le comparateur colore le code comme Visual Studio : C#, ASPX/ASCX/Master (balises serveur
+comprises), JavaScript, CSS, HTML/XML, SQL, VB.NET et JSON, selon l'extension du fichier.
+
+- Le texte complet de chaque côté est tokenisé en une passe (Prism, vendorisé dans
+  `renderer/vendor/`) : les commentaires multi-lignes restent corrects même repliés.
+- La coloration se superpose aux couches existantes sans les remplacer : surlignage mot à mot,
+  glyphes de blancs, marques « ␣ ».
+- Le bouton « Couleur » la désactive ou la réactive, préférence mémorisée. Au-delà de 1,5 Mo de
+  texte, elle se coupe d'elle-même pour ne pas figer l'interface.
+- Les teintes restent dans les deux familles de l'identité (vert et gris).
 
 ## Interface
 

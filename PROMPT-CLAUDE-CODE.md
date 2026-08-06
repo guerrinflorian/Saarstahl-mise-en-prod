@@ -305,7 +305,7 @@ Ne pas écraser web.config sans avertissement explicite.
 Ne pas déployer sans avoir archivé la version précédente. Aucune exception.
 Ne pas interrompre un scan parce qu'un dossier est inaccessible.
 Ne pas mélanger Sprint N et <Demande>_N dans une même demande.
-Ne pas introduire de bundler, d'étape de build ou de dépendance lourde. Le front se limite à Preact + htm vendorisés en ESM : pas d'autre framework, pas de transpilation, pas de JSX.
+Ne pas introduire de bundler, d'étape de build ou de dépendance lourde. Le front se limite à Preact + htm vendorisés en ESM (plus Prism vendorisé pour la seule tokenisation de la coloration syntaxique) : pas d'autre framework, pas de transpilation, pas de JSX.
 Ne pas masquer une erreur derrière un catch vide.
 Ne pas écrire de tests unitaires pour l'instant — je veux d'abord quelque chose que je peux lancer et essayer sur mes vrais dossiers.
 10. Questions à me poser
