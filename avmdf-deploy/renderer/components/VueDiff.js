@@ -12,9 +12,9 @@ const SIGNES = { identique: ' ', ajout: '+', suppression: '−', modification: 
 
 /**
  * Panneau droit : comparaison ligne à ligne.
- * Production à gauche — l'existant ; local à droite — ce qui va partir.
+ * Production à gauche - l'existant ; local à droite - ce qui va partir.
  */
-export function VueDiff({ diff, onOuvrirExterne, onNotifier }) {
+export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
   const [unifie, setUnifie] = useState(false);
   const [synchronise, setSynchronise] = useState(true);
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
@@ -201,6 +201,16 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier }) {
             </span>`
           : null}
         <div style="flex:1"></div>
+        ${onVoirVersions
+          ? html`<button
+              type="button"
+              class="btn btn-mini"
+              title="Versions « avant modification » archivées de ce fichier"
+              onClick=${onVoirVersions}
+            >
+              Versions archivées
+            </button>`
+          : null}
         ${donnees.type === 'texte'
           ? html`
               <button
@@ -284,7 +294,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier }) {
                 <div class="etat-vide">
                   <div class="etat-vide-titre">Fichier trop volumineux pour être comparé ici</div>
                   <div class="etat-vide-texte">
-                    ${formaterOctets(donnees.taille)} — au-delà de ${formaterOctets(donnees.limite)}, l'affichage
+                    ${formaterOctets(donnees.taille)} - au-delà de ${formaterOctets(donnees.limite)}, l'affichage
                     ligne à ligne n'est plus lisible.
                   </div>
                   <div style="display:flex;gap:6px">
@@ -468,9 +478,9 @@ function VueBinaire({ donnees, onOuvrirExterne }) {
             </tr>
           </thead>
           <tbody>
-            ${ligne('Taille', donnees.prod ? formaterOctets(donnees.prod.taille) : '—', donnees.local ? formaterOctets(donnees.local.taille) : '—')}
-            ${ligne('Date', donnees.prod ? formaterDate(donnees.prod.mtimeMs) : '—', donnees.local ? formaterDate(donnees.local.mtimeMs) : '—')}
-            ${ligne('SHA-256', donnees.hashProd || '—', donnees.hashLocal || '—')}
+            ${ligne('Taille', donnees.prod ? formaterOctets(donnees.prod.taille) : '-', donnees.local ? formaterOctets(donnees.local.taille) : '-')}
+            ${ligne('Date', donnees.prod ? formaterDate(donnees.prod.mtimeMs) : '-', donnees.local ? formaterDate(donnees.local.mtimeMs) : '-')}
+            ${ligne('SHA-256', donnees.hashProd || '-', donnees.hashLocal || '-')}
           </tbody>
         </table>
         <div style="display:flex;gap:6px;margin-top:12px">

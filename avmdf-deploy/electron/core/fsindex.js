@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * fsindex.js — parcours récursif, empreintes SHA-256, cache et concurrence
+ * fsindex.js - parcours récursif, empreintes SHA-256, cache et concurrence
  * bornée.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM.

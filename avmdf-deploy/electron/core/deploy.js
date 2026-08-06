@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * deploy.js — contrôles préalables, sauvegarde, copie, manifeste et retour
+ * deploy.js - contrôles préalables, sauvegarde, copie, manifeste et retour
  * arrière.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM.
@@ -241,7 +241,7 @@ async function preflight(plan, options = {}) {
         BLOQUANT,
         'verrou',
         `${verrouilles.length} fichier(s) sont verrouillés en production.`,
-        'Fichier verrouillé en production — recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
+        'Fichier verrouillé en production - recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
         verrouilles
       )
     );
@@ -342,7 +342,7 @@ async function espaceDisponible(chemin) {
 }
 
 function formaterOctets(octets) {
-  if (octets === null || octets === undefined) return '—';
+  if (octets === null || octets === undefined) return '-';
   const unites = ['o', 'Ko', 'Mo', 'Go', 'To'];
   let valeur = octets;
   let rang = 0;
@@ -360,7 +360,7 @@ function formaterOctets(octets) {
 /**
  * Déroule la mise en production, fichier par fichier.
  *
- * En simulation, tout se déroule à l'identique — empreintes comprises — mais
+ * En simulation, tout se déroule à l'identique - empreintes comprises - mais
  * aucun octet n'est écrit.
  *
  * @param {object} plan
@@ -518,7 +518,7 @@ async function traiterFichier(fichier, plan, contexte) {
       if (invaliderCache) invaliderCache(cheminProd);
     }
   } catch (err) {
-    entree.erreur = `${raisonLisible(err)} — ${err.message}`;
+    entree.erreur = `${raisonLisible(err)} - ${err.message}`;
     if (entree.archiveNonRemplace) {
       entree.erreur += ' (la version de production a été archivée mais n\'a PAS été remplacée)';
     }
@@ -594,16 +594,16 @@ function redigerRecapitulatif(manifeste) {
   const date = new Date(manifeste.date);
   const lignes = [];
 
-  lignes.push(`## ${date.toLocaleString('fr-FR')} — ${manifeste.projet}`);
+  lignes.push(`## ${date.toLocaleString('fr-FR')} - ${manifeste.projet}`);
   lignes.push('');
   lignes.push(`- **Ticket** : ${manifeste.ticket}`);
   lignes.push(`- **Sprint** : ${manifeste.sprint}`);
-  lignes.push(`- **Auteur** : ${manifeste.auteur || '—'}`);
+  lignes.push(`- **Auteur** : ${manifeste.auteur || '-'}`);
   lignes.push(`- **Opération** : ${libelleOperation(manifeste)}`);
   lignes.push(`- **Source** : \`${manifeste.racineLocale}\``);
   lignes.push(`- **Destination** : \`${manifeste.racineProd}\``);
   lignes.push(
-    `- **Fichiers** : ${resume.total} au total — ${resume.remplacements} remplacé(s), ` +
+    `- **Fichiers** : ${resume.total} au total - ${resume.remplacements} remplacé(s), ` +
       `${resume.creations} créé(s), ${resume.suppressions} supprimé(s)` +
       (resume.echecs ? `, **${resume.echecs} en échec**` : '')
   );
@@ -614,10 +614,10 @@ function redigerRecapitulatif(manifeste) {
   lignes.push('| --- | --- | --- | --- | --- |');
   for (const fichier of manifeste.fichiers) {
     const lignesTexte =
-      fichier.lignesAjoutees === null ? '—' : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`;
+      fichier.lignesAjoutees === null ? '-' : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`;
     const sauvegarde = fichier.sauvegarde
       ? '`' + fichier.sauvegarde + '`' + (fichier.sauvegardeConservee ? ' (passage précédent)' : '')
-      : '—';
+      : '-';
     lignes.push(
       `| \`${fichier.chemin}\` | ${fichier.action} | ${lignesTexte} | ${sauvegarde} | ` +
         `${fichier.erreur ? '**échec : ' + fichier.erreur + '**' : 'ok'} |`
@@ -636,7 +636,7 @@ function libelleOperation(manifeste) {
 async function ajouterAuRecapitulatif(chemin, manifeste) {
   let entete = '';
   if (!(await existe(chemin))) {
-    entete = `# Récapitulatif — ${manifeste.ticket} / ${manifeste.sprint}\n\n`;
+    entete = `# Récapitulatif - ${manifeste.ticket} / ${manifeste.sprint}\n\n`;
   }
   await fsp.appendFile(cheminLong(chemin), entete + redigerRecapitulatif(manifeste) + '\n', 'utf8');
 }
@@ -745,7 +745,7 @@ async function preparerRestauration(manifeste, options = {}) {
         BLOQUANT,
         'verrou',
         `${verrouilles.length} fichier(s) sont verrouillés en production.`,
-        'Fichier verrouillé en production — recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
+        'Fichier verrouillé en production - recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
         verrouilles
       )
     );
@@ -850,7 +850,7 @@ async function restaurer(manifeste, preparation, options = {}) {
       }
       if (invaliderCache) invaliderCache(cheminProd);
     } catch (err) {
-      entree.erreur = `${raisonLisible(err)} — ${err.message}`;
+      entree.erreur = `${raisonLisible(err)} - ${err.message}`;
     }
 
     resultats.push(entree);
@@ -888,6 +888,119 @@ async function restaurer(manifeste, preparation, options = {}) {
   return { manifeste: manifesteRestauration, chemins, rapport: resumer(manifesteRestauration) };
 }
 
+
+/**
+ * Restaure une version archivée précise d'un seul fichier.
+ *
+ * La version actuellement en production est d'abord archivée dans le dossier de
+ * sprint choisi : revenir à une version ancienne ne fait pas perdre l'actuelle.
+ * L'opération produit son propre manifeste, elle est donc réversible elle aussi.
+ *
+ * @param {object} plan
+ * @param {object} [options]
+ */
+async function restaurerVersion(plan, options = {}) {
+  const { invaliderCache = null } = options;
+  const simulation = Boolean(plan.simulation);
+  const debut = new Date();
+
+  const cheminProd = joindreRelatif(plan.racineProd, plan.chemin);
+  const cheminSauvegarde = joindreRelatif(plan.dossierSauvegarde, plan.chemin);
+
+  const entree = {
+    chemin: plan.chemin,
+    action: ACTION_RESTAURATION,
+    sauvegarde: null,
+    versionRestauree: plan.source,
+    hashAvant: null,
+    tailleAvant: null,
+    hashApres: null,
+    tailleApres: null,
+    lignesAjoutees: null,
+    lignesSupprimees: null,
+    erreur: null,
+    archiveNonRemplace: false,
+    sauvegardeConservee: false
+  };
+
+  const problemes = [];
+  try {
+    if (!estSousRacine(plan.source, plan.racineAvmdf)) {
+      throw new Error('la version à restaurer est hors du dossier d\'archives');
+    }
+    if (!estSousRacine(cheminProd, plan.racineProd)) {
+      throw new Error('destination hors de la racine de production');
+    }
+    if (!estSousRacine(cheminSauvegarde, plan.racineAvmdf)) {
+      throw new Error('destination d\'archivage hors du dossier d\'archives');
+    }
+
+    const codeVerrou = await estVerrouille(cheminProd);
+    if (codeVerrou) {
+      problemes.push(
+        probleme(
+          BLOQUANT,
+          'verrou',
+          `Le fichier est verrouillé en production (${codeVerrou}).`,
+          'Fichier verrouillé en production : recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
+          [plan.chemin]
+        )
+      );
+      throw new Error('fichier verrouillé en production');
+    }
+
+    // 1. Archivage de la version actuelle, sans exception.
+    if (await existe(cheminProd)) {
+      const etatProd = await fsp.stat(cheminLong(cheminProd));
+      entree.tailleAvant = etatProd.size;
+      entree.hashAvant = await hashFichier(cheminProd);
+      const dejaArchive = await existe(cheminSauvegarde);
+      if (!simulation && !dejaArchive) await copierAvecDate(cheminProd, cheminSauvegarde);
+      entree.sauvegarde = plan.chemin;
+      entree.sauvegardeConservee = dejaArchive;
+    }
+
+    // 2. Remise en place de la version choisie.
+    const etatSource = await fsp.stat(cheminLong(plan.source));
+    entree.tailleApres = etatSource.size;
+    entree.hashApres = await hashFichier(plan.source);
+    if (!simulation) {
+      await copierAvecDate(plan.source, cheminProd);
+      if (invaliderCache) invaliderCache(cheminProd);
+    }
+  } catch (err) {
+    entree.erreur = `${raisonLisible(err)} - ${err.message}`;
+  }
+
+  const manifeste = {
+    ticket: plan.ticket,
+    sprint: plan.sprint,
+    auteur: plan.auteur,
+    date: debut.toISOString(),
+    projet: plan.projet,
+    operation: ACTION_RESTAURATION,
+    restaureDepuis: plan.source,
+    racineLocale: plan.racineLocale || null,
+    racineProd: plan.racineProd,
+    dossierSauvegarde: plan.dossierSauvegarde,
+    simulation,
+    annule: false,
+    fichiers: [entree]
+  };
+
+  const chemins = { manifeste: null, recapitulatif: null };
+  if (!simulation && !entree.erreur) {
+    const suffixe = horodatageFichier(debut);
+    await fsp.mkdir(cheminLong(plan.dossierSauvegarde), { recursive: true });
+    chemins.manifeste = path.join(plan.dossierSauvegarde, `_restauration_${suffixe}.json`);
+    chemins.recapitulatif = path.join(plan.dossierSauvegarde, '_recapitulatif.md');
+    await fsp.writeFile(cheminLong(chemins.manifeste), JSON.stringify(manifeste, null, 2) + '\n', 'utf8');
+    await ajouterAuRecapitulatif(chemins.recapitulatif, manifeste);
+  }
+
+  return { manifeste, chemins, rapport: resumer(manifeste), problemes };
+}
+
 module.exports = {
   ACTION_REMPLACEMENT,
   ACTION_CREATION,
@@ -905,6 +1018,7 @@ module.exports = {
   listerManifestes,
   preparerRestauration,
   restaurer,
+  restaurerVersion,
   formaterOctets,
   estVerrouille,
   copierAvecDate

@@ -1,4 +1,4 @@
-# AVMDF — Mise en production
+# AVMDF - Mise en production
 
 Outil de bureau qui compare les sources locales et le site de production IIS, archive la version
 écrasée dans `AvMdf\AVMDF<ticket>\<sprint>` avant toute copie, et permet de revenir en arrière.
@@ -39,7 +39,7 @@ administrateur. À lancer depuis n'importe quel poste ayant accès à `Z:\`.
 
 ```
 electron/
-  main.js       fenêtre et handlers IPC — aucune logique métier
+  main.js       fenêtre et handlers IPC - aucune logique métier
   preload.js    pont contextBridge ; le renderer n'a aucun accès direct au disque
   core/         logique métier en modules Node purs (aucun require('electron'))
     config.js   réglages : défauts, normalisation, contrôle de cohérence, écriture atomique
@@ -136,6 +136,45 @@ transmet pour la traçabilité.
 
 ---
 
+## Identité
+
+L'interface reprend le logo Saarstahl Rail et ses deux couleurs, relevées au pixel dans le
+fichier fourni :
+
+| Rôle | Couleur |
+|---|---|
+| Vert de marque : logo, actions de production, ajouts, fichiers nouveaux | `#ABD083` |
+| Gris de marque : texte secondaire, statut « modifié » | `#8597A5` |
+| Fond, panneaux, séparateurs | `#16191C`, `#1D2126`, `#2E343B` |
+
+Tout le reste est construit sur ces deux teintes. Une seule entorse, assumée : un rouge sourd
+`#D08B80` pour ce qui casse ou détruit (suppressions dans la comparaison, fichiers orphelins,
+échecs, boutons destructeurs). Les avertissements, eux, restent dans le gris de marque. Dites-le
+si vous voulez que le rouge disparaisse aussi : la bascule tient dans une variable CSS.
+
+Déclinaisons produites depuis `logo-Saarstahl-Rail.jpg`, fond blanc rendu transparent :
+
+| Fichier | Usage |
+|---|---|
+| `renderer/assets/marque.png` | symbole seul, en-tête de l'application |
+| `renderer/assets/logo.png` | logo complet, écran de démarrage |
+| `build/icon.ico` et `build/icon.png` | icône de l'exécutable et de la fenêtre |
+
+Aucun tiret cadratin dans l'application : ni dans l'interface, ni dans les messages, ni dans le
+code.
+
+## Versions archivées d'un fichier
+
+Chaque dossier de sprint contient la version « avant modification » des fichiers touchés. L'outil
+sait les retrouver : sur un fichier, `Versions archivées` (bouton de la comparaison ou clic droit
+dans l'arborescence) liste **toutes** ses versions, tous tickets et tous sprints confondus, avec
+leur date, leur auteur et l'action d'origine, lus dans les manifestes présents sur place.
+
+Chaque version se compare à la version actuellement en production, et se remet en place en un
+geste. La remise en production archive d'abord la version actuelle dans le sprint choisi, puis
+écrit son propre manifeste de restauration : revenir à une version ancienne ne fait jamais perdre
+l'état courant, et l'opération est elle-même réversible depuis l'écran Historique.
+
 ## Décisions prises
 
 Deux points laissés ouverts par la spécification ont été tranchés ainsi. Ils se changent sans
@@ -144,7 +183,7 @@ difficulté si vous préférez l'inverse.
 **Fichiers orphelins.** Présents en production seulement, ils ne partent jamais avec une mise en
 production : c'est une opération distincte. On les coche seuls, le bouton du bandeau devient
 « Supprimer en production », la version supprimée est archivée dans le sprint **avant** d'être
-retirée, et l'opération produit son propre manifeste — donc elle est réversible comme les autres.
+retirée, et l'opération produit son propre manifeste - donc elle est réversible comme les autres.
 Cocher un dossier ne mélange jamais les deux natures.
 
 **Pools IIS.** L'outil ne pilote pas le serveur. S'il détecte un fichier verrouillé, il bloque
@@ -155,7 +194,7 @@ par défaut.
 ## Ce que l'outil ne fait jamais
 
 - déployer sans avoir archivé la version écrasée ;
-- écraser une archive déjà présente dans un sprint — la version « avant modification » d'origine
+- écraser une archive déjà présente dans un sprint - la version « avant modification » d'origine
   gagne toujours, un second passage la conserve ;
 - ré-encoder, reformater ou normaliser les fins de ligne : la copie est binaire, octet pour octet ;
 - écrire hors des racines configurées : chaque destination est résolue en absolu et vérifiée ;

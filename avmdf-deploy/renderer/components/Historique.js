@@ -14,7 +14,7 @@ const LIBELLES_ACTION = {
 };
 
 function formaterHorodatage(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString('fr-FR');
@@ -142,7 +142,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                           ${manifeste.simulation ? html`<span class="etiquette">simulation</span>` : null}
                         </div>
                         <div class="historique-ligne2 attenue">
-                          ${formaterHorodatage(manifeste.date)} · ${manifeste.auteur || '—'} · ${manifeste.projet}
+                          ${formaterHorodatage(manifeste.date)} · ${manifeste.auteur || '-'} · ${manifeste.projet}
                         </div>
                         <div class="historique-ligne2 attenue">
                           ${formaterNombre(manifeste.resume.total)} fichier(s)
@@ -172,7 +172,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                             <tbody>
                               <tr><th>Ticket</th><td class="mono">${choisi.ticket} / ${choisi.sprint}</td></tr>
                               <tr><th>Date</th><td>${formaterHorodatage(choisi.date)}</td></tr>
-                              <tr><th>Auteur</th><td>${choisi.auteur || '—'}</td></tr>
+                              <tr><th>Auteur</th><td>${choisi.auteur || '-'}</td></tr>
                               <tr><th>Projet</th><td>${choisi.projet}</td></tr>
                               <tr><th>Production</th><td class="mono">${choisi.racineProd}</td></tr>
                               <tr><th>Sauvegarde</th><td class="mono">${choisi.dossierSauvegarde}</td></tr>
@@ -213,7 +213,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                                     <td>${LIBELLES_ACTION[fichier.action] || fichier.action}</td>
                                     <td class="mono">
                                       ${fichier.lignesAjoutees === null
-                                        ? '—'
+                                        ? '-'
                                         : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`}
                                     </td>
                                     <td>${fichier.erreur ? html`<span class="rouge">${fichier.erreur}</span>` : 'ok'}</td>

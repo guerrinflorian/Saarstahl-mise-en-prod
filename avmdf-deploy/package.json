@@ -27,7 +27,8 @@
     "files": [
       "electron/**/*",
       "renderer/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/.bin"
     ],
     "win": {
       "target": [
@@ -37,7 +38,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "AVMDF-MiseEnProd-${version}.exe"

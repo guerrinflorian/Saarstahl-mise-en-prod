@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * textdiff.js — détection d'encodage et comparaison ligne à ligne.
+ * textdiff.js - détection d'encodage et comparaison ligne à ligne.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM. Il travaille sur
  * des tampons ; c'est l'appelant qui lit les fichiers.
@@ -322,7 +322,7 @@ function comparerTampons(tamponGauche, tamponDroite, options = {}) {
 }
 
 /**
- * Compte les lignes ajoutées et supprimées sans construire la vue — utilisé par
+ * Compte les lignes ajoutées et supprimées sans construire la vue - utilisé par
  * le manifeste de déploiement.
  */
 function compterLignes(tamponGauche, tamponDroite, options = {}) {

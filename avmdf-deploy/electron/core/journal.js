@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * journal.js — journal quotidien en texte, une ligne par événement horodaté.
+ * journal.js - journal quotidien en texte, une ligne par événement horodaté.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM.
  * Un incident d'écriture du journal ne doit jamais faire échouer l'opération

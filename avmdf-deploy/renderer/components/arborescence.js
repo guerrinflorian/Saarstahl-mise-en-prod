@@ -1,5 +1,5 @@
 /**
- * arborescence.js — mise en forme de l'arbre pour l'affichage.
+ * arborescence.js - mise en forme de l'arbre pour l'affichage.
  *
  * L'arbre complet est construit par `electron/core/compare.js` et transmis avec
  * le résultat d'analyse. Ici on ne fait que le tailler selon les filtres et
@@ -164,7 +164,7 @@ export function ancetres(cheminFichier) {
 }
 
 export function formaterOctets(octets) {
-  if (octets === null || octets === undefined) return '—';
+  if (octets === null || octets === undefined) return '-';
   const unites = ['o', 'Ko', 'Mo', 'Go'];
   let valeur = octets;
   let rang = 0;
@@ -176,7 +176,7 @@ export function formaterOctets(octets) {
 }
 
 export function formaterDate(millisecondes) {
-  if (!millisecondes) return '—';
+  if (!millisecondes) return '-';
   return new Date(millisecondes).toLocaleString('fr-FR', {
     day: '2-digit',
     month: '2-digit',

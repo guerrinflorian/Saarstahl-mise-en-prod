@@ -501,7 +501,7 @@ export function Reglages({
               : html`
                   <span class="grandir attenue">
                     ${controle.avertissements.length
-                      ? controle.avertissements.length + ' avertissement(s) — l\'enregistrement reste possible.'
+                      ? controle.avertissements.length + ' avertissement(s) - l\'enregistrement reste possible.'
                       : ''}
                   </span>
                   <button type="button" class="btn" onClick=${demanderFermeture}>Fermer</button>

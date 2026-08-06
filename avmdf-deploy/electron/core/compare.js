@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * compare.js — appariement des deux arborescences et attribution des statuts.
+ * compare.js - appariement des deux arborescences et attribution des statuts.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM.
  *
@@ -159,7 +159,7 @@ async function verifierContenus(aVerifier, options) {
           surIncident({
             chemin: fichier.chemin,
             type: 'fichier',
-            raison: 'contenu illisible (' + (err.code || err.message) + ') — statut supposé modifié'
+            raison: 'contenu illisible (' + (err.code || err.message) + ') - statut supposé modifié'
           });
         }
       }

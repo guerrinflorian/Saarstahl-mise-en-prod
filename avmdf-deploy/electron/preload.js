@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * preload.js — pont entre le renderer et le processus principal.
+ * preload.js - pont entre le renderer et le processus principal.
  *
  * Le renderer ne reçoit que les fonctions listées ici : ni `ipcRenderer`,
  * ni `require`, ni accès au système de fichiers.
@@ -63,7 +63,14 @@ contextBridge.exposeInMainWorld('avmdf', {
 
   fichier: {
     /** Comparaison ligne à ligne d'un fichier de la dernière analyse. */
-    diff: (cle) => ipcRenderer.invoke('fichier:diff', { cle })
+    diff: (cle) => ipcRenderer.invoke('fichier:diff', { cle }),
+    /** Versions « avant modification » archivées sous la racine AVMDF. */
+    versions: (cle) => ipcRenderer.invoke('fichier:versions', { cle }),
+    /** Compare une version archivée à la production actuelle. */
+    comparerVersion: (cle, cheminVersion) =>
+      ipcRenderer.invoke('fichier:comparerVersion', { cle, cheminVersion }),
+    /** Remet une version archivée en production, après archivage de l'actuelle. */
+    restaurerVersion: (parametres) => ipcRenderer.invoke('fichier:restaurerVersion', parametres)
   },
 
   avmdf: {

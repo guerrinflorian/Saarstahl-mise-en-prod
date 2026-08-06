@@ -257,17 +257,15 @@ Disposition :
 │ 23 fichiers → Z:\AvMdf\AVMDF4611\AVMDF4611_3   ☑ Simulation  [Mettre en prod] │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-Direction visuelle : thème sombre froid (fond proche de 
-#16191d, panneaux 
-#1c2026, séparateurs 
-#2e353f, texte 
-#d5dae1). Accent laiton/ambre (
-#c9963f) réservé aux actions de production — ni bleu générique, ni terracotta. Statuts : modifié bleu (
-#4f8cc9), nouveau vert (
-#5aa96b), orphelin rouille (
-#b56a5a), identique atténué. Diff : ajout sur 
-#1e3326, suppression sur 
-#3a2226.
+Direction visuelle : identité Saarstahl Rail. Thème sombre froid, gris et vert
+strictement, dérivé du logo : vert de marque `#ABD083`, gris de marque `#8597A5`.
+Fond `#16191C`, panneaux `#1D2126`, séparateurs `#2E343B`, texte `#D7DDE3`.
+Le vert est réservé à la marque, aux actions de production et aux ajouts.
+Statuts : modifié gris-bleu `#8FA6B8`, nouveau vert `#ABD083`, orphelin `#C08C84`,
+identique atténué. Diff : ajout sur `#1C2617`, suppression sur `#2B1F1E`.
+Le rouge (`#D08B80`) ne sert qu'à ce qui casse ou détruit ; les avertissements
+restent dans le gris de marque. Le logo est repris dans l'en-tête et au démarrage.
+Aucun tiret cadratin dans l'interface.
 
 Typographie : Segoe UI Variable pour l'interface, Cascadia Mono puis Consolas en repli pour tous les chemins, numéros de ligne et contenus de fichiers. Aucune police web : l'outil doit fonctionner sur un poste sans accès Internet.
 

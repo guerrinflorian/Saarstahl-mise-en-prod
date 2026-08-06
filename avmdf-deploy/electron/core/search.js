@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * search.js — moteur de recherche et de filtrage.
+ * search.js - moteur de recherche et de filtrage.
  *
  * Module Node pur, sans accès au disque : il travaille sur la liste produite
  * par `compare.js`. La recherche dans le contenu des fichiers lui est fournie

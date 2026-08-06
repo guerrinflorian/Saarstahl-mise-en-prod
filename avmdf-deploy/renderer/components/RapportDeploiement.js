@@ -136,11 +136,11 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                     <td>${LIBELLES_ACTION[fichier.action] || fichier.action}</td>
                     <td class="mono">
                       ${fichier.lignesAjoutees === null
-                        ? '—'
+                        ? '-'
                         : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`}
                     </td>
                     <td class="mono">
-                      ${fichier.sauvegarde || '—'}
+                      ${fichier.sauvegarde || '-'}
                       ${fichier.sauvegardeConservee
                         ? html`<span class="attenue" title="Archive d'un passage précédent dans ce sprint"> (déjà archivé)</span>`
                         : null}

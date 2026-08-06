@@ -58,7 +58,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
           ${controle.bloquants.length
             ? html`
                 <div class="encart encart-danger" style="margin-bottom:14px">
-                  <strong>${controle.bloquants.length} point(s) bloquant(s) — la mise en production est refusée.</strong>
+                  <strong>${controle.bloquants.length} point(s) bloquant(s) - la mise en production est refusée.</strong>
                   ${controle.bloquants.map(
                     (probleme) => html`
                       <div class="probleme" key=${probleme.code + probleme.message}>
@@ -104,7 +104,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             <tbody>
               <tr><th>Projet</th><td>${resume.projet}</td></tr>
               <tr><th>Opération</th><td>${suppression ? 'suppression de fichiers orphelins' : 'mise en production'}</td></tr>
-              <tr><th>Auteur</th><td>${resume.auteur || '—'}</td></tr>
+              <tr><th>Auteur</th><td>${resume.auteur || '-'}</td></tr>
               <tr><th>Destination production</th><td class="mono">${resume.racineProd}</td></tr>
               <tr><th>Dossier de sauvegarde</th><td class="mono">${resume.dossierSauvegarde}</td></tr>
               <tr>
@@ -120,7 +120,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
                         </span>
                       `
                     )}
-                  <span class="attenue"> — ${formaterOctets(resume.octets)}</span>
+                  <span class="attenue"> - ${formaterOctets(resume.octets)}</span>
                 </td>
               </tr>
             </tbody>

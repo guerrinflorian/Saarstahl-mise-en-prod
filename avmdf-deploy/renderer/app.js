@@ -12,6 +12,7 @@ import { ConfirmationDeploiement } from './components/ConfirmationDeploiement.js
 import { RapportDeploiement } from './components/RapportDeploiement.js';
 import { Historique } from './components/Historique.js';
 import { Journal } from './components/Journal.js';
+import { VersionsFichier } from './components/VersionsFichier.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { joindreChemin } from './components/chemins.js';
 import { criteresParDefaut, filtrer, listerDossiers } from './components/filtres.js';
@@ -43,6 +44,7 @@ function App() {
   const [diff, setDiff] = useState({ etat: 'vide' });
 
   const [destination, setDestination] = useState(null);
+  const [versionsDe, setVersionsDe] = useState(null);
   const [deploiement, setDeploiement] = useState(null);
   const [rapport, setRapport] = useState(null);
 
@@ -251,7 +253,7 @@ function App() {
         ? `Analyse terminée : ${ecarts} écart(s) sur ${reponse.resultat.fichiers.length} fichiers.`
         : 'Aucun écart détecté entre local et prod.',
       texte: reponse.resultat.ignores.length
-        ? `${reponse.resultat.ignores.length} élément(s) ignorés — voir le panneau en bas à gauche.`
+        ? `${reponse.resultat.ignores.length} élément(s) ignorés - voir le panneau en bas à gauche.`
         : ''
     });
   }, [cheminLocal, cheminProd, modeLibre, projet, notifier, notifierEchec]);
@@ -275,6 +277,10 @@ function App() {
       if (action === 'copier') {
         await window.avmdf.systeme.copier(fichier.chemin);
         notifier({ type: 'succes', titre: 'Chemin copié.', texte: fichier.chemin, duree: 2500 });
+        return;
+      }
+      if (action === 'versions') {
+        setVersionsDe({ cle: fichier.cle, chemin: fichier.chemin });
         return;
       }
       if (action === 'exclure') {
@@ -437,13 +443,20 @@ function App() {
 
   // -- Rendu ----------------------------------------------------------------
   if (etat === 'chargement') {
-    return html`<div class="demarrage"><h1>AVMDF</h1><p class="attenue">Chargement des réglages…</p></div>`;
+    return html`
+      <div class="demarrage">
+        <img class="demarrage-logo" src="assets/logo.png" alt="Saarstahl Rail" />
+        <h1><span class="demarrage-marque">AVMDF</span> Mise en production</h1>
+        <p class="attenue">Chargement des réglages…</p>
+      </div>
+    `;
   }
 
   if (etat === 'panne') {
     return html`
       <div class="demarrage">
-        <h1>AVMDF</h1>
+        <img class="demarrage-logo" src="assets/logo.png" alt="Saarstahl Rail" />
+        <h1><span class="demarrage-marque">AVMDF</span> Mise en production</h1>
         <div class="encart encart-danger" style="max-width:640px;text-align:left">
           <strong>${panne.message}</strong>
           ${panne.conseil ? html`<div style="margin-top:6px">${panne.conseil}</div>` : null}
@@ -507,7 +520,16 @@ function App() {
           onAnnuler=${() => window.avmdf.analyse.annuler()}
         />
 
-        <${VueDiff} diff=${diff} onOuvrirExterne=${ouvrirExterne} onNotifier=${notifier} />
+        <${VueDiff}
+          diff=${diff}
+          onOuvrirExterne=${ouvrirExterne}
+          onNotifier=${notifier}
+          onVoirVersions=${
+            diff.donnees
+              ? () => setVersionsDe({ cle: diff.donnees.cle, chemin: diff.donnees.chemin })
+              : null
+          }
+        />
       </div>
 
       <${BandeauDeploiement}
@@ -589,6 +611,27 @@ function App() {
             onFermer=${() => {
               window.avmdf.deploiement.annuler();
               setDeploiement(null);
+            }}
+          />`
+        : null}
+
+      ${versionsDe
+        ? html`<${VersionsFichier}
+            fichier=${versionsDe}
+            destination=${destination}
+            simulation=${config.options.simulation}
+            onFermer=${() => setVersionsDe(null)}
+            onEchec=${(reponse) => notifierEchec(reponse, 'Versions archivées indisponibles.')}
+            onRapport=${(resultat) => {
+              setVersionsDe(null);
+              setRapport(resultat);
+              if (!resultat.manifeste.simulation) {
+                notifier({
+                  type: 'succes',
+                  titre: 'Version remise en production.',
+                  texte: 'Relancez une analyse pour repartir de l\'état réel.'
+                });
+              }
             }}
           />`
         : null}

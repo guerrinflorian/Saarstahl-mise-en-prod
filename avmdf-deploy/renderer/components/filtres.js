@@ -1,5 +1,5 @@
 /**
- * filtres.js — application des filtres côté affichage.
+ * filtres.js - application des filtres côté affichage.
  *
  * Ces prédicats reprennent ceux de `electron/core/search.js`, qui reste le
  * moteur de référence (et le seul utilisable en ligne de commande). Le doublon

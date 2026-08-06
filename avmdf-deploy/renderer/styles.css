@@ -1,46 +1,51 @@
 /* ==========================================================================
-   AVMDF — Mise en production
+   AVMDF - Mise en production
    Outil d'exploitation : dense, lisible, sans animation superflue.
    ========================================================================== */
 
 :root {
-  /* Fonds et structure */
-  --fond: #16191d;
-  --panneau: #1c2026;
-  --panneau-releve: #21262e;
-  --champ: #14171b;
-  --separateur: #2e353f;
-  --separateur-clair: #3a424e;
+  /* Gris froids dérivés du gris de marque Saarstahl #8597A5 */
+  --fond: #16191c;
+  --panneau: #1d2126;
+  --panneau-releve: #232830;
+  --champ: #131619;
+  --separateur: #2e343b;
+  --separateur-clair: #3b434c;
 
   /* Texte */
-  --texte: #d5dae1;
-  --texte-attenue: #8e98a6;
-  --texte-faible: #6b7480;
+  --texte: #d7dde3;
+  --texte-attenue: #8597a5;
+  --texte-faible: #66727d;
 
-  /* Accent laiton : réservé aux actions de production */
-  --accent: #c9963f;
-  --accent-vif: #e0aa4d;
-  --accent-sourd: #6b5223;
-  --accent-fond: #2a2318;
+  /* Vert Saarstahl : marque, actions de production, ajouts */
+  --accent: #abd083;
+  --accent-vif: #c0df9c;
+  --accent-sourd: #5a7443;
+  --accent-fond: #1e2618;
+  --accent-voile: rgba(171, 208, 131, 0.1);
+  --sur-accent: #14180f;
 
   /* Statuts */
-  --modifie: #4f8cc9;
-  --nouveau: #5aa96b;
-  --orphelin: #b56a5a;
-  --identique: #6b7480;
+  --modifie: #8fa6b8;
+  --nouveau: #abd083;
+  --orphelin: #c08c84;
+  --identique: #66727d;
 
   /* Diff */
-  --diff-ajout: #1e3326;
-  --diff-suppression: #3a2226;
+  --diff-ajout: #1c2617;
+  --diff-suppression: #2b1f1e;
 
-  /* Alertes */
-  --danger: #d4675a;
-  --danger-fond: #2c1c1b;
-  --alerte: #d1a24a;
-  --alerte-fond: #2a2418;
-  --info-fond: #1a222b;
+  /* Le rouge est la seule entorse au gris et vert : il ne sert qu'à ce qui
+     casse ou détruit. Les avertissements, eux, restent dans le gris de marque. */
+  --danger: #d08b80;
+  --danger-fond: #2a1d1c;
+  --danger-bord: #5c3a35;
+  --alerte: #a9bcc9;
+  --alerte-fond: #1e242a;
+  --alerte-bord: #3c4750;
+  --info-fond: #1a2026;
 
-  /* Typographie — aucune police web : tout est local au poste */
+  /* Typographie : aucune police web, tout est local au poste */
   --police-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Tahoma, system-ui, sans-serif;
   --police-mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
 
@@ -93,12 +98,12 @@ body {
   background: var(--fond);
 }
 ::-webkit-scrollbar-thumb {
-  background: #333b45;
+  background: #333a42;
   border: 2px solid var(--fond);
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #434d59;
+  background: #434b55;
 }
 
 /* --------------------------------------------------------------------------
@@ -157,7 +162,7 @@ textarea {
   gap: 6px;
   height: var(--hauteur-controle);
   padding: 0 11px;
-  background: #262c34;
+  background: #262c33;
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
   color: var(--texte);
@@ -167,12 +172,12 @@ textarea {
 }
 
 .btn:hover:not(:disabled) {
-  background: #2e353f;
-  border-color: #4a5462;
+  background: #2e343b;
+  border-color: #4b545e;
 }
 
 .btn:active:not(:disabled) {
-  background: #21262e;
+  background: #232830;
 }
 
 .btn:disabled {
@@ -183,21 +188,21 @@ textarea {
 .btn-accent {
   background: var(--accent);
   border-color: var(--accent-vif);
-  color: #1a1408;
+  color: var(--sur-accent);
   font-weight: 600;
 }
 
 .btn-accent:hover:not(:disabled) {
   background: var(--accent-vif);
-  border-color: #f0be63;
+  border-color: #cfe9b0;
 }
 
 .btn-accent:active:not(:disabled) {
-  background: #b8862f;
+  background: #93b86e;
 }
 
 .btn-danger {
-  border-color: #6d3a34;
+  border-color: var(--danger-bord);
   color: var(--danger);
 }
 
@@ -212,7 +217,7 @@ textarea {
 }
 
 .btn-plat:hover:not(:disabled) {
-  background: #262c34;
+  background: #262c33;
   border-color: var(--separateur-clair);
 }
 
@@ -327,10 +332,10 @@ label {
 }
 
 .encart-danger {
-  border-color: #6d3a34;
+  border-color: var(--danger-bord);
   border-left-color: var(--danger);
   background: var(--danger-fond);
-  color: #e8b3ab;
+  color: #e2bab3;
 }
 
 .encart-danger strong {
@@ -338,10 +343,10 @@ label {
 }
 
 .encart-alerte {
-  border-color: #5f5228;
+  border-color: var(--alerte-bord);
   border-left-color: var(--alerte);
   background: var(--alerte-fond);
-  color: #ddc48a;
+  color: #bfd0dc;
 }
 
 .encart-alerte strong {
@@ -395,7 +400,13 @@ label {
 .entete-marque {
   color: var(--accent);
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
+}
+
+.entete-logo {
+  height: 22px;
+  width: auto;
+  flex: none;
 }
 
 .entete label {
@@ -523,10 +534,11 @@ label {
   border-top: 2px solid var(--separateur);
 }
 
-/* Simulation désactivée : le bandeau vire au laiton. */
+/* Simulation désactivée : le bandeau s'allume au vert de marque. */
 .bandeau.reel {
-  background: var(--accent-fond);
+  background: linear-gradient(to bottom, #232b1d, #1e2618);
   border-top-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(171, 208, 131, 0.18);
 }
 
 .bandeau-resume {
@@ -573,7 +585,7 @@ label {
 .bandeau-etat.reel {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #1a1408;
+  color: var(--sur-accent);
   font-weight: 700;
 }
 
@@ -586,7 +598,7 @@ label {
   inset: 0;
   display: flex;
   justify-content: center;
-  background: rgba(10, 12, 15, 0.6);
+  background: rgba(10, 12, 14, 0.66);
   z-index: 20;
 }
 
@@ -1068,6 +1080,10 @@ select.marque {
   border-top: 1px dotted var(--separateur);
 }
 
+.filtres-resume > span:first-child {
+  white-space: nowrap;
+}
+
 .filtres-resume strong {
   color: var(--texte);
   font-family: var(--police-mono);
@@ -1195,7 +1211,7 @@ select.marque {
 }
 
 .ligne:hover {
-  background: #22272f;
+  background: #22272c;
 }
 
 .ligne.curseur {
@@ -1203,7 +1219,7 @@ select.marque {
 }
 
 .ligne.actif {
-  background: #2a323d;
+  background: var(--accent-voile);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -1272,7 +1288,7 @@ select.marque {
   padding: 0 6px;
   border-radius: 8px;
   background: var(--orphelin);
-  color: #1a1108;
+  color: #221614;
   font-family: var(--police-mono);
   font-size: 11px;
   font-weight: 700;
@@ -1337,7 +1353,7 @@ select.marque {
 }
 
 .menu-entree:hover:not(:disabled) {
-  background: #2e353f;
+  background: #2e343b;
 }
 
 .menu-entree:disabled {
@@ -1390,8 +1406,8 @@ select.marque {
   flex-wrap: wrap;
   padding: 4px 10px;
   background: var(--alerte-fond);
-  border-bottom: 1px solid #5f5228;
-  color: #ddc48a;
+  border-bottom: 1px solid var(--alerte-bord);
+  color: #bfd0dc;
   font-size: 12px;
 }
 
@@ -1498,7 +1514,7 @@ select.marque {
 }
 
 .diff-modification {
-  background: rgba(79, 140, 201, 0.08);
+  background: rgba(143, 166, 184, 0.09);
 }
 
 .diff-absente {
@@ -1520,7 +1536,7 @@ select.marque {
 .fragment {
   border-radius: 2px;
   padding: 0 1px;
-  background: rgba(201, 150, 63, 0.28);
+  background: rgba(171, 208, 131, 0.26);
   box-shadow: inset 0 -1px 0 var(--accent);
 }
 
@@ -1539,7 +1555,7 @@ select.marque {
   height: 18px;
   line-height: 18px;
   padding: 0 0 0 62px;
-  background: #1a1f26;
+  background: #1a1e22;
   border: none;
   border-top: 1px solid var(--separateur);
   border-bottom: 1px solid var(--separateur);
@@ -1552,7 +1568,7 @@ select.marque {
 
 .diff-repli:hover {
   color: var(--accent);
-  background: #20262e;
+  background: #212730;
 }
 
 .diff-pied {
@@ -1668,7 +1684,7 @@ select.marque {
 }
 
 .tableau-fichiers tbody tr:hover {
-  background: #21262e;
+  background: #232830;
 }
 
 .tableau-fichiers .en-echec {
@@ -1711,7 +1727,7 @@ select.marque {
 .probleme {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px dotted #6d3a34;
+  border-top: 1px dotted var(--danger-bord);
 }
 
 .probleme:first-of-type {
@@ -1823,11 +1839,11 @@ select.marque {
 }
 
 .historique-entree:hover {
-  background: #21262e;
+  background: #232830;
 }
 
 .historique-entree.choisi {
-  background: #2a323d;
+  background: var(--accent-voile);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -1885,7 +1901,7 @@ select.marque {
 }
 
 .journal-ligne:hover {
-  background: #1b2027;
+  background: #1a1f24;
 }
 
 .journal-ligne.erreur {
@@ -1927,4 +1943,55 @@ button.bandeau-destination:hover {
 /* Compteurs de statut posés dans un tableau : ils ont besoin d'air. */
 .tableau .compteur {
   margin-right: 12px;
+}
+
+/* ==========================================================================
+   Identité Saarstahl
+   ========================================================================== */
+
+.demarrage-logo {
+  height: 54px;
+  width: auto;
+  margin-bottom: 6px;
+}
+
+.demarrage h1 {
+  color: var(--texte-attenue);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+}
+
+.demarrage-marque {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.signature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texte-faible);
+  font-size: 11px;
+}
+
+.signature img {
+  height: 16px;
+  width: auto;
+  opacity: 0.75;
+}
+
+/* Barre d'action au-dessus de la comparaison d'une version archivée */
+.versions-barre {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 6px 12px;
+  background: var(--panneau-releve);
+  border-bottom: 1px solid var(--separateur);
+}
+
+.versions-barre .attenue {
+  max-width: 560px;
+  font-size: 12px;
 }

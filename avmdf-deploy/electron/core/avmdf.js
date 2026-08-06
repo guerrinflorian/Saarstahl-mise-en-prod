@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * avmdf.js — lecture réelle du dossier d'archives, détection des tickets et des
+ * avmdf.js - lecture réelle du dossier d'archives, détection des tickets et des
  * conventions de sprint.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM.
@@ -16,7 +16,7 @@
 const fsp = require('fs/promises');
 const path = require('path');
 
-const { cheminLong, raisonLisible } = require('./fsindex');
+const { cheminLong, joindreRelatif, pool, raisonLisible } = require('./fsindex');
 
 const CONVENTION_SPRINT = 'sprint';
 const CONVENTION_SUFFIXE = 'suffixe';
@@ -272,6 +272,145 @@ async function inspecterSprint(cheminSprint) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Versions archivées d'un fichier
+// ---------------------------------------------------------------------------
+
+/**
+ * Retrouve toutes les versions « avant modification » d'un fichier, tous
+ * tickets et tous sprints confondus.
+ *
+ * On regarde dans chaque dossier de sprint, et aussi à la racine de chaque
+ * ticket pour la convention historique. Les manifestes présents sur place
+ * fournissent la date et l'auteur ; à défaut, on se rabat sur la date du
+ * fichier archivé.
+ *
+ * @param {string} racineAvmdf
+ * @param {string} cheminRelatif chemin relatif du fichier, séparateurs Windows
+ * @returns {Promise<{versions:object[], erreur:string|null}>}
+ */
+async function versionsArchivees(racineAvmdf, cheminRelatif, options = {}) {
+  const { concurrence = 6, signal = { annule: false } } = options;
+  if (!cheminRelatif) return { versions: [], erreur: null };
+
+  const { tickets, erreur } = await listerTickets(racineAvmdf);
+  if (erreur) return { versions: [], erreur };
+
+  const emplacements = [];
+  for (const ticket of tickets) {
+    emplacements.push({ ticket: ticket.nom, numero: ticket.numero, sprint: null, dossier: ticket.chemin });
+    let contenu = [];
+    try {
+      contenu = await fsp.readdir(cheminLong(ticket.chemin), { withFileTypes: true });
+    } catch (err) {
+      continue;
+    }
+    for (const element of contenu) {
+      if (!element.isDirectory()) continue;
+      emplacements.push({
+        ticket: ticket.nom,
+        numero: ticket.numero,
+        sprint: element.name,
+        dossier: path.join(ticket.chemin, element.name)
+      });
+    }
+  }
+
+  const versions = [];
+  await pool(
+    emplacements,
+    concurrence,
+    async (emplacement) => {
+      const chemin = joindreRelatif(emplacement.dossier, cheminRelatif);
+      try {
+        const etat = await fsp.stat(cheminLong(chemin));
+        if (!etat.isFile()) return;
+        versions.push({
+          ticket: emplacement.ticket,
+          numero: emplacement.numero,
+          sprint: emplacement.sprint,
+          dossier: emplacement.dossier,
+          chemin,
+          taille: etat.size,
+          mtimeMs: etat.mtimeMs,
+          date: null,
+          auteur: null,
+          action: null,
+          simulation: false
+        });
+      } catch (err) {
+        /* pas de version archivée ici */
+      }
+    },
+    signal
+  );
+
+  await enrichirParLesManifestes(versions, cheminRelatif, concurrence, signal);
+
+  versions.sort((a, b) => {
+    const da = a.date ? Date.parse(a.date) : a.mtimeMs;
+    const db = b.date ? Date.parse(b.date) : b.mtimeMs;
+    return db - da;
+  });
+
+  return { versions, erreur: null };
+}
+
+/** Complète les versions avec la date, l'auteur et l'action lus des manifestes. */
+async function enrichirParLesManifestes(versions, cheminRelatif, concurrence, signal) {
+  const dossiers = [...new Set(versions.map((v) => v.dossier))];
+  const parDossier = new Map();
+
+  await pool(
+    dossiers,
+    concurrence,
+    async (dossier) => {
+      let noms = [];
+      try {
+        noms = (await fsp.readdir(cheminLong(dossier))).filter((n) =>
+          /^_(deploiement|restauration)_.*\.json$/i.test(n)
+        );
+      } catch (err) {
+        return;
+      }
+      const entrees = [];
+      for (const nom of noms) {
+        try {
+          const manifeste = JSON.parse(await fsp.readFile(cheminLong(path.join(dossier, nom)), 'utf8'));
+          const fichier = (manifeste.fichiers || []).find(
+            (f) => String(f.chemin || '').toLowerCase() === cheminRelatif.toLowerCase()
+          );
+          if (fichier) {
+            entrees.push({
+              date: manifeste.date,
+              auteur: manifeste.auteur,
+              action: fichier.action,
+              simulation: Boolean(manifeste.simulation),
+              manifeste: path.join(dossier, nom)
+            });
+          }
+        } catch (err) {
+          /* manifeste illisible : la version reste utilisable sans métadonnées */
+        }
+      }
+      entrees.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      if (entrees.length) parDossier.set(dossier, entrees[0]);
+    },
+    signal
+  );
+
+  for (const version of versions) {
+    const trouve = parDossier.get(version.dossier);
+    if (!trouve) continue;
+    version.date = trouve.date;
+    version.auteur = trouve.auteur;
+    version.action = trouve.action;
+    version.simulation = trouve.simulation;
+    version.manifeste = trouve.manifeste;
+  }
+}
+
 module.exports = {
   CONVENTION_SPRINT,
   CONVENTION_SUFFIXE,
@@ -286,5 +425,6 @@ module.exports = {
   proposerNom,
   verifierConvention,
   resoudreDestination,
-  estSousRacine
+  estSousRacine,
+  versionsArchivees
 };

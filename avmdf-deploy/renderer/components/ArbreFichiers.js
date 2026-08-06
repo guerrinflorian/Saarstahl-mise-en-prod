@@ -21,8 +21,8 @@ const MARGE = 10;
 /**
  * Panneau gauche : recherche, filtres, arborescence pliable et éléments ignorés.
  *
- * L'arbre est rendu par fenêtre glissante — seules les lignes visibles existent
- * dans le DOM — pour rester fluide bien au-delà de 5 000 fichiers.
+ * L'arbre est rendu par fenêtre glissante - seules les lignes visibles existent
+ * dans le DOM - pour rester fluide bien au-delà de 5 000 fichiers.
  */
 export function ArbreFichiers({
   analyse,
@@ -102,7 +102,7 @@ export function ArbreFichiers({
   }
 
   /**
-   * Cocher un dossier coche ses descendants — mais jamais de façon à mélanger
+   * Cocher un dossier coche ses descendants - mais jamais de façon à mélanger
    * une mise en production et une suppression d'orphelins, qui sont deux
    * opérations distinctes. La nature déjà engagée par la sélection l'emporte ;
    * à sélection vide, on prend les fichiers à déployer, et les orphelins
@@ -230,8 +230,8 @@ export function ArbreFichiers({
                   L'analyse compare récursivement, à profondeur illimitée :
                 </div>
                 <div class="mono etat-vide-texte" style="text-align:left">
-                  <div>${cheminLocal || '—'}</div>
-                  <div>${cheminProd || '—'}</div>
+                  <div>${cheminLocal || '-'}</div>
+                  <div>${cheminProd || '-'}</div>
                 </div>
                 <button type="button" class="btn" disabled=${!cheminLocal || !cheminProd} onClick=${onAnalyser}>
                   Analyser (F5)
@@ -469,6 +469,7 @@ function MenuContextuel({ menu, onFermer, onAction }) {
     { action: 'ouvrirProd', libelle: 'Ouvrir la version production', actif: Boolean(fichier.prod) },
     { action: 'reveler', libelle: "Afficher dans l'explorateur", actif: true },
     { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
+    { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
     { action: 'exclure', libelle: 'Exclure ce fichier', actif: true, danger: true }
   ];
 

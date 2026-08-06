@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * config.js — réglages de l'application : valeurs par défaut, chargement,
+ * config.js - réglages de l'application : valeurs par défaut, chargement,
  * vérification et sauvegarde.
  *
  * Module Node pur : aucune dépendance à Electron ni au DOM, utilisable depuis
@@ -412,7 +412,7 @@ function resoudreProjet(config, projet) {
  * Jointure d'une racine et d'un dossier de projet.
  *
  * Une racine Windows (`Z:\…`, `\\serveur\…`) est jointe à la mode Windows quel
- * que soit l'OS courant — c'est le cas réel d'exploitation. Une racine POSIX est
+ * que soit l'OS courant - c'est le cas réel d'exploitation. Une racine POSIX est
  * jointe avec `/`, ce qui permet d'exercer ces modules depuis un script en ligne
  * de commande sur un autre système.
  */

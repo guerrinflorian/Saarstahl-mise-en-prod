@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * main.js — fenêtre principale et handlers IPC.
+ * main.js - fenêtre principale et handlers IPC.
  *
  * Ce fichier n'orchestre que des appels : la logique vit dans `core/`.
  * Toute écriture sur le disque passe par ici ; le renderer n'a aucun accès
  * direct au système de fichiers et ne manipule jamais de chemin absolu qu'il
- * aurait fabriqué lui-même — il désigne les fichiers par leur clé d'analyse.
+ * aurait fabriqué lui-même - il désigne les fichiers par leur clé d'analyse.
  */
 
 const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
@@ -277,7 +277,7 @@ function handlersAnalyse() {
 
       carnet.ecrire(
         signal.annule ? 'ALERTE' : 'INFO',
-        `analyse ${signal.annule ? 'annulée' : 'terminée'} en ${Math.round((Date.now() - debut) / 1000)} s — ` +
+        `analyse ${signal.annule ? 'annulée' : 'terminée'} en ${Math.round((Date.now() - debut) / 1000)} s - ` +
           `${resultat.fichiers.length} fichiers, ${resultat.compteurs.modifie} modifiés, ` +
           `${resultat.compteurs.nouveau} nouveaux, ${resultat.compteurs.orphelin} orphelins, ` +
           `${ignores.length} ignorés`
@@ -423,6 +423,133 @@ function handlersDiff() {
     }
 
     return succes({ diff: enveloppe });
+  });
+
+  gerer('fichier:versions', async (parametres) => {
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    const fichier = dernierScan.parCle.get(String(parametres.cle || ''));
+    if (!fichier) {
+      return echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.');
+    }
+    const actuels = reglages();
+    const { versions, erreur } = await avmdf.versionsArchivees(actuels.racines.avmdf, fichier.chemin, {
+      concurrence: actuels.options.lecturesSimultanees
+    });
+    if (erreur) return echec(erreur, 'Vérifiez la racine des archives dans les réglages.');
+    return succes({ chemin: fichier.chemin, statut: fichier.statut, versions });
+  });
+
+  gerer('fichier:comparerVersion', async (parametres) => {
+    const actuels = reglages();
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    const fichier = dernierScan.parCle.get(String(parametres.cle || ''));
+    if (!fichier) return echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.');
+
+    const source = String(parametres.cheminVersion || '');
+    if (!avmdf.estSousRacine(source, actuels.racines.avmdf)) {
+      return echec(
+        'Cette version est hors du dossier d\'archives.',
+        'Rouvrez la liste des versions pour repartir du contenu réel.'
+      );
+    }
+
+    const lire = async (chemin) => {
+      if (!chemin) return null;
+      try {
+        return await fsp.readFile(fsindex.cheminLong(chemin));
+      } catch (err) {
+        return null;
+      }
+    };
+    const cheminProd = fsindex.joindreRelatif(dernierScan.cheminProd, fichier.chemin);
+    const [archive, actuel] = await Promise.all([lire(source), lire(cheminProd)]);
+    if (!archive) {
+      return echec(
+        'Version archivée illisible : ' + source,
+        'Le fichier a peut-être été déplacé dans le dossier d\'archives.'
+      );
+    }
+
+    const resultat = textdiff.comparerTampons(archive, actuel, {
+      ignorerEspaces: actuels.options.ignorerEspaces,
+      extensionTexte: actuels.extensionsTexte.includes(fichier.extension)
+    });
+    const enveloppe = {
+      cle: fichier.cle,
+      chemin: fichier.chemin,
+      statut: fichier.statut,
+      titreGauche: 'Version archivée',
+      titreDroite: 'Production actuelle',
+      ...resultat
+    };
+    if (resultat.type === 'texte') {
+      enveloppe.groupes = textdiff.grouper(resultat.lignes);
+      delete enveloppe.lignes;
+    }
+    return succes({ diff: enveloppe });
+  });
+
+  gerer('fichier:restaurerVersion', async (parametres) => {
+    const actuels = reglages();
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    if (dernierScan.modeLibre) {
+      return echec(
+        'La comparaison libre ne permet pas de restaurer une version.',
+        'Revenez à un projet configuré.'
+      );
+    }
+    const fichier = dernierScan.parCle.get(String(parametres.cle || ''));
+    if (!fichier) return echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.');
+
+    const source = String(parametres.cheminVersion || '');
+    if (!avmdf.estSousRacine(source, actuels.racines.avmdf)) {
+      return echec('Cette version est hors du dossier d\'archives.', 'Rouvrez la liste des versions.');
+    }
+
+    const ticket = avmdf.normaliserTicket(parametres.ticket);
+    if (!ticket) {
+      return echec(
+        'Aucune destination d\'archivage choisie.',
+        'Choisissez un ticket et un sprint dans le bandeau du bas : la version actuelle doit être archivée avant d\'être remplacée.'
+      );
+    }
+    const destination = avmdf.resoudreDestination(actuels.racines.avmdf, ticket.nom, parametres.sprint);
+    if (!destination.valide) return echec(destination.erreur, 'Corrigez le nom du dossier de sprint.');
+
+    const plan = {
+      projet: dernierScan.projet || '(dossiers libres)',
+      racineLocale: dernierScan.cheminLocal,
+      racineProd: dernierScan.cheminProd,
+      racineAvmdf: actuels.racines.avmdf,
+      dossierSauvegarde: destination.chemin,
+      ticket: ticket.nom,
+      sprint: parametres.sprint.trim(),
+      auteur: actuels.options.auteur,
+      simulation: Boolean(parametres.simulation),
+      chemin: fichier.chemin,
+      source
+    };
+
+    carnet.ecrire(
+      'ALERTE',
+      `${plan.simulation ? 'simulation de ' : ''}restauration de version : ${fichier.chemin} depuis ${source}`
+    );
+    const resultat = await deploy.restaurerVersion(plan, {
+      invaliderCache: (chemin) => cacheHash.invalider(chemin)
+    });
+    cacheHash.enregistrer();
+
+    if (resultat.manifeste.fichiers[0].erreur) {
+      return Object.assign(
+        echec(
+          'Restauration impossible : ' + resultat.manifeste.fichiers[0].erreur,
+          resultat.problemes.length ? resultat.problemes[0].conseil : 'Relancez une analyse et réessayez.'
+        ),
+        { problemes: resultat.problemes }
+      );
+    }
+    carnet.ecrire('INFO', `restauration de version terminée : ${fichier.chemin}`);
+    return succes({ manifeste: resultat.manifeste, chemins: resultat.chemins, rapport: resultat.rapport });
   });
 }
 
@@ -644,10 +771,10 @@ function handlersDeploiement() {
       const r = resultat.rapport;
       carnet.ecrire(
         r.echecs ? 'ERREUR' : 'INFO',
-        `${plan.simulation ? 'simulation' : 'mise en production'} terminée — ` +
+        `${plan.simulation ? 'simulation' : 'mise en production'} terminée - ` +
           `${r.remplacements} remplacé(s), ${r.creations} créé(s), ${r.suppressions} supprimé(s), ` +
           `${r.echecs} échec(s)` +
-          (resultat.chemins.manifeste ? ` — manifeste ${resultat.chemins.manifeste}` : '')
+          (resultat.chemins.manifeste ? ` - manifeste ${resultat.chemins.manifeste}` : '')
       );
 
       return succes({
@@ -800,7 +927,7 @@ function handlersHistorique() {
       cacheHash.enregistrer();
       carnet.ecrire(
         resultat.rapport.echecs ? 'ERREUR' : 'INFO',
-        `retour arrière terminé — ${resultat.rapport.total} fichier(s), ${resultat.rapport.echecs} échec(s)`
+        `retour arrière terminé - ${resultat.rapport.total} fichier(s), ${resultat.rapport.echecs} échec(s)`
       );
       return succes({ manifeste: resultat.manifeste, chemins: resultat.chemins, rapport: resultat.rapport });
     } finally {
@@ -907,7 +1034,7 @@ function creerFenetre() {
     show: false,
     backgroundColor: '#16191d',
     autoHideMenuBar: true,
-    title: 'AVMDF — Mise en production',
+    title: 'AVMDF - Mise en production',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
