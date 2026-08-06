@@ -1,0 +1,43 @@
+{
+  "name": "avmdf-deploy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Comparaison des sources locales et de la production IIS, archivage AVMDF et mise en production assistée.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "diff": "^9.0.0",
+    "iconv-lite": "^0.7.3"
+  },
+  "devDependencies": {
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "fr.process.avmdf-deploy",
+    "productName": "AVMDF Mise en production",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "AVMDF-MiseEnProd-${version}.exe"
+    }
+  }
+}
