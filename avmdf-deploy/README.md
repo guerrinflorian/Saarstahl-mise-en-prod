@@ -99,6 +99,13 @@ valeurs par défaut sont rechargées.
 développement et production. S'il est retiré de la liste d'exclusion, l'interface le signale en
 rouge et chaque mise en production qui le concerne affichera un avertissement.
 
+L'outil compare du code, pas les métadonnées d'atelier. Les exclusions par défaut couvrent donc
+aussi, depuis la version 2 des réglages : `$tf` et `My Project` (dossiers), `*.vspscc`, `*.vssscc`,
+`*.sln`, `*.vbproj`, `*.csproj`, `*.pubxml`, `*.licx`, `*.cd`, `*.manifest`, `packages.config`,
+`libman.json`, `Web.Debug.config` et `Web.Release.config` (fichiers). Une configuration enregistrée
+en version 1 reçoit ces motifs à son premier chargement, par union : les motifs ajoutés à la main
+sont conservés, et les motifs par défaut retirés volontairement ne reviennent pas.
+
 ## Format du manifeste
 
 Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<horodatage>.json`

@@ -20,7 +20,33 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION_CONFIG = 1;
+const VERSION_CONFIG = 2;
+
+/**
+ * Motifs ajoutés aux exclusions par la version 2 : l'application compare du
+ * code, pas les métadonnées d'atelier (TFVC, fichiers projet Visual Studio,
+ * transforms de publication). Une configuration enregistrée en version 1 les
+ * reçoit à son premier chargement, sans toucher aux motifs que l'utilisateur
+ * a ajoutés ou retirés lui-même.
+ */
+const AJOUTS_EXCLUSIONS_V2 = {
+  dossiers: ['$tf', 'My Project'],
+  fichiers: [
+    '*.vspscc',
+    '*.vssscc',
+    '*.sln',
+    '*.vbproj',
+    '*.csproj',
+    '*.pubxml',
+    '*.licx',
+    '*.cd',
+    '*.manifest',
+    'packages.config',
+    'libman.json',
+    'Web.Debug.config',
+    'Web.Release.config'
+  ]
+};
 
 const CONTENU_APP_OFFLINE_DEFAUT = [
   '<!doctype html>',
@@ -74,7 +100,8 @@ function reglagesParDefaut(contexte = {}) {
         'node_modules',
         'App_Data',
         'TestResults',
-        '_ReSharper*'
+        '_ReSharper*',
+        ...AJOUTS_EXCLUSIONS_V2.dossiers
       ],
       fichiers: [
         'web.config',
@@ -85,7 +112,8 @@ function reglagesParDefaut(contexte = {}) {
         '*.sln.docstates',
         'Thumbs.db',
         'desktop.ini',
-        '*.tmp'
+        '*.tmp',
+        ...AJOUTS_EXCLUSIONS_V2.fichiers
       ]
     },
     extensionsTexte: [
@@ -198,6 +226,17 @@ function normaliser(brut, contexte = {}) {
 
   const projets = Array.isArray(source.projets) ? source.projets.map(creerProjet) : defauts.projets;
 
+  // Migration v1 → v2 : les nouveaux motifs d'exclusion rejoignent une liste
+  // personnalisée sans écraser les choix de l'utilisateur (union, pas
+  // remplacement). Une configuration déjà en version 2 n'est pas retouchée.
+  const versionSource = Number.isInteger(source.version) ? source.version : 1;
+  let dossiersExclus = listeDeTextes(exclusions.dossiers, defauts.exclusions.dossiers);
+  let fichiersExclus = listeDeTextes(exclusions.fichiers, defauts.exclusions.fichiers);
+  if (versionSource < 2) {
+    dossiersExclus = listeDeTextes(dossiersExclus.concat(AJOUTS_EXCLUSIONS_V2.dossiers), []);
+    fichiersExclus = listeDeTextes(fichiersExclus.concat(AJOUTS_EXCLUSIONS_V2.fichiers), []);
+  }
+
   return {
     version: VERSION_CONFIG,
     racines: {
@@ -207,8 +246,8 @@ function normaliser(brut, contexte = {}) {
     },
     projets,
     exclusions: {
-      dossiers: listeDeTextes(exclusions.dossiers, defauts.exclusions.dossiers),
-      fichiers: listeDeTextes(exclusions.fichiers, defauts.exclusions.fichiers)
+      dossiers: dossiersExclus,
+      fichiers: fichiersExclus
     },
     extensionsTexte: listeExtensions(source.extensionsTexte, defauts.extensionsTexte),
     options: {
