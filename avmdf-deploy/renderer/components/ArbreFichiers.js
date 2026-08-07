@@ -302,8 +302,7 @@ export function ArbreFichiers({
                       onCurseur=${() => setCurseur(debut + position)}
                       onMenu=${(evenement, noeud) => {
                         evenement.preventDefault();
-                        if (noeud.type !== 'fichier') return;
-                        setMenu({ x: evenement.clientX, y: evenement.clientY, fichier: noeud });
+                        setMenu({ x: evenement.clientX, y: evenement.clientY, noeud });
                       }}
                     />
                   `
@@ -354,7 +353,7 @@ export function ArbreFichiers({
             menu=${menu}
             onFermer=${() => setMenu(null)}
             onAction=${(action) => {
-              onAction(action, menu.fichier);
+              onAction(action, menu.noeud);
               setMenu(null);
             }}
           />`
@@ -505,6 +504,96 @@ function Ligne({
   `;
 }
 
+/**
+ * Les deux côtés sont toujours proposés, chacun le sien : un fichier modifié
+ * existe des deux, et on veut aller voir l'un ou l'autre. Celui qui n'existe
+ * pas est grisé plutôt qu'absent, pour que le statut se lise là aussi.
+ */
+function entreesFichier(fichier) {
+  return [
+    { action: 'ouvrirLocal', libelle: 'Ouvrir la version locale', actif: Boolean(fichier.local) },
+    { action: 'ouvrirProd', libelle: 'Ouvrir la version production', actif: Boolean(fichier.prod) },
+    { separateur: true },
+    {
+      action: 'revelerLocal',
+      libelle: "Afficher le local dans l'explorateur",
+      actif: Boolean(fichier.local)
+    },
+    {
+      action: 'revelerProd',
+      libelle: "Afficher la production dans l'explorateur",
+      actif: Boolean(fichier.prod)
+    },
+    { separateur: true },
+    { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
+    { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
+    {
+      action: 'exclure',
+      libelle: 'Exclure ce fichier',
+      titre: `Ajoute « ${fichier.nom} » aux fichiers exclus des réglages.`,
+      actif: true,
+      danger: true
+    }
+  ];
+}
+
+/**
+ * Sur un dossier, l'exclusion se pose de deux façons, et la différence compte :
+ * par nom, elle écarte tous les dossiers qui le portent, à n'importe quelle
+ * profondeur ; par chemin, elle n'écarte que celui-ci. Les deux motifs sont
+ * montrés en toutes lettres, parce que c'est eux qu'on retrouvera dans les
+ * réglages.
+ *
+ * À la racine, chemin et nom sont la même chaîne : une seule entrée alors, il
+ * n'y a rien à départager.
+ */
+function entreesDossier(dossier) {
+  const exclusions =
+    dossier.chemin === dossier.nom
+      ? [
+          {
+            action: 'exclureDossierNom',
+            libelle: 'Exclure ce dossier',
+            titre:
+              `Ajoute le motif « ${dossier.nom} » aux dossiers exclus. ` +
+              'Tout dossier portant ce nom sera écarté, à n\'importe quelle profondeur.',
+            actif: true,
+            danger: true
+          }
+        ]
+      : [
+          {
+            action: 'exclureDossierChemin',
+            libelle: 'Exclure ce dossier seulement ici',
+            titre: `Ajoute le motif « ${dossier.chemin} » aux dossiers exclus.`,
+            actif: true,
+            danger: true
+          },
+          {
+            action: 'exclureDossierNom',
+            libelle: `Exclure tous les dossiers « ${dossier.nom} »`,
+            titre:
+              `Ajoute le motif « ${dossier.nom} » aux dossiers exclus. ` +
+              'Tout dossier portant ce nom sera écarté, à n\'importe quelle profondeur.',
+            actif: true,
+            danger: true
+          }
+        ];
+
+  return [
+    { action: 'revelerLocal', libelle: "Afficher le dossier local dans l'explorateur", actif: true },
+    {
+      action: 'revelerProd',
+      libelle: "Afficher le dossier production dans l'explorateur",
+      actif: true
+    },
+    { separateur: true },
+    { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
+    { separateur: true },
+    ...exclusions
+  ];
+}
+
 function MenuContextuel({ menu, onFermer, onAction }) {
   const boite = useRef(null);
 
@@ -523,34 +612,12 @@ function MenuContextuel({ menu, onFermer, onAction }) {
     };
   }, [onFermer]);
 
-  const fichier = menu.fichier;
-  // Les deux côtés sont toujours proposés, chacun le sien : un fichier
-  // modifié existe des deux, et on veut aller voir l'un ou l'autre. Celui qui
-  // n'existe pas est grisé plutôt qu'absent, pour que le statut se lise là
-  // aussi.
-  const entrees = [
-    { action: 'ouvrirLocal', libelle: 'Ouvrir la version locale', actif: Boolean(fichier.local) },
-    { action: 'ouvrirProd', libelle: 'Ouvrir la version production', actif: Boolean(fichier.prod) },
-    { separateur: true },
-    {
-      action: 'revelerLocal',
-      libelle: "Afficher le local dans l'explorateur",
-      actif: Boolean(fichier.local)
-    },
-    {
-      action: 'revelerProd',
-      libelle: "Afficher la production dans l'explorateur",
-      actif: Boolean(fichier.prod)
-    },
-    { separateur: true },
-    { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
-    { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
-    { action: 'exclure', libelle: 'Exclure ce fichier', actif: true, danger: true }
-  ];
+  const noeud = menu.noeud;
+  const entrees = noeud.type === 'dossier' ? entreesDossier(noeud) : entreesFichier(noeud);
 
   return html`
     <div class="menu" ref=${boite} style=${`left:${menu.x}px;top:${menu.y}px`} role="menu">
-      <div class="menu-titre mono">${fichier.chemin}</div>
+      <div class="menu-titre mono">${noeud.chemin}</div>
       ${entrees.map((entree, index) =>
         entree.separateur
           ? html`<div class="menu-separateur" key=${'separateur' + index} role="separator"></div>`
@@ -560,6 +627,7 @@ function MenuContextuel({ menu, onFermer, onAction }) {
                 class=${'menu-entree' + (entree.danger ? ' danger' : '')}
                 key=${entree.action}
                 disabled=${!entree.actif}
+                title=${entree.titre || ''}
                 role="menuitem"
                 onClick=${() => onAction(entree.action)}
               >

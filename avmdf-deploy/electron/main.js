@@ -166,17 +166,13 @@ function handlersConfig() {
     }
   });
 
-  gerer('config:exclureFichier', (nom) => {
-    const actuels = reglages();
-    const motif = String(nom || '').trim();
-    if (!motif) return echec('Aucun fichier à exclure.', 'Réessayez depuis le menu contextuel.');
-    if (actuels.exclusions.fichiers.some((m) => m.toLowerCase() === motif.toLowerCase())) {
-      return succes({ config: actuels, deja: true });
-    }
-    actuels.exclusions.fichiers.push(motif);
-    const { config: enregistre } = depotConfig.enregistrer(actuels);
-    return succes({ config: enregistre, deja: false });
-  });
+  gerer('config:exclureFichier', (nom) =>
+    ajouterExclusion('fichiers', nom, 'Aucun fichier à exclure.')
+  );
+
+  gerer('config:exclureDossier', (motif) =>
+    ajouterExclusion('dossiers', motif, 'Aucun dossier à exclure.')
+  );
 
   // Sert l'écran de premier démarrage : dire tout de suite si un dossier saisi
   // existe et se lit, plutôt que de le découvrir à la première analyse.
@@ -209,6 +205,33 @@ function handlersConfig() {
     if (resultat.canceled || !resultat.filePaths.length) return succes({ annule: true, chemin: '' });
     return succes({ annule: false, chemin: resultat.filePaths[0] });
   });
+}
+
+/**
+ * Ajoute un motif à une liste d'exclusions et enregistre.
+ *
+ * Le motif est rendu tel quel dans la réponse : c'est lui que l'interface
+ * montre, plutôt que « c'est fait ». Une exclusion posée d'un clic droit se
+ * retrouve autrement mal dans les réglages quand on la cherche.
+ *
+ * @param {'fichiers'|'dossiers'} categorie
+ * @param {string} brut
+ * @param {string} messageVide
+ */
+function ajouterExclusion(categorie, brut, messageVide) {
+  const motif = String(brut || '').trim();
+  if (!motif) return echec(messageVide, 'Réessayez depuis le menu contextuel.');
+
+  const actuels = reglages();
+  const liste = actuels.exclusions[categorie];
+  if (liste.some((connu) => connu.toLowerCase() === motif.toLowerCase())) {
+    return succes({ config: actuels, motif, deja: true });
+  }
+
+  liste.push(motif);
+  const { config: enregistre } = depotConfig.enregistrer(actuels);
+  carnet.ecrire('INFO', `exclusion ajoutée (${categorie}) : ${motif}`);
+  return succes({ config: enregistre, motif, deja: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -1139,6 +1162,33 @@ function handlersSysteme() {
     const chemin = cheminAutorise(parametres.chemin);
     if (!chemin) return echec('Chemin hors du périmètre de l\'application.', 'Relancez une analyse.');
     shell.showItemInFolder(chemin);
+    return succes({});
+  });
+
+  /**
+   * Montre un dossier de l'arborescence dans l'explorateur, d'un côté ou de
+   * l'autre. Le renderer désigne le dossier par son chemin relatif : c'est ici
+   * qu'il est joint à la racine du dernier scan, jamais dans l'interface.
+   */
+  gerer('systeme:revelerDossier', async (parametres) => {
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    const cote = parametres.cote === 'prod' ? 'production' : 'local';
+    const racine = cote === 'production' ? dernierScan.cheminProd : dernierScan.cheminLocal;
+    const cible = cheminAutorise(fsindex.joindreRelatif(racine, String(parametres.chemin || '')));
+    if (!cible) return echec('Chemin hors du périmètre de l\'application.', 'Relancez une analyse.');
+
+    try {
+      const etat = await fsp.stat(fsindex.cheminLong(cible));
+      if (!etat.isDirectory()) return echec(`Ce n'est pas un dossier : ${cible}`, 'Relancez une analyse.');
+    } catch (err) {
+      return echec(
+        `Ce dossier n'existe pas côté ${cote} : ${cible}`,
+        'Un dossier peut n\'exister que d\'un seul côté ; c\'est le cas quand tout son contenu est nouveau ou orphelin.',
+        err
+      );
+    }
+
+    shell.showItemInFolder(cible);
     return succes({});
   });
 

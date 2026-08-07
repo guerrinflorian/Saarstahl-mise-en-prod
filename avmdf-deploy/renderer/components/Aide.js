@@ -810,7 +810,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 'Case à cocher d\'un dossier',
                 'Coche ou décoche toute la branche visible. Une branche déjà engagée conserve sa nature : jamais de mélange entre déploiement et suppression.'
               ],
-              ['Clic droit sur un fichier', 'Ouvre le menu contextuel décrit ci-dessous.'],
+              ['Clic droit sur un fichier ou un dossier', 'Ouvre le menu contextuel décrit ci-dessous. Il n\'est pas le même sur un fichier et sur un dossier.'],
               [html`<${T}>↑<//> <${T}>↓<//>`, 'Déplacent le curseur dans la liste.'],
               [html`<${T}>→<//> <${T}>←<//>`, 'Déplient et replient le dossier sous le curseur.'],
               [html`<${T}>Espace<//>`, 'Coche ou décoche la ligne sous le curseur, branche entière pour un dossier.'],
@@ -853,6 +853,54 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ]
             ]}
           />
+
+          <h3>Le clic droit sur un dossier</h3>
+          <p>
+            Un dossier a son propre menu. On y va voir le dossier réel de chaque côté, on copie son
+            chemin, et surtout <strong>on l'écarte entièrement de la comparaison</strong> : un
+            dossier de ressources générées, une réserve d'anciennes versions, un répertoire qui
+            n'a pas à être comparé.
+          </p>
+          <${Demo} legende="Deux façons d'exclure, et la différence compte.">
+            <div class="aide-menu">
+              <div class="menu-titre mono">GPNET\\Controles\\Images</div>
+              <button type="button" class="menu-entree">Afficher le dossier local dans l'explorateur</button>
+              <button type="button" class="menu-entree">Afficher le dossier production dans l'explorateur</button>
+              <div class="menu-separateur"></div>
+              <button type="button" class="menu-entree">Copier le chemin relatif</button>
+              <div class="menu-separateur"></div>
+              <button type="button" class="menu-entree danger">Exclure ce dossier seulement ici</button>
+              <button type="button" class="menu-entree danger">Exclure tous les dossiers « Images »</button>
+            </div>
+          <//>
+
+          <${Repere}
+            entetes=${['Entrée', 'Motif ajouté aux réglages', 'Portée']}
+            lignes=${[
+              [
+                html`<span class="aide-danger-texte">Exclure ce dossier seulement ici</span>`,
+                html`<span class="mono">Controles\\Images</span>`,
+                'Ce dossier-là, à cet endroit-là. Les autres dossiers du même nom ailleurs dans l\'arborescence restent comparés.'
+              ],
+              [
+                html`<span class="aide-danger-texte">Exclure tous les dossiers « … »</span>`,
+                html`<span class="mono">Images</span>`,
+                'Tout dossier portant ce nom, à n\'importe quelle profondeur, des deux côtés.'
+              ]
+            ]}
+          />
+          <p class="attenue">
+            Sur un dossier de premier niveau, les deux motifs seraient identiques : une seule entrée
+            est alors proposée. Le motif exact est rappelé au survol de l'entrée, puis dans la
+            notification : c'est lui qu'on retrouvera dans <strong>Dossiers exclus</strong>, et
+            c'est de là qu'on le retire pour revenir en arrière.
+          </p>
+          <div class="encart">
+            <strong>Un dossier exclu n'est jamais parcouru</strong>, ni côté local ni côté
+            production. Ce qu'il contient ne peut donc ni apparaître dans la liste, ni partir en
+            production, ni être supprimé. L'analyse en cours ne bouge pas : relancez-la avec${' '}
+            <${T}>F5<//> pour la voir se réduire.
+          </div>
 
           <h3>Éléments ignorés</h3>
           <p>
@@ -1415,7 +1463,11 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               [
                 'Dossiers exclus',
-                html`Jamais parcourus, des deux côtés. Jokers acceptés : <span class="mono">obj</span>, <span class="mono">node_modules</span>, <span class="mono">_ReSharper*</span>.`
+                html`Jamais parcourus, des deux côtés. Un nom seul (<span class="mono">obj</span>)
+                  écarte tous les dossiers qui le portent ; un chemin
+                  (<span class="mono">Controles\\Images</span>) n'écarte que celui-là. Jokers
+                  acceptés : <span class="mono">_ReSharper*</span>. Le clic droit sur un dossier de
+                  l'arborescence remplit cette liste sans passer par ici.`
               ],
               [
                 'Fichiers exclus',
@@ -1593,7 +1645,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               [
                 'Des dizaines de fichiers « nouveaux » qui n\'ont rien à faire là',
-                html`Des fichiers qui n'existent que côté développement. Ajoutez un motif dans <strong>Fichiers exclus</strong>, ou utilisez « Exclure ce fichier » au clic droit.`
+                html`Des fichiers qui n'existent que côté développement. Clic droit dessus, « Exclure
+                  ce fichier ». S'ils sont tous dans le même dossier, clic droit sur le dossier :
+                  « Exclure ce dossier ». Les listes se modifient aussi à la main dans les réglages.`
               ],
               [
                 html`<strong>ouvert par un autre programme</strong> (EBUSY)`,

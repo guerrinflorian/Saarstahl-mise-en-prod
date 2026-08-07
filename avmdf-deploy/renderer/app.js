@@ -321,43 +321,63 @@ function App() {
     []
   );
 
-  const actionFichier = useCallback(
-    async (action, fichier) => {
+  /** Menu contextuel de l'arborescence : les fichiers comme les dossiers. */
+  const actionSurNoeud = useCallback(
+    async (action, noeud) => {
+      const estDossier = noeud.type === 'dossier';
+
       if (action === 'copier') {
-        await window.avmdf.systeme.copier(fichier.chemin);
-        notifier({ type: 'succes', titre: 'Chemin copié.', texte: fichier.chemin, duree: 2500 });
+        await window.avmdf.systeme.copier(noeud.chemin);
+        notifier({ type: 'succes', titre: 'Chemin copié.', texte: noeud.chemin, duree: 2500 });
         return;
       }
       if (action === 'versions') {
-        setVersionsDe({ cle: fichier.cle, chemin: fichier.chemin });
+        setVersionsDe({ cle: noeud.cle, chemin: noeud.chemin });
         return;
       }
-      if (action === 'exclure') {
-        const reponse = await window.avmdf.config.exclureFichier(fichier.nom);
+      if (action === 'exclure' || action === 'exclureDossierNom' || action === 'exclureDossierChemin') {
+        const motif = action === 'exclureDossierChemin' ? noeud.chemin : noeud.nom;
+        const reponse = estDossier
+          ? await window.avmdf.config.exclureDossier(motif)
+          : await window.avmdf.config.exclureFichier(motif);
         if (!reponse.ok) {
           notifierEchec(reponse, 'Exclusion impossible.');
           return;
         }
         setConfig(reponse.config);
+        const quoi = estDossier ? 'dossiers exclus' : 'fichiers exclus';
         notifier({
           type: 'succes',
-          titre: reponse.deja ? 'Ce fichier était déjà exclu.' : `« ${fichier.nom} » ajouté aux fichiers exclus.`,
-          texte: 'La prochaine analyse n\'en tiendra plus compte.'
+          titre: reponse.deja
+            ? `« ${motif} » figurait déjà dans les ${quoi}.`
+            : `« ${motif} » ajouté aux ${quoi}.`,
+          texte: 'L\'analyse en cours ne change pas. Relancez-la (F5) pour la mettre à jour.'
         });
+        return;
+      }
+      if (estDossier) {
+        // Un dossier n'a pas de chemin absolu dans l'analyse : il est désigné
+        // par son chemin relatif, que le processus principal joint lui-même à
+        // la bonne racine.
+        const reponse = await window.avmdf.systeme.revelerDossier(
+          noeud.chemin,
+          action === 'revelerProd' ? 'prod' : 'local'
+        );
+        if (!reponse.ok) notifierEchec(reponse, 'Affichage impossible.');
         return;
       }
       // Chaque action désigne son côté sans repli : « ouvrir la production »
       // qui ouvrirait le fichier local ferait dire n'importe quoi à ce qu'on
       // voit ensuite à l'écran.
       const versProd = action === 'ouvrirProd' || action === 'revelerProd';
-      const cote = versProd ? fichier.prod : fichier.local;
+      const cote = versProd ? noeud.prod : noeud.local;
       if (!cote) {
         notifier({
           type: 'alerte',
           titre: versProd
             ? 'Ce fichier n\'existe pas en production.'
             : 'Ce fichier n\'existe pas en local.',
-          texte: fichier.chemin
+          texte: noeud.chemin
         });
         return;
       }
@@ -669,7 +689,7 @@ function App() {
           fichierActif=${fichierActif}
           onChoisir=${choisirFichier}
           ignores=${analyse.resultat ? analyse.resultat.ignores : []}
-          onAction=${actionFichier}
+          onAction=${actionSurNoeud}
           onAnalyser=${analyser}
           onAnnuler=${() => window.avmdf.analyse.annuler()}
         />

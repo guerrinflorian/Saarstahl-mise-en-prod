@@ -287,6 +287,20 @@ créent pas de trait.
   la version production, et afficher l'une ou l'autre dans l'explorateur Windows. Aucune entrée ne
   se rabat sur l'autre côté quand le fichier n'existe que d'un seul : elle est grisée. Ouvrir « la
   production » et se retrouver devant le fichier local ferait mal lire tout ce qui suit.
+- Le clic droit sur un **dossier** a son propre menu : montrer le dossier réel de chaque côté,
+  copier son chemin, et l'écarter entièrement de la comparaison. L'exclusion se pose de deux façons,
+  et la différence compte :
+
+  | Entrée | Motif ajouté | Portée |
+  |---|---|---|
+  | Exclure ce dossier seulement ici | `Controles\Images` | ce dossier-là, à cet endroit-là |
+  | Exclure tous les dossiers « Images » | `Images` | tout dossier de ce nom, à n'importe quelle profondeur |
+
+  Sur un dossier de premier niveau les deux motifs seraient identiques : une seule entrée est alors
+  proposée. Le motif exact est rappelé au survol puis dans la notification, parce que c'est lui
+  qu'on retrouvera dans **Dossiers exclus** et de là qu'on le retirera. Un dossier exclu n'est
+  jamais parcouru, d'aucun côté : son contenu ne peut ni apparaître, ni partir en production, ni
+  être supprimé. L'analyse en cours ne bouge pas, `F5` la refait.
 
 ## Thèmes
 

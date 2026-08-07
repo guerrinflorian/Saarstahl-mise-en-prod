@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('avmdf', {
     ouvrir: (chemin) => ipcRenderer.invoke('systeme:ouvrir', { chemin }),
     /** Affiche un fichier dans l'explorateur. */
     reveler: (chemin) => ipcRenderer.invoke('systeme:reveler', { chemin }),
+    /** Affiche un dossier de l'analyse, côté local ou côté production. */
+    revelerDossier: (chemin, cote) => ipcRenderer.invoke('systeme:revelerDossier', { chemin, cote }),
     /** Copie un texte dans le presse-papiers. */
     copier: (texte) => ipcRenderer.invoke('systeme:copier', texte),
     /** Accorde le fond de la fenêtre au thème, pour les redimensionnements. */
@@ -44,6 +46,7 @@ contextBridge.exposeInMainWorld('avmdf', {
     enregistrer: (reglages) => ipcRenderer.invoke('config:enregistrer', reglages),
     reinitialiser: () => ipcRenderer.invoke('config:reinitialiser'),
     exclureFichier: (nom) => ipcRenderer.invoke('config:exclureFichier', nom),
+    exclureDossier: (motif) => ipcRenderer.invoke('config:exclureDossier', motif),
     revelerFichier: () => ipcRenderer.invoke('config:revelerFichier')
   },
 
