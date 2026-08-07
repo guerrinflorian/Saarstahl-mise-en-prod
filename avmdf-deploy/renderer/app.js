@@ -431,15 +431,33 @@ function App() {
     if (!reponse.manifeste.simulation) {
       setSelection(new Set());
       setArchiver(true);
+
+      // L'arborescence suit sans relire le partage : ce qui est parti passe en
+      // « identique » et sort donc de la liste, ce qui a échoué y reste. La
+      // comparaison ouverte, elle, décrit un écart qui n'existe plus.
+      if (reponse.analyse) {
+        setAnalyse({ etat: 'termine', progression: null, resultat: reponse.analyse });
+        setFichierActif(null);
+        setDiff({ etat: 'vide' });
+      }
+
       notifier({
         type: reponse.rapport.echecs ? 'erreur' : 'succes',
         titre: reponse.rapport.echecs
           ? `Mise en production terminée avec ${reponse.rapport.echecs} échec(s).`
           : 'Mise en production terminée.',
-        texte: 'Relancez une analyse pour repartir de l\'état réel.'
+        texte: reponse.analyse
+          ? reponse.rapport.echecs
+            ? 'L\'arborescence est à jour : seuls les fichiers en échec y restent.'
+            : 'L\'arborescence est à jour.'
+          : 'Relancez une analyse pour repartir de l\'état réel.'
       });
     }
-  }, [selection, destination, operation, config, notifier, notifierEchec]);
+    // `archiver` fait partie des dépendances : sans lui, ce rappel garde la
+    // valeur qu'avait la case au moment où il a été construit. Décocher
+    // « Archiver » sans rien toucher d'autre laissait alors partir un plan
+    // avec archivage, qui réclamait une demande au dernier moment.
+  }, [selection, destination, archiver, operation, config, notifier, notifierEchec]);
 
   // La largeur du panneau de gauche survit au redémarrage.
   useEffect(() => {

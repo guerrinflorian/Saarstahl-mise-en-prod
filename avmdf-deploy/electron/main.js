@@ -348,6 +348,66 @@ function handlersAnalyse() {
 }
 
 /** Le renderer n'a pas besoin des index internes ; la Map n'est pas sérialisable. */
+/**
+ * Met l'analyse en mémoire à jour d'après le manifeste, sans relire le partage.
+ *
+ * Après une copie réussie, le fichier de production a exactement le contenu du
+ * fichier local : ce n'est pas une supposition, c'est ce que le manifeste
+ * enregistre, empreinte comprise. Inutile de reparcourir des milliers de
+ * fichiers sur le réseau pour apprendre ce qu'on vient d'écrire soi-même.
+ *
+ * Ce qui a échoué garde son statut : l'écart est toujours là, il doit rester
+ * visible.
+ *
+ * @param {object} manifeste
+ * @returns {boolean} vrai si l'analyse a changé
+ */
+function rafraichirScan(manifeste) {
+  if (!dernierScan || manifeste.simulation) return false;
+  // Une restauration remet en production un contenu venu des archives, pas des
+  // sources locales : conclure « identique » serait faux.
+  if (manifeste.operation === 'restauration') return false;
+
+  const aRetirer = new Set();
+  let touches = 0;
+
+  for (const entree of manifeste.fichiers) {
+    if (entree.erreur) continue;
+    const fichier = dernierScan.parCle.get(entree.chemin.toLowerCase());
+    if (!fichier) continue;
+
+    // Un orphelin supprimé n'existe plus nulle part : il quitte la liste.
+    if (entree.action === 'suppression') {
+      aRetirer.add(fichier.cle);
+      touches += 1;
+      continue;
+    }
+
+    // Copie binaire : les deux côtés ont désormais le même contenu, octet pour
+    // octet. La date, elle, est celle de la mise en production.
+    fichier.statut = compare.IDENTIQUE;
+    fichier.prod = {
+      absolu: fsindex.joindreRelatif(dernierScan.cheminProd, fichier.chemin),
+      chemin: fichier.chemin,
+      taille: entree.tailleApres,
+      mtimeMs: Date.now(),
+      hash: entree.hashApres || null
+    };
+    if (fichier.local) fichier.local.hash = entree.hashApres || fichier.local.hash;
+    touches += 1;
+  }
+
+  if (!touches) return false;
+
+  if (aRetirer.size) {
+    dernierScan.fichiers = dernierScan.fichiers.filter((fichier) => !aRetirer.has(fichier.cle));
+    dernierScan.parCle = new Map(dernierScan.fichiers.map((fichier) => [fichier.cle, fichier]));
+  }
+  dernierScan.compteurs = compare.compter(dernierScan.fichiers);
+  dernierScan.extensions = compare.inventaireExtensions(dernierScan.fichiers);
+  return true;
+}
+
 function pourLeRenderer(scan) {
   return {
     cheminLocal: scan.cheminLocal,
@@ -795,11 +855,16 @@ function handlersDeploiement() {
           (resultat.chemins.manifeste ? ` - manifeste ${resultat.chemins.manifeste}` : '')
       );
 
+      // L'arborescence se remet à jour toute seule : les fichiers partis
+      // passent en « identique », les orphelins supprimés disparaissent.
+      const analyse = rafraichirScan(resultat.manifeste) ? pourLeRenderer(dernierScan) : null;
+
       return succes({
         manifeste: resultat.manifeste,
         chemins: resultat.chemins,
         rapport: resultat.rapport,
-        avertissements: controle.avertissements
+        avertissements: controle.avertissements,
+        analyse
       });
     } finally {
       operationEnCours = null;

@@ -349,6 +349,34 @@ style ou une image sont lues, envoyées et refermées. Recycler le pool pour un 
 aucun effet, donc l'outil ne le propose pas. Le dépôt automatique de `app_offline.htm` reste
 disponible en option dans les réglages, désactivé par défaut.
 
+## Dates des fichiers
+
+Deux copies, deux règles, et ce n'est pas un détail :
+
+| Copie | Date portée | Pourquoi |
+|---|---|---|
+| local → **production** | celle de la **mise en production** | Dans l'explorateur du serveur, la date d'un fichier répond à « quand est-ce que ça a été mis en prod ? ». Reprendre la date du poste de développement afficherait une date sans rapport, souvent bien plus ancienne. |
+| production → **archive AVMDF** | celle que le fichier **avait en production** | C'est tout l'intérêt d'une archive : dire de quand datait la version remplacée. |
+
+Ce sont deux fonctions distinctes dans `deploy.js`, `copierVersProduction` et `copierAvecDate`. La
+comparaison ne s'en trouve pas faussée : elle se décide sur la taille puis sur l'empreinte SHA-256,
+jamais sur la date.
+
+## Mise à jour de l'arborescence après une mise en production
+
+L'analyse en mémoire est mise à jour depuis le manifeste, sans relire le partage : les fichiers
+partis passent en « identique » et quittent donc la liste, les orphelins supprimés en sont retirés,
+et les fichiers en échec gardent leur statut. Les compteurs et l'arbre sont recalculés, et le
+renderer reçoit le résultat dans la réponse de `deploiement:executer`.
+
+Ce n'est pas une supposition sur l'état du disque : après une copie réussie, le fichier de
+production a exactement le contenu du fichier local, et le manifeste en garde l'empreinte.
+Reparcourir des milliers de fichiers sur un partage SMB pour réapprendre ce qu'on vient d'écrire
+soi-même n'aurait aucun intérêt. `F5` reste là pour repartir vraiment du disque.
+
+Une **restauration** est exclue de ce mécanisme : elle remet en production un contenu venu des
+archives, pas des sources locales, donc conclure « identique » serait faux.
+
 ## Mise en production sans archivage
 
 Toutes les mises en production ne méritent pas leur dossier d'archives : une feuille de style, une
@@ -388,6 +416,8 @@ passages, faute de quoi le manifeste ne dirait plus s'il est réversible.
 - écraser une archive déjà présente dans un sprint - la version « avant modification » d'origine
   gagne toujours, un second passage la conserve ;
 - ré-encoder, reformater ou normaliser les fins de ligne : la copie est binaire, octet pour octet ;
+- obliger à relancer une analyse après une mise en production : l'arborescence se met à jour toute
+  seule (voir ci-dessous) ;
 - écrire hors des racines configurées : chaque destination est résolue en absolu et vérifiée ;
 - conclure à l'égalité sur la date ou la taille seules ;
 - interrompre un scan parce qu'un dossier est inaccessible.

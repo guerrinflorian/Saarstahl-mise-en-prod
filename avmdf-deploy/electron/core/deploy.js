@@ -11,7 +11,9 @@
  *     explicite pour le passage entier (`plan.archiver` à faux), qui est alors
  *     inscrit dans le manifeste et interdit le retour arrière ;
  *   - la copie est binaire, octet pour octet : aucun ré-encodage, aucune
- *     normalisation des fins de ligne ;
+ *     normalisation des fins de ligne. Seule la date change : le fichier de
+ *     production porte celle de sa mise en production, l'archive celle qu'il
+ *     avait avant d'être remplacé ;
  *   - toute destination est vérifiée comme étant sous la racine de production
  *     ou sous la racine d'archives avant la moindre écriture ;
  *   - un fichier en échec n'interrompt pas les autres, il est remonté dans le
@@ -53,12 +55,36 @@ function probleme(niveau, code, message, conseil, fichiers) {
   return { niveau, code, message, conseil: conseil || '', fichiers: fichiers || [] };
 }
 
-/** Copie binaire en conservant la date de modification de la source. */
+/**
+ * Copie binaire en conservant la date de modification de la source.
+ *
+ * C'est ce qu'il faut pour une archive : le fichier rangé sous AVMDF doit
+ * garder la date qu'il avait en production, sinon il ne dit plus de quand
+ * datait la version remplacée.
+ */
 async function copierAvecDate(source, destination) {
   await fsp.mkdir(cheminLong(path.dirname(destination)), { recursive: true });
   await fsp.copyFile(cheminLong(source), cheminLong(destination));
   const etat = await fsp.stat(cheminLong(source));
   await fsp.utimes(cheminLong(destination), etat.atime, etat.mtime);
+}
+
+/**
+ * Copie binaire datée du moment où elle a lieu.
+ *
+ * C'est ce qu'il faut vers la production : dans l'explorateur du serveur, la
+ * date d'un fichier répond à la question qu'on se pose vraiment, « quand est-ce
+ * que ça a été mis en prod ? ». Reprendre la date du poste de développement
+ * afficherait une date sans rapport, souvent bien plus ancienne.
+ *
+ * La comparaison ne s'en trouve pas faussée : elle se décide sur la taille
+ * puis sur l'empreinte, jamais sur la date.
+ */
+async function copierVersProduction(source, destination) {
+  await fsp.mkdir(cheminLong(path.dirname(destination)), { recursive: true });
+  await fsp.copyFile(cheminLong(source), cheminLong(destination));
+  const maintenant = new Date();
+  await fsp.utimes(cheminLong(destination), maintenant, maintenant);
 }
 
 async function existe(chemin) {
@@ -680,7 +706,7 @@ async function traiterFichier(fichier, plan, contexte) {
       entree.lignesSupprimees = comptes.supprimees;
     }
 
-    // 3. Copie binaire vers la production, date locale conservée.
+    // 3. Copie binaire vers la production, datée du moment de la copie.
     if (!estSousRacine(cheminProd, plan.racineProd)) {
       throw new Error('destination hors de la racine de production');
     }
@@ -690,7 +716,7 @@ async function traiterFichier(fichier, plan, contexte) {
 
     if (!simulation) {
       try {
-        await copierAvecDate(cheminLocal, cheminProd);
+        await copierVersProduction(cheminLocal, cheminProd);
       } catch (err) {
         entree.archiveNonRemplace = presentEnProd;
         throw err;
@@ -1031,7 +1057,7 @@ async function restaurer(manifeste, preparation, options = {}) {
         const etat = await fsp.stat(cheminLong(operation.source));
         entree.tailleApres = etat.size;
         entree.hashApres = await hashFichier(operation.source);
-        if (!simulation) await copierAvecDate(operation.source, cheminProd);
+        if (!simulation) await copierVersProduction(operation.source, cheminProd);
       }
       if (invaliderCache) invaliderCache(cheminProd);
     } catch (err) {
@@ -1144,7 +1170,7 @@ async function restaurerVersion(plan, options = {}) {
     entree.tailleApres = etatSource.size;
     entree.hashApres = await hashFichier(plan.source);
     if (!simulation) {
-      await copierAvecDate(plan.source, cheminProd);
+      await copierVersProduction(plan.source, cheminProd);
       if (invaliderCache) invaliderCache(cheminProd);
     }
   } catch (err) {
@@ -1201,5 +1227,6 @@ module.exports = {
   formaterOctets,
   obstacleEcriture,
   creerRegistreObstacles,
-  copierAvecDate
+  copierAvecDate,
+  copierVersProduction
 };

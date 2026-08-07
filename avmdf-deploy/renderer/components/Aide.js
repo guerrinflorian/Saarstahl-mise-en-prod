@@ -511,9 +511,19 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <${Etape} numero="9" titre="Vérifier">
             <p>
               Le rapport s'affiche : fichiers remplacés, créés, en échec, lignes ajoutées et
-              supprimées, et les liens vers le manifeste et le récapitulatif. Relancez ensuite une
-              analyse : les fichiers déployés doivent être passés en${' '}
-              <span class="marqueur marqueur-identique">=</span> identiques.
+              supprimées, et les liens vers le manifeste et le récapitulatif.
+            </p>
+            <p>
+              En le fermant, <strong>l'arborescence est déjà à jour</strong> : les fichiers partis
+              sont passés en <span class="marqueur marqueur-identique">=</span> identiques et ont
+              donc quitté la liste, les orphelins supprimés ont disparu, et seuls les fichiers en
+              échec restent visibles. Il n'y a plus rien à relancer.
+            </p>
+            <p class="attenue">
+              Ce n'est pas une supposition : le manifeste enregistre l'empreinte de ce qui vient
+              d'être écrit, l'outil s'en sert plutôt que de reparcourir des milliers de fichiers
+              sur le réseau pour réapprendre ce qu'il vient de faire lui-même. Une analyse complète
+              reste évidemment possible par <${T}>F5<//> si vous voulez repartir du disque.
             </p>
           </${Etape}>
         <//>
@@ -1479,8 +1489,16 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             </li>
             <li>
               <strong>La copie est binaire, octet pour octet.</strong> Aucun ré-encodage, aucune
-              normalisation des fins de ligne. Ce que vous voyez à droite du comparateur est
-              exactement ce qui arrive sur le serveur.
+              normalisation des fins de ligne. Le contenu qui arrive sur le serveur est exactement
+              celui de vos sources.
+            </li>
+            <li>
+              <strong>Le fichier de production porte la date de sa mise en production</strong>, pas
+              celle de votre poste. Dans l'explorateur du serveur, la date répond ainsi à la
+              question qu'on se pose vraiment : quand est-ce que c'est parti ? L'archive AVMDF,
+              elle, garde la date que le fichier avait avant d'être remplacé, puisque c'est tout
+              son intérêt. La comparaison ne s'en trouve pas faussée : elle se décide sur la taille
+              puis sur l'empreinte, jamais sur la date.
             </li>
             <li>
               <strong>Toute destination est vérifiée avant la moindre écriture</strong> comme étant
