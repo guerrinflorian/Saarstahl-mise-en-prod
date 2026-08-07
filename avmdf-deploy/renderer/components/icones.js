@@ -292,3 +292,21 @@ export function IconeLoupe({ classe }) {
 export function IconeEntonnoir({ classe }) {
   return svg(classe, html`<path d="M2.6 3.4h10.8l-4.2 4.9v4.6l-2.4-1.4V8.3z" />`);
 }
+
+/** Soleil : le thème clair, celui vers lequel le bouton emmène. */
+export function IconeSoleil({ classe }) {
+  return svg(
+    classe,
+    html`
+      <circle cx="8" cy="8" r="3.1" />
+      <path
+        d="M8 1.3v1.7M8 13v1.7M1.3 8h1.7M13 8h1.7M3.35 3.35l1.2 1.2M11.45 11.45l1.2 1.2M12.65 3.35l-1.2 1.2M4.55 11.45l-1.2 1.2"
+      />
+    `
+  );
+}
+
+/** Croissant de lune : le thème sombre. */
+export function IconeLune({ classe }) {
+  return svg(classe, html`<path d="M13.1 9.7A5.8 5.8 0 0 1 6.3 2.9 5.75 5.75 0 1 0 13.1 9.7z" />`);
+}

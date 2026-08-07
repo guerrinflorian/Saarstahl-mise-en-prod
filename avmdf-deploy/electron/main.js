@@ -15,6 +15,7 @@ const path = require('path');
 const os = require('os');
 
 const config = require('./core/config');
+const acces = require('./core/acces');
 const fsindex = require('./core/fsindex');
 const compare = require('./core/compare');
 const search = require('./core/search');
@@ -177,6 +178,22 @@ function handlersConfig() {
     return succes({ config: enregistre, deja: false });
   });
 
+  // Sert l'écran de premier démarrage : dire tout de suite si un dossier saisi
+  // existe et se lit, plutôt que de le découvrir à la première analyse.
+  gerer('config:controlerRacines', async (racines = {}) => {
+    const controle = await acces.verifierRacines([
+      { role: 'locale', titre: 'Racine locale', libelle: 'La racine locale', chemin: String(racines.locale || '') },
+      { role: 'prod', titre: 'Racine de production', libelle: 'La racine de production', chemin: String(racines.prod || '') },
+      {
+        role: 'avmdf',
+        titre: 'Racine des archives AVMDF',
+        libelle: 'La racine des archives AVMDF',
+        chemin: String(racines.avmdf || '')
+      }
+    ]);
+    return succes({ acces: controle });
+  });
+
   gerer('config:revelerFichier', () => {
     shell.showItemInFolder(depotConfig.chemin);
     return succes({});
@@ -207,11 +224,21 @@ function handlersAnalyse() {
     const actuels = reglages();
     const cheminLocal = String(parametres.cheminLocal || '');
     const cheminProd = String(parametres.cheminProd || '');
-    if (!cheminLocal || !cheminProd) {
-      return echec(
-        'Aucune cible à comparer.',
-        'Choisissez un projet, ou renseignez deux dossiers dans les réglages.'
+
+    // Les deux racines sont contrôlées avant le premier parcours. Une analyse
+    // qui démarre sur un dossier illisible ne s'arrête pas : elle rend un côté
+    // vide, et l'écran se remplit d'écarts qui n'existent pas.
+    const racines = await acces.verifierRacines([
+      { role: 'local', titre: 'Dossier local', libelle: 'Le dossier local', chemin: cheminLocal },
+      { role: 'prod', titre: 'Dossier de production', libelle: 'Le dossier de production', chemin: cheminProd }
+    ]);
+    if (!racines.ok) {
+      carnet.ecrire(
+        'ERREUR',
+        'analyse refusée - ' +
+          racines.problemes.map((cote) => `${cote.role} : ${cote.code} (${cote.chemin || 'non renseigné'})`).join(' ; ')
       );
+      return Object.assign(echec(racines.message, racines.conseil), { acces: racines });
     }
 
     const signal = fsindex.creerSignal();
@@ -284,7 +311,17 @@ function handlersAnalyse() {
           `${ignores.length} ignorés`
       );
 
-      return succes({ annule: signal.annule, resultat: pourLeRenderer(dernierScan) });
+      const pourEnvoi = pourLeRenderer(dernierScan);
+      if (pourEnvoi.correspondance.niveau !== 'ok') {
+        carnet.ecrire(
+          'ALERTE',
+          `correspondance douteuse (${pourEnvoi.correspondance.code}) : ` +
+            `${pourEnvoi.correspondance.communs} fichier(s) commun(s) sur ` +
+            `${pourEnvoi.correspondance.local} en local et ${pourEnvoi.correspondance.prod} en production`
+        );
+      }
+
+      return succes({ annule: signal.annule, resultat: pourEnvoi });
     } finally {
       analyseEnCours = null;
     }
@@ -420,6 +457,9 @@ function pourLeRenderer(scan) {
     compteurs: scan.compteurs,
     extensions: scan.extensions,
     ignores: scan.ignores,
+    // Recalculée à chaque envoi plutôt que mémorisée : une mise en production
+    // rapproche les deux côtés, le constat doit suivre.
+    correspondance: compare.diagnostiquerCorrespondance(scan.fichiers),
     arbre: compare.construireArbre(scan.fichiers)
   };
 }
@@ -740,17 +780,23 @@ function construirePlan(parametres) {
 
   // L'archivage se fait, sauf renoncement explicite : le défaut n'est jamais
   // la perte de l'état antérieur.
-  const archiver = parametres.archiver !== false;
+  //
+  // La case ne concerne que les mises en production. Supprimer un orphelin
+  // sans en garder de copie serait sans retour, et le bandeau ne propose
+  // d'ailleurs pas la case dans ce cas : on ne se fie pas à ce que le renderer
+  // envoie.
+  const archiver =
+    operation === deploy.OPERATION_SUPPRESSION ? true : parametres.archiver !== false;
 
-  // La demande et le sprint disent où ranger les versions remplacées. Sans
-  // archivage, il n'y a rien à ranger : ils deviennent facultatifs. Indiqués
-  // quand même, ils servent à déposer le manifeste, donc à faire apparaître le
-  // passage dans l'historique et le tableau de bord.
+  // La case gouverne tout le versant AVMDF. Décochée, la demande et le sprint
+  // ne sont ni demandés ni lus, et rien n'est écrit sous la racine des
+  // archives, pas même le manifeste : un passage à moitié archivé serait plus
+  // difficile à expliquer qu'un passage qui ne l'est pas du tout. Le journal,
+  // lui, garde la trace dans tous les cas.
   const demande = avmdf.normaliserDemande(parametres.demande);
-  const destinationDemandee = archiver || Boolean(String(parametres.demande || '').trim());
 
   let destination = null;
-  if (destinationDemandee) {
+  if (archiver) {
     if (!demande) {
       return { erreur: echec('Aucune demande choisie.', 'Choisissez ou créez une demande AVMDF dans le panneau de destination.') };
     }
@@ -1098,6 +1144,18 @@ function handlersSysteme() {
 
   gerer('systeme:copier', (texte) => {
     clipboard.writeText(String(texte || ''));
+    return succes({});
+  });
+
+  // Le fond de la fenêtre est ce qui s'affiche pendant un redimensionnement,
+  // avant que la page ne soit repeinte. Laissé au gris sombre en thème clair,
+  // il fait clignoter du noir sur les bords à chaque coup de souris.
+  gerer('systeme:fondFenetre', (couleur) => {
+    const valeur = String(couleur || '');
+    if (!/^#[0-9a-f]{6}$/i.test(valeur)) {
+      return echec('Couleur de fond invalide.', 'Attendu : une couleur hexadécimale, par exemple #16191c.');
+    }
+    if (fenetre && !fenetre.isDestroyed()) fenetre.setBackgroundColor(valeur);
     return succes({});
   });
 }

@@ -30,13 +30,17 @@ contextBridge.exposeInMainWorld('avmdf', {
     /** Affiche un fichier dans l'explorateur. */
     reveler: (chemin) => ipcRenderer.invoke('systeme:reveler', { chemin }),
     /** Copie un texte dans le presse-papiers. */
-    copier: (texte) => ipcRenderer.invoke('systeme:copier', texte)
+    copier: (texte) => ipcRenderer.invoke('systeme:copier', texte),
+    /** Accorde le fond de la fenêtre au thème, pour les redimensionnements. */
+    fondFenetre: (couleur) => ipcRenderer.invoke('systeme:fondFenetre', couleur)
   },
 
   config: {
     lire: () => ipcRenderer.invoke('config:lire'),
     defauts: () => ipcRenderer.invoke('config:defauts'),
     verifier: (reglages) => ipcRenderer.invoke('config:verifier', reglages),
+    /** Existence et lisibilité réelles des trois racines. */
+    controlerRacines: (racines) => ipcRenderer.invoke('config:controlerRacines', racines),
     enregistrer: (reglages) => ipcRenderer.invoke('config:enregistrer', reglages),
     reinitialiser: () => ipcRenderer.invoke('config:reinitialiser'),
     exclureFichier: (nom) => ipcRenderer.invoke('config:exclureFichier', nom),

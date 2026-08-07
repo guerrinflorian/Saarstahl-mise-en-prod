@@ -1,6 +1,8 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { joindreChemin } from './chemins.js';
+import { IconeLune, IconeSoleil } from './icones.js';
+import { themeOppose } from './theme.js';
 
 const html = htm.bind(h);
 
@@ -14,6 +16,8 @@ export function EnTete({
   cible,
   vue,
   onVue,
+  theme,
+  onTheme,
   analyseEnCours,
   onChangerProjet,
   onQuitterModeLibre,
@@ -124,6 +128,15 @@ export function EnTete({
         </button>
         <button type="button" class="btn btn-plat" title="Journal des événements" onClick=${onOuvrirJournal}>
           Journal
+        </button>
+        <button
+          type="button"
+          class="btn btn-carre"
+          title=${'Passer au thème ' + (theme === 'clair' ? 'sombre' : 'clair')}
+          aria-label=${'Passer au thème ' + (theme === 'clair' ? 'sombre' : 'clair')}
+          onClick=${() => onTheme(themeOppose(theme))}
+        >
+          ${theme === 'clair' ? html`<${IconeLune} />` : html`<${IconeSoleil} />`}
         </button>
         <button type="button" class="btn" title="Réglages" onClick=${onOuvrirReglages}>⚙ Réglages</button>
       </div>

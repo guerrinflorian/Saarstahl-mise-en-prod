@@ -56,8 +56,10 @@ electron/
   preload.js    pont contextBridge ; le renderer n'a aucun accès direct au disque
   core/         logique métier en modules Node purs (aucun require('electron'))
     config.js   réglages : défauts, normalisation, contrôle de cohérence, écriture atomique
+    acces.js    existence et lisibilité réelles d'une racine, avant de s'en servir
     fsindex.js  parcours récursif, empreintes SHA-256, cache, concurrence bornée
-    compare.js  appariement des deux arbres, statuts, compteurs agrégés
+    compare.js  appariement des deux arbres, statuts, compteurs agrégés,
+                diagnostic de correspondance des deux dossiers
     search.js   recherche et filtrage, occurrences dans le contenu
     textdiff.js encodage (BOM → UTF-8 strict → Windows-1252) et diff ligne à ligne
     avmdf.js    demandes, conventions de sprint, résolution de destination
@@ -65,7 +67,8 @@ electron/
     journal.js  journal quotidien en texte
 renderer/
   index.html    page unique
-  styles.css    thème sombre, jeu de couleurs des statuts et du diff
+  theme-initial.js  pose le thème avant le premier affichage (script classique)
+  styles.css    deux thèmes en variables, jeu de couleurs des statuts et du diff
   app.js        montage racine et état global
   components/   un fichier par composant (arbre, diff, filtres, destination,
                 confirmation, rapport, historique, journal, réglages…)
@@ -99,6 +102,20 @@ reproduire en cas de mise à jour :
 markup, css, clike, javascript, csharp, aspnet, sql, basic, vbnet et json, précédée de
 `self.Prism = { manual: true, … }` et suivie de `export default Prism;`. Seul `Prism.tokenize`
 est utilisé : jamais de HTML généré par Prism, jamais de retouche automatique du DOM.
+
+## Premier démarrage
+
+Les racines locale et de production sont **vides par défaut** : elles dépendent du poste, personne
+ne peut les deviner à la place de celui qui installe, et une valeur inventée serait pire que rien -
+elle donnerait l'illusion d'un outil déjà réglé. Tant qu'elles ne sont pas renseignées,
+l'application affiche un écran d'accueil qui les demande, et rien d'autre.
+
+La racine des archives, elle, arrive préremplie à `Z:\AvMdf` : celle-là est la même pour tout le
+monde.
+
+Chaque chemin saisi est contrôlé pour de vrai - existence, nature, lecture - et le résultat
+s'affiche sous le champ. Un dossier introuvable n'interdit pas de continuer (un partage réseau peut
+être arrêté au moment de l'installation), mais il est dit.
 
 ## Réglages
 
@@ -161,7 +178,9 @@ Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<hor
 ```
 
 Champs propres à l'outil : `operation` vaut `deploiement`, `suppression` ou `restauration` ;
-`archivage` à `false` marque un passage fait sans archivage AVMDF, donc non réversible ;
+`archivage` à `false` marque un passage fait sans archivage AVMDF, donc non réversible - les
+versions ≤ 0.6 pouvaient écrire un manifeste dans ce cas, ce n'est plus possible depuis (sans
+archivage, rien n'est écrit du tout), mais ces manifestes-là restent lus et marqués comme tels ;
 `archiveNonRemplace` signale un fichier archivé dont la copie a échoué ; `sauvegardeConservee`
 signale une archive héritée d'un passage précédent dans le même sprint ; `sansArchive` marque une
 entrée dont la version de production a été écrasée sans copie de sauvegarde.
@@ -181,7 +200,8 @@ fichier fourni :
 |---|---|
 | Vert de marque : logo, actions de production, ajouts, fichiers nouveaux | `#ABD083` |
 | Gris de marque : texte secondaire, statut « modifié » | `#8597A5` |
-| Fond, panneaux, séparateurs | `#16191C`, `#1D2126`, `#2E343B` |
+| Fond, panneaux, séparateurs (thème sombre) | `#16191C`, `#1D2126`, `#2E343B` |
+| Fond, panneaux, séparateurs (thème clair) | `#E9EDF1`, `#F4F6F9`, `#D5DCE2` |
 
 Tout le reste est construit sur ces deux teintes. Une seule entorse, assumée : un rouge sourd
 `#D08B80` pour ce qui casse ou détruit (suppressions dans la comparaison, fichiers orphelins,
@@ -263,6 +283,34 @@ créent pas de trait.
   production et gardent leur ordre propre (`inversable={false}`).
 - La navigation se fait par onglets : Analyse, Tableau de bord, Aide. Historique et Journal
   restent accessibles en permanence.
+- Le clic droit sur un fichier propose **les deux côtés séparément** : ouvrir la version locale ou
+  la version production, et afficher l'une ou l'autre dans l'explorateur Windows. Aucune entrée ne
+  se rabat sur l'autre côté quand le fichier n'existe que d'un seul : elle est grisée. Ouvrir « la
+  production » et se retrouver devant le fichier local ferait mal lire tout ce qui suit.
+
+## Thèmes
+
+Un bouton en haut à droite bascule entre **sombre** (par défaut) et **clair**. L'icône montre le
+thème vers lequel elle emmène : soleil en sombre, lune en clair.
+
+Le thème n'est qu'un attribut `data-theme` posé sur `<html>` : la feuille de style redéfinit ses
+variables, **aucune règle ne change**. Toutes les couleurs de l'application vivent dans les deux
+blocs en tête de `styles.css` ; une couleur écrite en dur ailleurs serait invisible en sombre et
+fausse en clair, donc il n'y en a plus.
+
+Le thème clair n'est pas le thème sombre éclairci. Sur fond blanc, une couleur claire disparaît :
+tout ce qui porte du sens - statuts, marqueurs, coloration syntaxique - est redescendu en clarté
+jusqu'à passer 4,5:1 sur blanc, en gardant teinte et saturation d'origine. Le vert du logo
+(`#ABD083`, teinte 89°, saturation 41 %) devient `#6F9C3F` pour les surfaces et `#4A6B28` pour le
+texte : même teinte, même saturation, clarté descendue. Le relief s'inverse aussi - en sombre une
+surface monte en s'éclaircissant, en clair elle monte vers le blanc.
+
+Le choix est mémorisé dans le stockage local du poste (`avmdf.theme`), pas dans les réglages : c'est
+un confort de lecture, pas un paramètre de déploiement. Il est appliqué par `theme-initial.js`, un
+script classique chargé dans l'en-tête et donc exécuté **avant le premier affichage** - `app.js`
+étant un module différé, poser le thème depuis lui ferait clignoter du sombre à chaque démarrage en
+thème clair. Le fond de la fenêtre Electron suit par IPC (`systeme:fondFenetre`) : c'est lui qu'on
+voit pendant un redimensionnement, avant que la page ne soit repeinte.
 
 ### Panneau de gauche
 
@@ -300,8 +348,9 @@ dépannage et un glossaire.
 
 Parti pris : **montrer plutôt que décrire**. Les morceaux d'interface y sont reproduits avec leurs
 vraies classes CSS, donc avec leurs vraies couleurs et leurs vrais glyphes. Le jour où une teinte
-de statut change, l'aide change avec elle. Les reproductions sont inertes (`.aide-demo`), seule la
-navigation clique.
+de statut change, l'aide change avec elle - et comme tout passe par les variables de thème, l'aide
+se lit dans le thème en cours sans une ligne de plus. Les reproductions sont inertes
+(`.aide-demo`), seule la navigation clique.
 
 ## Versions archivées d'un fichier
 
@@ -314,6 +363,45 @@ Chaque version se compare à la version actuellement en production, et se remet 
 geste. La remise en production archive d'abord la version actuelle dans le sprint choisi, puis
 écrit son propre manifeste de restauration : revenir à une version ancienne ne fait jamais perdre
 l'état courant, et l'opération est elle-même réversible depuis l'écran Historique.
+
+## Ce qui est refusé avant de commencer
+
+Une analyse lancée sur un dossier illisible ne plante pas : elle réussit à moitié. Le côté
+inaccessible rend zéro fichier, et tout ce qui existe de l'autre côté ressort en « nouveau » ou en
+« orphelin ». L'écran se remplit alors de milliers de lignes qui décrivent un problème de droits,
+pas un écart de contenu - et une sélection large y effacerait une production entière.
+
+`core/acces.js` contrôle donc les deux racines **avant le premier parcours** : existence, nature,
+et lecture réelle du contenu (`readdir`, pas seulement `stat` - sur un partage, un dossier peut se
+laisser interroger sans se laisser lister). Les deux côtés sont toujours testés, même quand le
+premier échoue : celui qui corrige veut connaître les deux problèmes d'un coup. L'analyse est
+refusée, et le panneau de gauche montre les deux racines, celle qui va comme celle qui bloque,
+avec la cause et le remède.
+
+| Code | Ce que dit le message |
+|---|---|
+| `ENOENT` | est introuvable - et, sur un chemin UNC, que le partage est peut-être arrêté ou la session non authentifiée |
+| `EACCES` / `EPERM` | refuse l'accès : droits Windows insuffisants sur le dossier |
+| `ENOTDIR`, fichier | n'est pas un dossier : indiquer le dossier qui le contient |
+| `EBUSY`, `ENAMETOOLONG`, `ELOOP` | verrouillé, chemin trop long, boucle de liens |
+
+## Quand les deux dossiers n'ont rien à voir
+
+Deux dossiers sans rapport ne produisent aucune erreur : ils produisent une liste énorme où tout le
+local est « nouveau » et toute la production « orpheline ». Parfaitement lisible, parfaitement
+fausse. Le seul moyen de s'en apercevoir est de regarder la proportion de chemins présents des deux
+côtés, ce que fait `compare.diagnostiquerCorrespondance()` :
+
+| Constat | Niveau |
+|---|---|
+| aucun fichier local | alerte : tout ressort en orphelin, vérifier avant de supprimer |
+| production vide | attention : normal pour un tout premier déploiement, suspect sinon |
+| aucun chemin commun | alerte, avec le compte de chaque côté et l'absence de dossier de premier niveau commun |
+| moins de 20 % de chemins communs (à partir de 8 fichiers) | alerte, avec la proportion exacte |
+
+Le constat est affiché en haut du panneau de gauche et repris en notification. Il ne bloque rien :
+un premier déploiement ressemble légitimement à ça. Il est recalculé à chaque envoi vers
+l'interface plutôt que mémorisé, parce qu'une mise en production rapproche les deux côtés.
 
 ## Décisions prises
 
@@ -383,31 +471,35 @@ Toutes les mises en production ne méritent pas leur dossier d'archives : une fe
 correction d'affichage, une retouche sans enjeu. La case **Archiver** du bandeau, cochée par
 défaut, se décoche pour un passage.
 
-**La demande devient alors facultative** : rien n'est rangé, donc il n'y a rien à ranger quelque
-part. Personne ne devrait avoir à ouvrir une demande de travaux pour pousser une feuille de style.
-Le dossier d'archives n'est même pas consulté, et le lecteur réseau peut être déconnecté sans que
-cela empêche quoi que ce soit.
+**La case gouverne tout le versant AVMDF.** Décochée, la demande n'est plus exigée, plus lue, et
+plus rien ne s'écrit sous la racine des archives : ni les versions remplacées, ni le manifeste qui
+les recense. Personne ne devrait avoir à ouvrir une demande de travaux pour pousser une feuille de
+style. Le dossier d'archives n'est même pas consulté, et le lecteur réseau peut être déconnecté sans
+que cela empêche quoi que ce soit.
 
-| Sans archivage, la demande est… | Ce qui se passe |
-|---|---|
-| indiquée quand même | Manifeste et récapitulatif écrits dans le dossier de sprint, avec l'empreinte de chaque version remplacée. Le passage apparaît dans l'historique et le tableau de bord. Seule la copie de sauvegarde n'a pas lieu. |
-| laissée vide | Aucune écriture dans les archives. Le passage n'apparaît ni dans l'historique ni dans le tableau de bord ; le journal en garde la ligne et le rapport final reste affiché. |
+Une destination choisie **avant** de décocher est mise de côté, pas utilisée : le bandeau affiche
+« aucun archivage » à sa place, et elle revient si la case est recochée. C'est le point qui avait
+été mal tranché au départ - la demande était encore transmise, donc la confirmation réclamait
+toujours son numéro et parlait encore d'AVMDF alors que la case était décochée. Un passage à moitié
+archivé est plus difficile à expliquer qu'un passage qui ne l'est pas du tout.
 
-Sans demande, la confirmation se fait en recopiant le **nombre de fichiers** au lieu du numéro de
+La case ne s'applique qu'aux mises en production : une **suppression d'orphelins** archive toujours,
+elle est sans retour. La case n'apparaît d'ailleurs pas dans ce cas, et le processus principal
+n'écoute pas ce que le renderer envoie sur ce point.
+
+Sans archivage, la confirmation se fait en recopiant le **nombre de fichiers** au lieu du numéro de
 demande : le geste reste le même, et il oblige à relire ce qui part. Ce qu'il ne faut surtout pas,
 c'est un champ vide qui se valide seul.
 
-Le choix se voit à chaque étape : un pavé `SANS AVMDF` dans le bandeau, un avertissement dans les
-contrôles préalables avec la liste des fichiers concernés, un encart rouge dans la confirmation,
-une ligne dédiée dans le récapitulatif, une étiquette `sans AVMDF` dans l'historique, et une ligne
-`ALERTE` au journal. Le manifeste porte `"archivage": false` et chaque entrée touchée
-`"sansArchive": true`.
+Le choix se voit à chaque étape : « aucun archivage » à la place de la destination dans le bandeau,
+un pavé `SANS AVMDF` à côté, un avertissement dans les contrôles préalables avec la liste des
+fichiers concernés, un encart rouge dans la confirmation, et une ligne `ALERTE` au journal.
 
-Conséquence assumée : **le retour arrière est refusé sur ces passages**, avec un message qui
-distingue « rien n'a jamais été archivé » de « l'archive a disparu ». La case revient d'elle-même à
-« cochée » après chaque mise en production réelle : le choix se refait à chaque passage, il ne se
-subit pas. Un lot mélangeant fichiers sans enjeu et fichiers à conserver se traite en deux
-passages, faute de quoi le manifeste ne dirait plus s'il est réversible.
+Conséquence assumée : **le passage ne laisse aucune trace écrite dans les archives**. Il n'apparaît
+ni dans l'historique ni dans le tableau de bord, il n'y a rien à restaurer, et seul le journal en
+garde la ligne. La case revient d'elle-même à « cochée » après chaque mise en production réelle :
+le choix se refait à chaque passage, il ne se subit pas. Un lot mélangeant fichiers sans enjeu et
+fichiers à conserver se traite en deux passages.
 
 ## Ce que l'outil ne fait jamais
 

@@ -14,15 +14,17 @@ import { Historique } from './components/Historique.js';
 import { Journal } from './components/Journal.js';
 import { TableauDeBord } from './components/TableauDeBord.js';
 import { Aide } from './components/Aide.js';
+import { Bienvenue } from './components/Bienvenue.js';
 import { VersionsFichier } from './components/VersionsFichier.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
+import { appliquerTheme, lireTheme } from './components/theme.js';
 import { joindreChemin } from './components/chemins.js';
 import { criteresParDefaut, filtrer, listerDossiers } from './components/filtres.js';
 import { dossiersDePremierNiveau, filtrerArbre, tousLesDossiers } from './components/arborescence.js';
 
 const html = htm.bind(h);
 
-const ANALYSE_INACTIVE = { etat: 'inactif', progression: null, resultat: null };
+const ANALYSE_INACTIVE = { etat: 'inactif', progression: null, resultat: null, acces: null };
 
 function App() {
   const [etat, setEtat] = useState('chargement');
@@ -35,6 +37,10 @@ function App() {
   const [cible, setCible] = useState({ mode: 'projet' });
   const [ecran, setEcran] = useState(null);
   const [vue, setVue] = useState('analyse');
+  // Le thème est déjà posé sur la page par `theme-initial.js` ; cet état ne
+  // fait que le suivre, et l'effet plus bas rejoue l'application complète
+  // (mémorisation, fond de la fenêtre).
+  const [theme, setTheme] = useState(lireTheme);
   const [largeurPanneau, setLargeurPanneau] = useState(() => {
     try {
       const memorise = JSON.parse(localStorage.getItem('avmdf.ui')) || {};
@@ -102,7 +108,13 @@ function App() {
       );
       avertissements.forEach((texte) => notifier({ type: 'alerte', titre: 'Réglages', texte, duree: 12000 }));
 
-      if (reponseConfig.controle && reponseConfig.controle.erreurs.length) {
+      // Au tout premier lancement, les racines vides font deux erreurs de
+      // contrôle : c'est justement ce que l'écran de premier démarrage
+      // demande, inutile de le doubler d'une alerte rouge.
+      const premierDemarrage =
+        !reponseConfig.config.racines.locale.trim() || !reponseConfig.config.racines.prod.trim();
+
+      if (!premierDemarrage && reponseConfig.controle && reponseConfig.controle.erreurs.length) {
         notifier({
           type: 'erreur',
           titre: 'Les réglages enregistrés comportent ' + reponseConfig.controle.erreurs.length + ' erreur(s).',
@@ -114,6 +126,10 @@ function App() {
       abandonne = true;
     };
   }, [notifier]);
+
+  useEffect(() => {
+    appliquerTheme(theme);
+  }, [theme]);
 
   // -- Abonnements aux progressions ----------------------------------------
   useEffect(() => {
@@ -178,6 +194,11 @@ function App() {
   );
   const operation = operationDe(resumeSelection);
 
+  // « Archiver » ne s'applique qu'aux mises en production. Supprimer un
+  // orphelin sans en garder de copie serait sans retour : le bandeau ne
+  // propose alors pas la case, et l'archivage reste entier.
+  const archivageAvmdf = archiver || operation === 'suppression';
+
   // Un filtre actif déplie l'arbre : sans cela, les fichiers trouvés restent
   // cachés dans des dossiers repliés et la recherche semble ne rien donner.
   useEffect(() => {
@@ -232,7 +253,7 @@ function App() {
       return;
     }
     jeton.current += 1;
-    setAnalyse({ etat: 'encours', progression: null, resultat: null });
+    setAnalyse({ etat: 'encours', progression: null, resultat: null, acces: null });
     setSelection(new Set());
     setFichierActif(null);
     setDiff({ etat: 'vide' });
@@ -246,7 +267,9 @@ function App() {
     });
 
     if (!reponse.ok) {
-      setAnalyse(ANALYSE_INACTIVE);
+      // Le détail par côté reste affiché dans le panneau de gauche : une
+      // notification qui s'efface ne suffit pas à faire corriger un chemin.
+      setAnalyse({ ...ANALYSE_INACTIVE, acces: reponse.acces || null });
       notifierEchec(reponse, 'Analyse impossible.');
       return;
     }
@@ -256,7 +279,7 @@ function App() {
       return;
     }
 
-    setAnalyse({ etat: 'termine', progression: null, resultat: reponse.resultat });
+    setAnalyse({ etat: 'termine', progression: null, resultat: reponse.resultat, acces: null });
     setOuverts(dossiersDePremierNiveau(reponse.resultat.arbre, 1));
 
     const compteurs = reponse.resultat.compteurs;
@@ -270,6 +293,18 @@ function App() {
         ? `${reponse.resultat.ignores.length} élément(s) ignorés - voir le panneau en bas à gauche.`
         : ''
     });
+
+    // Deux dossiers sans rapport donnent une analyse parfaitement lisible et
+    // parfaitement fausse : elle se dit, elle ne se devine pas.
+    const correspondance = reponse.resultat.correspondance;
+    if (correspondance && correspondance.niveau !== 'ok') {
+      notifier({
+        type: correspondance.niveau === 'alerte' ? 'erreur' : 'alerte',
+        titre: correspondance.titre,
+        texte: correspondance.texte,
+        duree: 20000
+      });
+    }
   }, [cheminLocal, cheminProd, modeLibre, projet, notifier, notifierEchec]);
 
   const choisirFichier = useCallback(
@@ -311,16 +346,28 @@ function App() {
         });
         return;
       }
-      const cote = action === 'ouvrirProd' || action === 'reveler' ? fichier.prod || fichier.local : fichier.local || fichier.prod;
+      // Chaque action désigne son côté sans repli : « ouvrir la production »
+      // qui ouvrirait le fichier local ferait dire n'importe quoi à ce qu'on
+      // voit ensuite à l'écran.
+      const versProd = action === 'ouvrirProd' || action === 'revelerProd';
+      const cote = versProd ? fichier.prod : fichier.local;
       if (!cote) {
-        notifier({ type: 'alerte', titre: 'Ce fichier n\'existe pas de ce côté.' });
+        notifier({
+          type: 'alerte',
+          titre: versProd
+            ? 'Ce fichier n\'existe pas en production.'
+            : 'Ce fichier n\'existe pas en local.',
+          texte: fichier.chemin
+        });
         return;
       }
-      const reponse =
-        action === 'reveler'
-          ? await window.avmdf.systeme.reveler(cote.absolu)
-          : await window.avmdf.systeme.ouvrir(cote.absolu);
-      if (!reponse.ok) notifierEchec(reponse, 'Ouverture impossible.');
+      const dansExplorateur = action === 'revelerLocal' || action === 'revelerProd';
+      const reponse = dansExplorateur
+        ? await window.avmdf.systeme.reveler(cote.absolu)
+        : await window.avmdf.systeme.ouvrir(cote.absolu);
+      if (!reponse.ok) {
+        notifierEchec(reponse, dansExplorateur ? 'Affichage impossible.' : 'Ouverture impossible.');
+      }
     },
     [notifier, notifierEchec]
   );
@@ -378,19 +425,21 @@ function App() {
   );
 
   const lancerPreflight = useCallback(async () => {
-    // La destination ne sert qu'à ranger les versions remplacées et le
-    // manifeste. Sans archivage, elle reste facultative.
-    if (!destination && archiver) {
+    // La destination ne sert qu'à ranger les versions remplacées. Sans
+    // archivage, elle n'a plus d'objet : elle n'est ni demandée ni transmise,
+    // même si un choix traîne encore de la sélection précédente.
+    if (!destination && archivageAvmdf) {
       setEcran('destination');
       return;
     }
+    const cible = archivageAvmdf ? destination : null;
     setDeploiement({ etape: 'preflight', progression: null, occupe: false });
     const reponse = await window.avmdf.deploiement.preflight({
       cles: [...selection],
-      demande: destination ? destination.demande : null,
-      sprint: destination ? destination.sprint : null,
+      demande: cible ? cible.demande : null,
+      sprint: cible ? cible.sprint : null,
       operation,
-      archiver,
+      archiver: archivageAvmdf,
       simulation: config.options.simulation
     });
     if (!reponse.ok) {
@@ -405,16 +454,17 @@ function App() {
       occupe: false,
       progression: null
     });
-  }, [destination, archiver, selection, operation, config, notifierEchec]);
+  }, [destination, archivageAvmdf, selection, operation, config, notifierEchec]);
 
   const confirmerDeploiement = useCallback(async () => {
+    const cible = archivageAvmdf ? destination : null;
     setDeploiement((precedent) => ({ ...precedent, occupe: true }));
     const reponse = await window.avmdf.deploiement.executer({
       cles: [...selection],
-      demande: destination ? destination.demande : null,
-      sprint: destination ? destination.sprint : null,
+      demande: cible ? cible.demande : null,
+      sprint: cible ? cible.sprint : null,
       operation,
-      archiver,
+      archiver: archivageAvmdf,
       simulation: config.options.simulation
     });
     if (!reponse.ok) {
@@ -436,7 +486,7 @@ function App() {
       // « identique » et sort donc de la liste, ce qui a échoué y reste. La
       // comparaison ouverte, elle, décrit un écart qui n'existe plus.
       if (reponse.analyse) {
-        setAnalyse({ etat: 'termine', progression: null, resultat: reponse.analyse });
+        setAnalyse({ etat: 'termine', progression: null, resultat: reponse.analyse, acces: null });
         setFichierActif(null);
         setDiff({ etat: 'vide' });
       }
@@ -453,11 +503,11 @@ function App() {
           : 'Relancez une analyse pour repartir de l\'état réel.'
       });
     }
-    // `archiver` fait partie des dépendances : sans lui, ce rappel garde la
-    // valeur qu'avait la case au moment où il a été construit. Décocher
+    // `archivageAvmdf` fait partie des dépendances : sans lui, ce rappel garde
+    // la valeur qu'avait la case au moment où il a été construit. Décocher
     // « Archiver » sans rien toucher d'autre laissait alors partir un plan
     // avec archivage, qui réclamait une demande au dernier moment.
-  }, [selection, destination, archiver, operation, config, notifier, notifierEchec]);
+  }, [selection, destination, archivageAvmdf, operation, config, notifier, notifierEchec]);
 
   // La largeur du panneau de gauche survit au redémarrage.
   useEffect(() => {
@@ -537,6 +587,21 @@ function App() {
     `;
   }
 
+  // Sans racine locale ni racine de production, il n'y a rien à afficher :
+  // ni cible, ni projet résolu, ni analyse possible. On demande d'abord.
+  const racinesAChoisir = !config.racines.locale.trim() || !config.racines.prod.trim();
+  if (racinesAChoisir && ecran !== 'reglages') {
+    return html`
+      <${Bienvenue}
+        config=${config}
+        defauts=${defauts}
+        onEnregistrer=${enregistrerReglages}
+        onOuvrirReglages=${() => setEcran('reglages')}
+      />
+      <${Notifications} liste=${notifications} onFermer=${retirer} />
+    `;
+  }
+
   const compteursAffichage = analyse.resultat ? analyse.resultat.compteurs : {};
 
   return html`
@@ -547,6 +612,8 @@ function App() {
         cible=${cible}
         vue=${vue}
         onVue=${setVue}
+        theme=${theme}
+        onTheme=${setTheme}
         analyseEnCours=${analyse.etat === 'encours'}
         onChangerProjet=${(id) => {
           setProjetId(id);

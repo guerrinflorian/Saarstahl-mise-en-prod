@@ -30,10 +30,12 @@ export function BandeauDeploiement({
   const mixte = operation === 'mixte';
   const suppression = operation === 'suppression';
 
-  // La destination ne sert qu'à ranger les versions remplacées et le manifeste.
-  // Sans archivage, elle reste possible mais n'est plus exigée : personne ne
-  // devrait avoir à ouvrir une demande pour pousser une feuille de style.
-  const destinationRequise = archiver || operation === 'suppression';
+  // La case « Archiver » gouverne tout le versant AVMDF. Décochée, il n'y a
+  // plus rien à ranger : la destination n'est ni exigée ni utilisée, et un
+  // choix fait auparavant est simplement mis de côté. Personne ne devrait
+  // avoir à ouvrir une demande pour pousser une feuille de style.
+  // Une suppression, elle, archive toujours : elle est sans retour.
+  const avecArchivage = archiver || suppression;
 
   const raisonBlocage = modeLibre
     ? 'La comparaison libre ne permet pas de mise en production.'
@@ -41,7 +43,7 @@ export function BandeauDeploiement({
       ? 'Cochez au moins un fichier dans l\'arborescence.'
       : mixte
         ? 'Ne mélangez pas déploiement et suppression : traitez les orphelins à part.'
-        : !destination && destinationRequise
+        : !destination && avecArchivage
           ? 'Choisissez d\'abord la demande et le dossier de sprint.'
           : '';
 
@@ -58,28 +60,31 @@ export function BandeauDeploiement({
             </span>`
           : null}
         <span class="fleche">→</span>
-        ${destination
-          ? html`<button
-              type="button"
-              class="bandeau-destination mono"
-              title="Changer la destination"
-              onClick=${onChoisirDestination}
+        ${!avecArchivage
+          ? html`<span
+              class="bandeau-destination attenue"
+              title="« Archiver » est décoché : aucune version ne part dans les archives, et aucune destination n'est utilisée. Recochez la case pour retrouver la demande et le sprint."
             >
-              ${destination.chemin}
-            </button>`
-          : html`<button
-              type="button"
-              class="btn btn-mini"
-              disabled=${modeLibre}
-              title=${modeLibre
-                ? 'Indisponible en comparaison libre'
-                : destinationRequise
-                  ? 'Choisir la demande et le sprint'
-                  : 'Facultatif sans archivage. Une demande fait quand même écrire le manifeste, donc apparaître ce passage dans l\'historique.'}
-              onClick=${onChoisirDestination}
-            >
-              ${destinationRequise ? 'Choisir la destination…' : 'Aucune demande (facultatif)'}
-            </button>`}
+              aucun archivage
+            </span>`
+          : destination
+            ? html`<button
+                type="button"
+                class="bandeau-destination mono"
+                title="Changer la destination"
+                onClick=${onChoisirDestination}
+              >
+                ${destination.chemin}
+              </button>`
+            : html`<button
+                type="button"
+                class="btn btn-mini"
+                disabled=${modeLibre}
+                title=${modeLibre ? 'Indisponible en comparaison libre' : 'Choisir la demande et le sprint'}
+                onClick=${onChoisirDestination}
+              >
+                Choisir la destination…
+              </button>`}
       </div>
 
       <div class="bandeau-actions">

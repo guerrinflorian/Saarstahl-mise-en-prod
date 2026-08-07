@@ -115,16 +115,16 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
                 <th>Archivage AVMDF</th>
                 <td>
                   ${resume.archiver === false
-                    ? html`<span class="rouge">écarté pour ce passage</span>`
+                    ? html`<span class="rouge">écarté pour ce passage : rien ne sera écrit dans les archives</span>`
                     : 'les versions remplacées sont conservées'}
                 </td>
               </tr>
-              <tr>
-                <th>${resume.archiver === false ? 'Dossier du manifeste' : 'Dossier de sauvegarde'}</th>
-                <td class=${resume.dossierSauvegarde ? 'mono' : ''}>
-                  ${resume.dossierSauvegarde || html`<span class="rouge">aucun : rien ne sera écrit dans les archives</span>`}
-                </td>
-              </tr>
+              ${resume.archiver === false
+                ? null
+                : html`<tr>
+                    <th>Dossier de sauvegarde</th>
+                    <td class="mono">${resume.dossierSauvegarde}</td>
+                  </tr>`}
               <tr>
                 <th>Fichiers</th>
                 <td>
@@ -167,11 +167,10 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
           ${resume.archiver === false && !suppression
             ? html`<div class="encart encart-danger" style="margin-top:14px">
                 <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
-                écrasées sans être conservées, et <strong>ce passage ne pourra pas être annulé</strong>.
-                ${resume.dossierSauvegarde
-                  ? ' Le manifeste sera écrit malgré tout et gardera leur empreinte.'
-                  : ' Sans demande choisie, aucun manifeste ne sera écrit non plus : ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord, seul le journal en gardera la ligne.'}${' '}
-                Recochez « Archiver » dans le bandeau du bas pour revenir au comportement normal.
+                écrasées sans être conservées, et <strong>ce passage ne pourra pas être annulé</strong>. Aucune
+                demande n'est utilisée et aucun manifeste n'est écrit : le passage n'apparaîtra ni dans
+                l'historique ni dans le tableau de bord, seul le journal en gardera la ligne. Recochez
+                « Archiver » dans le bandeau du bas pour revenir au comportement normal.
               </div>`
             : null}
 

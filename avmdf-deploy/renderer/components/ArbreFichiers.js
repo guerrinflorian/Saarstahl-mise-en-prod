@@ -181,6 +181,7 @@ export function ArbreFichiers({
   const visibles = lignes.slice(debut, fin);
 
   const enCours = analyse.etat === 'encours';
+  const correspondance = analyse.resultat ? analyse.resultat.correspondance : null;
 
   return html`
     <div class="panneau panneau-gauche">
@@ -196,6 +197,17 @@ export function ArbreFichiers({
       </div>
 
       ${enCours ? html`<${Progression} progression=${analyse.progression} onAnnuler=${onAnnuler} />` : null}
+
+      ${correspondance && correspondance.niveau !== 'ok'
+        ? html`
+            <div class="panneau-encart">
+              <div class=${'encart ' + (correspondance.niveau === 'alerte' ? 'encart-danger' : 'encart-alerte')}>
+                <strong>${correspondance.titre}</strong>
+                <div>${correspondance.texte}</div>
+              </div>
+            </div>
+          `
+        : null}
 
       ${analyse.resultat
         ? html`
@@ -227,16 +239,24 @@ export function ArbreFichiers({
         ${!analyse.resultat && !enCours
           ? html`
               <div class="etat-vide">
-                <div class="etat-vide-titre">Aucune analyse effectuée</div>
+                <div class="etat-vide-titre">
+                  ${analyse.acces ? 'Analyse impossible' : 'Aucune analyse effectuée'}
+                </div>
                 <div class="etat-vide-texte">
-                  L'analyse compare récursivement, à profondeur illimitée :
+                  ${analyse.acces
+                    ? 'Un des deux dossiers ne se laisse pas lire. Rien n\'a été comparé : une analyse à moitié faite montrerait des écarts qui n\'existent pas.'
+                    : 'L\'analyse compare récursivement, à profondeur illimitée :'}
                 </div>
-                <div class="mono etat-vide-texte" style="text-align:left">
-                  <div>${cheminLocal || '-'}</div>
-                  <div>${cheminProd || '-'}</div>
-                </div>
+                ${analyse.acces
+                  ? html`<${EtatAcces} acces=${analyse.acces} />`
+                  : html`
+                      <div class="mono etat-vide-texte" style="text-align:left">
+                        <div>${cheminLocal || '-'}</div>
+                        <div>${cheminProd || '-'}</div>
+                      </div>
+                    `}
                 <button type="button" class="btn" disabled=${!cheminLocal || !cheminProd} onClick=${onAnalyser}>
-                  Analyser (F5)
+                  ${analyse.acces ? 'Réessayer (F5)' : 'Analyser (F5)'}
                 </button>
               </div>
             `
@@ -374,6 +394,32 @@ function Progression({ progression, onAnnuler }) {
   `;
 }
 
+/**
+ * État des deux racines après un refus d'analyse : les deux côtés sont
+ * toujours montrés, celui qui va comme celui qui bloque. Savoir que le local
+ * répond bien fait autant avancer que de savoir que la production refuse.
+ */
+function EtatAcces({ acces }) {
+  return html`
+    <div class="acces">
+      ${acces.cotes.map(
+        (cote) => html`
+          <div class=${'acces-cote' + (cote.ok ? '' : ' en-echec')} key=${cote.role}>
+            <span class="acces-marque" aria-hidden="true">${cote.ok ? '✓' : '✕'}</span>
+            <div class="acces-corps">
+              <div class="acces-titre">${cote.titre || cote.libelle}</div>
+              <div class="mono acces-chemin">${cote.chemin || '(non renseigné)'}</div>
+              ${cote.ok
+                ? html`<div class="acces-raison">Lisible.</div>`
+                : html`<div class="acces-raison">Il ${cote.probleme}. ${cote.conseil}</div>`}
+            </div>
+          </div>
+        `
+      )}
+    </div>
+  `;
+}
+
 function Ligne({
   ligne,
   haut,
@@ -478,10 +524,25 @@ function MenuContextuel({ menu, onFermer, onAction }) {
   }, [onFermer]);
 
   const fichier = menu.fichier;
+  // Les deux côtés sont toujours proposés, chacun le sien : un fichier
+  // modifié existe des deux, et on veut aller voir l'un ou l'autre. Celui qui
+  // n'existe pas est grisé plutôt qu'absent, pour que le statut se lise là
+  // aussi.
   const entrees = [
     { action: 'ouvrirLocal', libelle: 'Ouvrir la version locale', actif: Boolean(fichier.local) },
     { action: 'ouvrirProd', libelle: 'Ouvrir la version production', actif: Boolean(fichier.prod) },
-    { action: 'reveler', libelle: "Afficher dans l'explorateur", actif: true },
+    { separateur: true },
+    {
+      action: 'revelerLocal',
+      libelle: "Afficher le local dans l'explorateur",
+      actif: Boolean(fichier.local)
+    },
+    {
+      action: 'revelerProd',
+      libelle: "Afficher la production dans l'explorateur",
+      actif: Boolean(fichier.prod)
+    },
+    { separateur: true },
     { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
     { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
     { action: 'exclure', libelle: 'Exclure ce fichier', actif: true, danger: true }
@@ -490,19 +551,21 @@ function MenuContextuel({ menu, onFermer, onAction }) {
   return html`
     <div class="menu" ref=${boite} style=${`left:${menu.x}px;top:${menu.y}px`} role="menu">
       <div class="menu-titre mono">${fichier.chemin}</div>
-      ${entrees.map(
-        (entree) => html`
-          <button
-            type="button"
-            class=${'menu-entree' + (entree.danger ? ' danger' : '')}
-            key=${entree.action}
-            disabled=${!entree.actif}
-            role="menuitem"
-            onClick=${() => onAction(entree.action)}
-          >
-            ${entree.libelle}
-          </button>
-        `
+      ${entrees.map((entree, index) =>
+        entree.separateur
+          ? html`<div class="menu-separateur" key=${'separateur' + index} role="separator"></div>`
+          : html`
+              <button
+                type="button"
+                class=${'menu-entree' + (entree.danger ? ' danger' : '')}
+                key=${entree.action}
+                disabled=${!entree.actif}
+                role="menuitem"
+                onClick=${() => onAction(entree.action)}
+              >
+                ${entree.libelle}
+              </button>
+            `
       )}
     </div>
   `;

@@ -3,6 +3,15 @@
    Outil d'exploitation : dense, lisible, sans animation superflue.
    ========================================================================== */
 
+/* Deux thèmes, une seule feuille. Aucune couleur n'est écrite ailleurs que
+   dans ces deux blocs : le thème clair ne redéfinit que des variables, jamais
+   une règle. Une couleur oubliée en dur serait invisible en sombre et fausse
+   en clair, donc rien n'échappe à la liste.
+
+   Les variantes voilée et bordure sont écrites en rgba plutôt que dérivées :
+   Chromium 108, embarqué pour Windows Server 2012 R2, ne connaît ni
+   color-mix() ni la syntaxe de couleur relative. */
+
 :root {
   /* Gris froids dérivés du gris de marque Saarstahl #8597A5 */
   --fond: #16191c;
@@ -17,17 +26,22 @@
   --texte-attenue: #8597a5;
   --texte-faible: #66727d;
 
-  /* Vert Saarstahl : marque, actions de production, ajouts */
+  /* Vert Saarstahl : marque, actions de production, ajouts.
+     `--accent` peint des surfaces, `--accent-texte` écrit des mots : sur un
+     fond clair, le vert du logo remplit très bien un bouton mais ne se lit pas
+     en petit corps. Les deux gardent la teinte et la saturation du logo, seule
+     la clarté change. */
   --accent: #abd083;
+  --accent-texte: #abd083;
   --accent-vif: #c0df9c;
   --accent-sourd: #5a7443;
   --accent-fond: #1e2618;
   --accent-voile: rgba(171, 208, 131, 0.1);
+  --accent-bord-vif: #cfe9b0;
+  --accent-actif: #93b86e;
   --sur-accent: #14180f;
 
-  /* Statuts. Les variantes voilée et bordure sont écrites en rgba plutôt que
-     dérivées : Chromium 108, embarqué pour Windows Server 2012 R2, ne connaît
-     ni color-mix() ni la syntaxe de couleur relative. */
+  /* Statuts */
   --modifie: #8fa6b8;
   --modifie-voile: rgba(143, 166, 184, 0.13);
   --modifie-bord: rgba(143, 166, 184, 0.42);
@@ -40,20 +54,69 @@
   --identique: #66727d;
   --identique-voile: rgba(102, 114, 125, 0.14);
   --identique-bord: rgba(102, 114, 125, 0.45);
+  --sur-pastille: #221614;
+  --marqueur-fond: rgba(0, 0, 0, 0.28);
 
   /* Diff */
   --diff-ajout: #1c2617;
   --diff-suppression: #2b1f1e;
+  --diff-modification: rgba(143, 166, 184, 0.09);
+  --diff-absente: rgba(0, 0, 0, 0.22);
+  --diff-numero-fond: rgba(0, 0, 0, 0.18);
+  --fragment-fond: rgba(171, 208, 131, 0.26);
+  --repli-fond: #1a1e22;
+  --repli-survol: #212730;
+  --blanc-glyphe: rgba(102, 114, 125, 0.62);
+  --blanc-fin-fond: rgba(208, 139, 128, 0.28);
+  --guide-trait: rgba(133, 151, 165, 0.3);
+
+  /* Coloration syntaxique du comparateur : familles du vert et du gris de
+     marque, aucune teinte étrangère. */
+  --code-mot-cle: #abd083;
+  --code-directive: #c0df9c;
+  --code-chaine: #c9d2a6;
+  --code-nombre: #a5bfce;
+  --code-fonction: #e2e8ed;
+  --code-classe: #bcd09c;
+  --code-balise: #96bd7c;
+  --code-attribut: #9fb0bd;
+  --code-ponctuation: #7e8b96;
 
   /* Le rouge est la seule entorse au gris et vert : il ne sert qu'à ce qui
      casse ou détruit. Les avertissements, eux, restent dans le gris de marque. */
   --danger: #d08b80;
   --danger-fond: #2a1d1c;
   --danger-bord: #5c3a35;
+  --danger-texte-doux: #e2bab3;
   --alerte: #a9bcc9;
   --alerte-fond: #1e242a;
   --alerte-bord: #3c4750;
+  --alerte-texte-doux: #bfd0dc;
   --info-fond: #1a2026;
+
+  /* Surfaces qui réagissent */
+  --btn-fond: #262c33;
+  --btn-fond-survol: #2e343b;
+  --btn-fond-actif: #232830;
+  --btn-bord-survol: #4b545e;
+  --survol: #22272c;
+  --survol-fort: #232830;
+  --survol-discret: #1a1f24;
+  --enfoncement: rgba(0, 0, 0, 0.2);
+  --barre-defilement: #333a42;
+  --barre-defilement-survol: #434b55;
+
+  /* Bandeau du bas quand la simulation est coupée */
+  --bandeau-reel-haut: #232b1d;
+  --bandeau-reel-bas: #1e2618;
+  --bandeau-reel-liseret: rgba(171, 208, 131, 0.18);
+
+  /* Ce qui flotte au-dessus du reste */
+  --voile-fond: rgba(10, 12, 14, 0.66);
+  --ombre-flottante: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --ombre-popover: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --ombre-menu: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --ombre-modale: 0 18px 50px rgba(0, 0, 0, 0.6);
 
   /* Typographie : aucune police web, tout est local au poste */
   --police-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Tahoma, system-ui, sans-serif;
@@ -61,6 +124,110 @@
 
   --rayon: 3px;
   --hauteur-controle: 26px;
+}
+
+/* --------------------------------------------------------------------------
+   Thème clair
+
+   Ce n'est pas le thème sombre éclairci : sur fond blanc, une couleur claire
+   disparaît. Tout ce qui porte du sens - statuts, marqueurs, coloration - est
+   redescendu en clarté jusqu'à passer le rapport de contraste 4,5:1 sur blanc,
+   en gardant teinte et saturation d'origine. Le vert reste le vert du logo,
+   simplement assombri ; le gris reste le gris de marque.
+   -------------------------------------------------------------------------- */
+
+:root[data-theme='clair'] {
+  /* Le relief s'inverse : en sombre, une surface montait en s'éclaircissant ;
+     ici elle monte en allant vers le blanc, et le fond de l'application est la
+     valeur la plus grise des quatre. */
+  --fond: #e9edf1;
+  --panneau: #f4f6f9;
+  --panneau-releve: #ffffff;
+  --champ: #ffffff;
+  --separateur: #d5dce2;
+  --separateur-clair: #b4c0c9;
+
+  --texte: #1b2227;
+  --texte-attenue: #55646f;
+  --texte-faible: #6f7d88;
+
+  --accent: #6f9c3f;
+  --accent-texte: #4a6b28;
+  --accent-vif: #5e8734;
+  --accent-sourd: #86b25a;
+  --accent-fond: #eef5e5;
+  --accent-voile: rgba(111, 156, 63, 0.14);
+  --accent-bord-vif: #4f7229;
+  --accent-actif: #56802f;
+  --sur-accent: #12180b;
+
+  --modifie: #46687f;
+  --modifie-voile: rgba(70, 104, 127, 0.1);
+  --modifie-bord: rgba(70, 104, 127, 0.38);
+  --nouveau: #517527;
+  --nouveau-voile: rgba(111, 156, 63, 0.14);
+  --nouveau-bord: rgba(111, 156, 63, 0.45);
+  --orphelin: #9c4034;
+  --orphelin-voile: rgba(156, 64, 52, 0.09);
+  --orphelin-bord: rgba(156, 64, 52, 0.36);
+  --identique: #5e6b75;
+  --identique-voile: rgba(94, 107, 117, 0.1);
+  --identique-bord: rgba(94, 107, 117, 0.35);
+  --sur-pastille: #ffffff;
+  --marqueur-fond: rgba(27, 34, 39, 0.07);
+
+  --diff-ajout: #e8f4d9;
+  --diff-suppression: #fbe8e5;
+  --diff-modification: rgba(70, 104, 127, 0.09);
+  --diff-absente: rgba(27, 34, 39, 0.05);
+  --diff-numero-fond: rgba(27, 34, 39, 0.045);
+  --fragment-fond: rgba(171, 208, 131, 0.62);
+  --repli-fond: #edf1f5;
+  --repli-survol: #e3e9ef;
+  --blanc-glyphe: rgba(111, 125, 136, 0.85);
+  --blanc-fin-fond: rgba(166, 51, 37, 0.18);
+  --guide-trait: rgba(85, 100, 111, 0.32);
+
+  --code-mot-cle: #4a6b28;
+  --code-directive: #3d6a1c;
+  --code-chaine: #5b6f22;
+  --code-nombre: #2b5c78;
+  --code-fonction: #263038;
+  --code-classe: #4a6f2c;
+  --code-balise: #3f6d22;
+  --code-attribut: #46687f;
+  --code-ponctuation: #66757f;
+
+  --danger: #a63325;
+  --danger-fond: #fdeeeb;
+  --danger-bord: #e7b7af;
+  --danger-texte-doux: #7d3227;
+  --alerte: #3f6076;
+  --alerte-fond: #eef3f7;
+  --alerte-bord: #c2d2de;
+  --alerte-texte-doux: #34505f;
+  --info-fond: #f2f5f8;
+
+  --btn-fond: #ffffff;
+  --btn-fond-survol: #f0f3f7;
+  --btn-fond-actif: #e6ebf1;
+  --btn-bord-survol: #9dabb6;
+  --survol: #edf1f5;
+  --survol-fort: #e4eaf0;
+  --survol-discret: #f0f3f7;
+  --enfoncement: rgba(27, 34, 39, 0.07);
+  --barre-defilement: #c2ccd4;
+  --barre-defilement-survol: #a6b3bd;
+
+  --bandeau-reel-haut: #f2f8e9;
+  --bandeau-reel-bas: #e8f2d9;
+  --bandeau-reel-liseret: rgba(111, 156, 63, 0.3);
+
+  --voile-fond: rgba(30, 41, 51, 0.38);
+  --ombre-flottante: 0 6px 18px rgba(24, 38, 50, 0.16);
+  --ombre-popover: 0 8px 24px rgba(24, 38, 50, 0.18);
+  --ombre-menu: 0 10px 30px rgba(24, 38, 50, 0.2);
+  --ombre-modale: 0 18px 50px rgba(24, 38, 50, 0.24);
 }
 
 * {
@@ -108,12 +275,12 @@ body {
   background: var(--fond);
 }
 ::-webkit-scrollbar-thumb {
-  background: #333a42;
+  background: var(--barre-defilement);
   border: 2px solid var(--fond);
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #434b55;
+  background: var(--barre-defilement-survol);
 }
 
 /* --------------------------------------------------------------------------
@@ -172,7 +339,7 @@ textarea {
   gap: 6px;
   height: var(--hauteur-controle);
   padding: 0 11px;
-  background: #262c33;
+  background: var(--btn-fond);
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
   color: var(--texte);
@@ -182,12 +349,12 @@ textarea {
 }
 
 .btn:hover:not(:disabled) {
-  background: #2e343b;
-  border-color: #4b545e;
+  background: var(--btn-fond-survol);
+  border-color: var(--btn-bord-survol);
 }
 
 .btn:active:not(:disabled) {
-  background: #232830;
+  background: var(--btn-fond-actif);
 }
 
 .btn:disabled {
@@ -204,11 +371,11 @@ textarea {
 
 .btn-accent:hover:not(:disabled) {
   background: var(--accent-vif);
-  border-color: #cfe9b0;
+  border-color: var(--accent-bord-vif);
 }
 
 .btn-accent:active:not(:disabled) {
-  background: #93b86e;
+  background: var(--accent-actif);
 }
 
 .btn-danger {
@@ -227,7 +394,7 @@ textarea {
 }
 
 .btn-plat:hover:not(:disabled) {
-  background: #262c33;
+  background: var(--btn-fond);
   border-color: var(--separateur-clair);
 }
 
@@ -367,7 +534,7 @@ label {
   border-color: var(--danger-bord);
   border-left-color: var(--danger);
   background: var(--danger-fond);
-  color: #e2bab3;
+  color: var(--danger-texte-doux);
 }
 
 .encart-danger strong {
@@ -378,7 +545,7 @@ label {
   border-color: var(--alerte-bord);
   border-left-color: var(--alerte);
   background: var(--alerte-fond);
-  color: #bfd0dc;
+  color: var(--alerte-texte-doux);
 }
 
 .encart-alerte strong {
@@ -398,9 +565,15 @@ label {
    Structure générale
    -------------------------------------------------------------------------- */
 
+/* `minmax(0, 1fr)` plutôt qu'une colonne implicite : une colonne « auto » se
+   dimensionne sur son contenu maximal, sans jamais être ramenée à la largeur
+   de la fenêtre. Un chemin de projet un peu long suffisait alors à élargir
+   l'en-tête, donc toute l'application, et le panneau de droite partait hors
+   de l'écran. */
 .application {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
 }
 
@@ -430,7 +603,7 @@ label {
 }
 
 .entete-marque {
-  color: var(--accent);
+  color: var(--accent-texte);
   font-weight: 700;
   letter-spacing: 0.12em;
 }
@@ -454,7 +627,11 @@ label {
   color: var(--texte-attenue);
 }
 
+/* `min-width: 0` casse la taille plancher que le flex donne à ses enfants :
+   sans lui, un chemin très long refuse de se réduire, pousse l'en-tête au-delà
+   de la fenêtre, et c'est toute l'application qui déborde à droite. */
 .entete-chemins .chemin {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -478,7 +655,7 @@ label {
   border: 1px solid var(--accent-sourd);
   border-radius: var(--rayon);
   background: var(--accent-fond);
-  color: var(--accent);
+  color: var(--accent-texte);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -554,6 +731,72 @@ label {
   color: var(--texte-attenue);
 }
 
+/* Accès aux deux racines ------------------------------------------------- */
+
+/* Un encart qui parle de toute l'analyse, posé en haut du panneau plutôt que
+   dans la barre de filtres : il ne se filtre pas, il se lit. */
+.panneau-encart {
+  padding: 8px 8px 0;
+}
+
+.acces {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 520px;
+  text-align: left;
+}
+
+.acces-cote {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--champ);
+  border: 1px solid var(--separateur);
+  border-left-width: 3px;
+  border-radius: var(--rayon);
+}
+
+.acces-cote.en-echec {
+  background: var(--danger-fond);
+  border-color: var(--danger-bord);
+  border-left-color: var(--danger);
+}
+
+.acces-marque {
+  flex: none;
+  color: var(--accent-texte);
+  font-family: var(--police-mono);
+  font-weight: 700;
+}
+
+.acces-cote.en-echec .acces-marque {
+  color: var(--danger);
+}
+
+.acces-corps {
+  min-width: 0;
+}
+
+.acces-titre {
+  font-weight: 600;
+}
+
+.acces-chemin {
+  color: var(--texte-attenue);
+  word-break: break-all;
+}
+
+.acces-raison {
+  margin-top: 3px;
+  color: var(--texte-attenue);
+}
+
+.acces-cote.en-echec .acces-raison {
+  color: var(--danger-texte-doux);
+}
+
 /* Bandeau de mise en production ------------------------------------------ */
 
 .bandeau {
@@ -568,9 +811,9 @@ label {
 
 /* Simulation désactivée : le bandeau s'allume au vert de marque. */
 .bandeau.reel {
-  background: linear-gradient(to bottom, #232b1d, #1e2618);
+  background: linear-gradient(to bottom, var(--bandeau-reel-haut), var(--bandeau-reel-bas));
   border-top-color: var(--accent);
-  box-shadow: inset 0 1px 0 rgba(171, 208, 131, 0.18);
+  box-shadow: inset 0 1px 0 var(--bandeau-reel-liseret);
 }
 
 .bandeau-resume {
@@ -638,7 +881,7 @@ label {
   inset: 0;
   display: flex;
   justify-content: center;
-  background: rgba(10, 12, 14, 0.66);
+  background: var(--voile-fond);
   z-index: 20;
 }
 
@@ -927,7 +1170,7 @@ label {
   border: 1px solid var(--separateur-clair);
   border-left-width: 3px;
   border-radius: var(--rayon);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--ombre-flottante);
 }
 
 .notification-corps {
@@ -988,7 +1231,121 @@ label {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-texte);
+}
+
+/* --------------------------------------------------------------------------
+   Premier démarrage
+   -------------------------------------------------------------------------- */
+
+.bienvenue {
+  display: flex;
+  justify-content: center;
+  height: 100vh;
+  overflow: auto;
+  padding: 28px 20px 40px;
+  background: var(--fond);
+}
+
+.bienvenue-boite {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(760px, 100%);
+  margin: auto;
+}
+
+.bienvenue-titre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.bienvenue-titre h1 {
+  margin: 0;
+  color: var(--texte-attenue);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bienvenue-chapeau {
+  align-self: center;
+  max-width: 64ch;
+  margin: 0 0 6px;
+  color: var(--texte-attenue);
+  text-align: center;
+}
+
+.bienvenue-racine {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-radius: 5px;
+}
+
+.bienvenue-numero {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  background: var(--accent-fond);
+  border: 1px solid var(--accent-sourd);
+  border-radius: 50%;
+  color: var(--accent-texte);
+  font-family: var(--police-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.bienvenue-racine-corps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bienvenue-racine-titre {
+  font-weight: 600;
+}
+
+.bienvenue-saisie {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.bienvenue-saisie input {
+  flex: 1;
+  min-width: 0;
+}
+
+.bienvenue-etat {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.bienvenue-etat.ok {
+  color: var(--accent-texte);
+}
+
+.bienvenue-etat.en-echec {
+  color: var(--danger);
+}
+
+.bienvenue-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
 }
 
 /* ==========================================================================
@@ -1093,7 +1450,7 @@ label {
   line-height: 15px;
   text-align: center;
   border-radius: 2px;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--marqueur-fond);
   font-family: var(--police-mono);
   font-size: 11px;
   font-weight: 700;
@@ -1197,7 +1554,7 @@ select.marque {
 .btn-marque {
   border-color: var(--accent-sourd);
   background: var(--accent-fond);
-  color: var(--accent);
+  color: var(--accent-texte);
 }
 
 .filtres-resume {
@@ -1264,7 +1621,7 @@ select.marque {
   background: var(--panneau-releve);
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--ombre-popover);
 }
 
 .popover-entete {
@@ -1368,7 +1725,7 @@ select.marque {
 }
 
 .ligne:hover {
-  background: #22272c;
+  background: var(--survol);
 }
 
 .ligne.curseur {
@@ -1425,40 +1782,40 @@ select.marque {
 }
 
 .famille-page {
-  color: #96bd7c;
+  color: var(--code-balise);
 }
 .famille-code {
-  color: var(--accent);
+  color: var(--accent-texte);
 }
 .famille-script {
-  color: #c9d2a6;
+  color: var(--code-chaine);
 }
 .famille-composant {
-  color: #bcd09c;
+  color: var(--code-classe);
 }
 .famille-style {
-  color: #a5bfce;
+  color: var(--code-nombre);
 }
 .famille-donnees {
-  color: #9fb0bd;
+  color: var(--code-attribut);
 }
 .famille-requete {
-  color: #8fa6b8;
+  color: var(--modifie);
 }
 .famille-terminal {
-  color: #a5bfce;
+  color: var(--code-nombre);
 }
 .famille-image {
-  color: #8fa6b8;
+  color: var(--modifie);
 }
 .famille-texte {
-  color: #9fb0bd;
+  color: var(--code-attribut);
 }
 .famille-tableur {
-  color: #8fa6b8;
+  color: var(--modifie);
 }
 .famille-document {
-  color: #8fa6b8;
+  color: var(--modifie);
 }
 .famille-archive {
   color: var(--orphelin);
@@ -1467,10 +1824,10 @@ select.marque {
   color: var(--orphelin);
 }
 .famille-police {
-  color: #7e8b96;
+  color: var(--code-ponctuation);
 }
 .famille-media {
-  color: #7e8b96;
+  color: var(--code-ponctuation);
 }
 .famille-inconnu {
   color: var(--texte-faible);
@@ -1538,7 +1895,7 @@ select.marque {
   padding: 0 6px;
   border-radius: 8px;
   background: var(--orphelin);
-  color: #221614;
+  color: var(--sur-pastille);
   font-family: var(--police-mono);
   font-size: 11px;
   font-weight: 700;
@@ -1578,7 +1935,7 @@ select.marque {
   background: var(--panneau-releve);
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--ombre-menu);
 }
 
 .menu-titre {
@@ -1603,7 +1960,7 @@ select.marque {
 }
 
 .menu-entree:hover:not(:disabled) {
-  background: #2e343b;
+  background: var(--btn-fond-survol);
 }
 
 .menu-entree:disabled {
@@ -1613,6 +1970,13 @@ select.marque {
 
 .menu-entree.danger {
   color: var(--danger);
+}
+
+/* Sépare les groupes d'actions : ouvrir, montrer, puis le reste. */
+.menu-separateur {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--separateur);
 }
 
 /* ==========================================================================
@@ -1657,7 +2021,7 @@ select.marque {
   padding: 4px 10px;
   background: var(--alerte-fond);
   border-bottom: 1px solid var(--alerte-bord);
-  color: #bfd0dc;
+  color: var(--alerte-texte-doux);
   font-size: 12px;
 }
 
@@ -1738,7 +2102,7 @@ select.marque {
   padding-right: 8px;
   text-align: right;
   color: var(--texte-faible);
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--diff-numero-fond);
   user-select: none;
 }
 
@@ -1764,11 +2128,11 @@ select.marque {
 }
 
 .diff-modification {
-  background: rgba(143, 166, 184, 0.09);
+  background: var(--diff-modification);
 }
 
 .diff-absente {
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--diff-absente);
 }
 
 .diff-ajout .diff-signe {
@@ -1786,7 +2150,7 @@ select.marque {
 .fragment {
   border-radius: 2px;
   padding: 0 1px;
-  background: rgba(171, 208, 131, 0.26);
+  background: var(--fragment-fond);
   box-shadow: inset 0 -1px 0 var(--accent);
 }
 
@@ -1805,7 +2169,7 @@ select.marque {
   height: 18px;
   line-height: 18px;
   padding: 0 0 0 62px;
-  background: #1a1e22;
+  background: var(--repli-fond);
   border: none;
   border-top: 1px solid var(--separateur);
   border-bottom: 1px solid var(--separateur);
@@ -1817,8 +2181,8 @@ select.marque {
 }
 
 .diff-repli:hover {
-  color: var(--accent);
-  background: #212730;
+  color: var(--accent-texte);
+  background: var(--repli-survol);
 }
 
 .diff-pied {
@@ -1848,7 +2212,7 @@ select.marque {
   background: var(--panneau);
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--ombre-modale);
   overflow: hidden;
 }
 
@@ -1934,7 +2298,7 @@ select.marque {
 }
 
 .tableau-fichiers tbody tr:hover {
-  background: #232830;
+  background: var(--survol-fort);
 }
 
 .tableau-fichiers .en-echec {
@@ -2042,7 +2406,7 @@ select.marque {
 .sprint.choisi {
   border-color: var(--accent);
   background: var(--accent-fond);
-  color: var(--accent);
+  color: var(--accent-texte);
 }
 
 .destination-resolue {
@@ -2058,7 +2422,7 @@ select.marque {
 }
 
 .destination-resolue .mono {
-  color: var(--accent-vif);
+  color: var(--accent-texte);
   font-size: 13px;
 }
 
@@ -2089,7 +2453,7 @@ select.marque {
 }
 
 .historique-entree:hover {
-  background: #232830;
+  background: var(--survol-fort);
 }
 
 .historique-entree.choisi {
@@ -2151,7 +2515,7 @@ select.marque {
 }
 
 .journal-ligne:hover {
-  background: #1a1f24;
+  background: var(--survol-discret);
 }
 
 .journal-ligne.erreur {
@@ -2187,7 +2551,7 @@ button.bandeau-destination {
 
 button.bandeau-destination:hover {
   border-color: var(--separateur-clair);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--enfoncement);
 }
 
 /* Compteurs de statut posés dans un tableau : ils ont besoin d'air. */
@@ -2212,7 +2576,7 @@ button.bandeau-destination:hover {
 }
 
 .demarrage-marque {
-  color: var(--accent);
+  color: var(--accent-texte);
   font-weight: 700;
 }
 
@@ -2353,7 +2717,7 @@ button.bandeau-destination:hover {
   font-size: 26px;
   font-weight: 700;
   line-height: 1.15;
-  color: var(--accent);
+  color: var(--accent-texte);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2364,7 +2728,7 @@ button.bandeau-destination:hover {
 }
 
 .tuile-lignes .plus {
-  color: var(--accent);
+  color: var(--accent-texte);
 }
 
 .tuile-lignes .moins {
@@ -2566,7 +2930,7 @@ button.bandeau-destination:hover {
 .chaud-nombre {
   font-family: var(--police-mono);
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-texte);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2653,10 +3017,7 @@ button.bandeau-destination:hover {
 }
 
 .blanc {
-  /* --texte-faible (#66727d) à 62 % : écrit en rgba car color-mix demande
-     Chromium 111, or l'application doit tourner sur Windows Server 2012 R2
-     (Electron 22, Chromium 108). */
-  color: rgba(102, 114, 125, 0.62);
+  color: var(--blanc-glyphe);
 }
 
 .fragment .blanc {
@@ -2665,7 +3026,7 @@ button.bandeau-destination:hover {
 }
 
 .blanc-fin {
-  background: rgba(208, 139, 128, 0.28);
+  background: var(--blanc-fin-fond);
   border-radius: 2px;
   color: var(--danger);
 }
@@ -2720,9 +3081,10 @@ select {
 
 /* ==========================================================================
    Coloration syntaxique du comparateur.
-   Palette dérivée de l'identité : familles du vert #ABD083 et du gris #8597A5,
-   aucune teinte étrangère. Les couleurs restent lisibles sur les fonds teintés
-   des lignes ajoutées ou supprimées.
+   Palette dérivée de l'identité, familles du vert et du gris de marque, aucune
+   teinte étrangère (les valeurs sont en tête de feuille, un jeu par thème).
+   Les couleurs restent lisibles sur les fonds teintés des lignes ajoutées ou
+   supprimées.
    ========================================================================== */
 
 .code-comment,
@@ -2737,7 +3099,7 @@ select {
 .code-rule,
 .code-important,
 .code-boolean {
-  color: var(--accent);
+  color: var(--code-mot-cle);
 }
 
 .code-string,
@@ -2745,45 +3107,45 @@ select {
 .code-attr-value,
 .code-regex,
 .code-url {
-  color: #c9d2a6;
+  color: var(--code-chaine);
 }
 
 .code-number,
 .code-constant,
 .code-symbol,
 .code-entity {
-  color: #a5bfce;
+  color: var(--code-nombre);
 }
 
 .code-function,
 .code-function-name {
-  color: #e2e8ed;
+  color: var(--code-fonction);
 }
 
 .code-class-name,
 .code-selector,
 .code-property,
 .code-variable {
-  color: #bcd09c;
+  color: var(--code-classe);
 }
 
 .code-tag {
-  color: #96bd7c;
+  color: var(--code-balise);
 }
 
 .code-attr-name {
-  color: #9fb0bd;
+  color: var(--code-attribut);
 }
 
 .code-punctuation,
 .code-operator {
-  color: #7e8b96;
+  color: var(--code-ponctuation);
 }
 
 .code-directive,
 .code-page-directive,
 .code-directive-tag {
-  color: var(--accent-vif);
+  color: var(--code-directive);
 }
 
 /* Les couches se combinent sans se gêner : le fragment mot à mot garde son
@@ -2806,8 +3168,7 @@ select {
   top: 0;
   bottom: 0;
   width: 0;
-  /* --texte-attenue (#8597a5) à 30 %, en rgba pour Chromium 108 (cf. .blanc). */
-  border-left: 1px solid rgba(133, 151, 165, 0.3);
+  border-left: 1px solid var(--guide-trait);
   pointer-events: none;
 }
 
@@ -2821,7 +3182,7 @@ select {
   left: 0;
   bottom: -1px;
   width: 7px;
-  border-bottom: 1px solid rgba(133, 151, 165, 0.3);
+  border-bottom: 1px solid var(--guide-trait);
 }
 
 /* ==========================================================================
@@ -2968,7 +3329,7 @@ select {
 }
 
 .aide-oui {
-  color: var(--accent);
+  color: var(--accent-texte);
 }
 
 .aide-non,
@@ -3107,7 +3468,7 @@ select {
 }
 
 .aide-flux-verbe {
-  color: var(--accent);
+  color: var(--accent-texte);
   font-weight: 600;
 }
 
@@ -3182,7 +3543,7 @@ select {
   background: var(--accent-fond);
   border: 1px solid var(--accent-sourd);
   border-radius: 50%;
-  color: var(--accent);
+  color: var(--accent-texte);
   font-family: var(--police-mono);
   font-size: 11px;
   font-weight: 700;
@@ -3327,7 +3688,7 @@ select {
   background: var(--accent-fond);
   border: 1px solid var(--accent-sourd);
   border-radius: 50%;
-  color: var(--accent);
+  color: var(--accent-texte);
   font-family: var(--police-mono);
   font-size: 13px;
   font-weight: 700;

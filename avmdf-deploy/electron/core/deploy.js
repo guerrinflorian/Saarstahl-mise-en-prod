@@ -435,23 +435,22 @@ async function preflight(plan, options = {}) {
           AVERTISSEMENT,
           'sans-archive',
           `Archivage AVMDF écarté : ${remplaces.length} version(s) de production seront écrasées sans copie de sauvegarde.`,
-          avecArchives
-            ? 'Le retour arrière sera impossible pour ce passage. Le manifeste sera écrit malgré tout, avec l\'empreinte de ce qui a été remplacé.'
-            : 'Le retour arrière sera impossible pour ce passage.',
+          'Le retour arrière sera impossible pour ce passage.',
           remplaces
         )
       );
     }
   }
 
-  // 6 bis. Aucune destination : ce passage ne laissera aucune trace écrite.
+  // 6 bis. Sans destination, rien ne s'écrit sous la racine des archives : ni
+  // les versions remplacées, ni le manifeste qui les recense.
   if (!avecArchives) {
     problemes.push(
       probleme(
         AVERTISSEMENT,
         'sans-manifeste',
-        'Aucune demande choisie : ni manifeste, ni récapitulatif ne seront écrits.',
-        'Ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Seul le journal en gardera la trace. Choisissez une demande si vous voulez le retrouver plus tard.'
+        'Sans archivage, ni manifeste ni récapitulatif ne seront écrits.',
+        'Ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Seul le journal en gardera la trace. Recochez « Archiver » si vous voulez le retrouver plus tard.'
       )
     );
   }
@@ -475,7 +474,7 @@ async function preflight(plan, options = {}) {
     (total, fichier) => total + (fichier.local ? fichier.local.taille : 0) + (fichier.prod ? fichier.prod.taille : 0),
     0
   );
-  const espace = await espaceDisponible(plan.racineProd);
+  const { mesurable, octets: espace } = await espaceDisponible(plan.racineProd);
   if (espace !== null && espace < octetsNecessaires * 1.2) {
     problemes.push(
       probleme(
@@ -485,7 +484,7 @@ async function preflight(plan, options = {}) {
         'Libérez de la place sur le serveur avant de déployer.'
       )
     );
-  } else if (espace === null) {
+  } else if (espace === null && mesurable) {
     problemes.push(
       probleme(
         AVERTISSEMENT,
@@ -519,12 +518,24 @@ async function verifierEcriture(dossierSouhaite, racine) {
   }
 }
 
+/**
+ * Place restante sur le volume qui porte ce chemin.
+ *
+ * `statfs` n'existe qu'à partir de Node 18. Electron 22, retenu pour rester
+ * compatible avec Windows Server 2012 R2, embarque Node 16 : la mesure y est
+ * tout simplement impossible. On le distingue d'un échec de mesure, parce que
+ * répéter « l'espace n'a pas pu être mesuré » à chaque passage n'apprendrait
+ * rien à personne et finirait par faire ignorer les vrais avertissements.
+ *
+ * @returns {Promise<{mesurable: boolean, octets: number|null}>}
+ */
 async function espaceDisponible(chemin) {
+  if (typeof fsp.statfs !== 'function') return { mesurable: false, octets: null };
   try {
     const info = await fsp.statfs(cheminLong(chemin));
-    return info.bavail * info.bsize;
+    return { mesurable: true, octets: info.bavail * info.bsize };
   } catch (err) {
-    return null;
+    return { mesurable: true, octets: null };
   }
 }
 

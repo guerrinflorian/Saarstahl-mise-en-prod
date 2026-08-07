@@ -198,6 +198,140 @@ function inventaireExtensions(fichiers) {
 }
 
 // ---------------------------------------------------------------------------
+// Correspondance des deux dossiers
+// ---------------------------------------------------------------------------
+
+/** En dessous, les deux dossiers ne décrivent visiblement pas la même chose. */
+const PROPORTION_MINIMALE = 0.2;
+
+/** Sous ce nombre de fichiers, une proportion ne veut plus rien dire. */
+const ECHANTILLON_MINIMAL = 8;
+
+/**
+ * Dit si les deux arborescences comparées se ressemblent assez pour que la
+ * comparaison ait un sens.
+ *
+ * Deux dossiers sans rapport ne produisent pas d'erreur : ils produisent une
+ * liste énorme où tout le local est « nouveau » et toute la production
+ * « orpheline ». C'est parfaitement lisible, parfaitement faux, et une
+ * sélection large y détruirait la production. Le seul moyen de s'en apercevoir
+ * est de regarder la proportion de chemins présents des deux côtés.
+ *
+ * Tout se déduit de la liste des fichiers : la fonction reste juste après une
+ * mise en production, qui déplace des fichiers d'une catégorie à l'autre.
+ *
+ * @param {object[]} fichiers
+ * @returns {{niveau:'ok'|'attention'|'alerte', code:string, titre:string, texte:string, local:number, prod:number, communs:number, proportion:number}}
+ */
+function diagnostiquerCorrespondance(fichiers) {
+  let local = 0;
+  let prod = 0;
+  let communs = 0;
+  const dossiersLocaux = new Set();
+  const dossiersProd = new Set();
+
+  for (const fichier of fichiers) {
+    const separateur = fichier.chemin.indexOf('\\');
+    const tete = separateur > 0 ? fichier.chemin.slice(0, separateur).toLowerCase() : null;
+    if (fichier.local) {
+      local += 1;
+      if (tete) dossiersLocaux.add(tete);
+    }
+    if (fichier.prod) {
+      prod += 1;
+      if (tete) dossiersProd.add(tete);
+    }
+    if (fichier.local && fichier.prod) communs += 1;
+  }
+
+  let dossiersCommuns = 0;
+  for (const nom of dossiersLocaux) {
+    if (dossiersProd.has(nom)) dossiersCommuns += 1;
+  }
+
+  const plusPetit = Math.min(local, prod);
+  const proportion = plusPetit ? communs / plusPetit : 0;
+  const mesures = { local, prod, communs, proportion, dossiersCommuns };
+
+  // Le détail sur les dossiers de premier niveau n'est parlant que si les deux
+  // côtés en ont : deux dossiers plats ne se départagent pas comme ça.
+  const noteDossiers =
+    dossiersLocaux.size && dossiersProd.size && dossiersCommuns === 0
+      ? ' Aucun dossier de premier niveau ne porte le même nom des deux côtés.'
+      : '';
+
+  if (!local && !prod) {
+    return {
+      ...mesures,
+      niveau: 'attention',
+      code: 'deux-vides',
+      titre: 'Les deux dossiers sont vides.',
+      texte: 'Il n\'y a rien à comparer, aux exclusions près. Vérifiez les deux chemins.'
+    };
+  }
+
+  if (!local) {
+    return {
+      ...mesures,
+      niveau: 'alerte',
+      code: 'local-vide',
+      titre: 'Le dossier local ne contient aucun fichier.',
+      texte:
+        (prod > 1
+          ? `Les ${prod} fichiers de la production ressortent donc tous comme orphelins. `
+          : 'Le fichier de la production ressort donc comme orphelin. ') +
+        'Vérifiez le chemin local avant de supprimer quoi que ce soit.'
+    };
+  }
+
+  if (!prod) {
+    return {
+      ...mesures,
+      niveau: 'attention',
+      code: 'prod-vide',
+      titre: 'Le dossier de production est vide.',
+      texte:
+        (local > 1
+          ? `Les ${local} fichiers locaux ressortent donc tous comme nouveaux. `
+          : 'Le fichier local ressort donc comme nouveau. ') +
+        'C\'est attendu pour une toute première mise en production, suspect sinon.'
+    };
+  }
+
+  if (!communs) {
+    return {
+      ...mesures,
+      niveau: 'alerte',
+      code: 'rien-en-commun',
+      titre: 'Ces deux dossiers n\'ont aucun fichier en commun.',
+      texte:
+        `${local} fichier${local > 1 ? 's' : ''} d'un côté, ${prod} de l'autre, ` +
+        'et pas un seul chemin identique.' +
+        noteDossiers +
+        ' Ce ne sont probablement pas les deux dossiers à comparer.'
+    };
+  }
+
+  if (plusPetit >= ECHANTILLON_MINIMAL && proportion < PROPORTION_MINIMALE) {
+    return {
+      ...mesures,
+      niveau: 'alerte',
+      code: 'peu-en-commun',
+      titre: 'Ces deux dossiers ne se ressemblent guère.',
+      texte:
+        (communs > 1
+          ? `Seuls ${communs} fichiers sur ${plusPetit} sont présents des deux côtés, `
+          : `Un seul fichier sur ${plusPetit} est présent des deux côtés, `) +
+        `soit ${Math.round(proportion * 100)} %.` +
+        noteDossiers +
+        ' Vérifiez que le projet pointe bien sur le bon sous-dossier de production.'
+    };
+  }
+
+  return { ...mesures, niveau: 'ok', code: 'correspond', titre: '', texte: '' };
+}
+
+// ---------------------------------------------------------------------------
 // Arborescence
 // ---------------------------------------------------------------------------
 
@@ -321,6 +455,7 @@ module.exports = {
   comparer,
   compter,
   inventaireExtensions,
+  diagnostiquerCorrespondance,
   construireArbre,
   statutLePlusChaud
 };

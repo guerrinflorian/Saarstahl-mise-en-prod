@@ -8,7 +8,8 @@ import {
   IconeEntonnoir,
   IconeFichier,
   IconeLoupe,
-  IconeReplier
+  IconeReplier,
+  IconeSoleil
 } from './icones.js';
 
 const html = htm.bind(h);
@@ -404,6 +405,12 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [
                 html`<button type="button" class="btn btn-plat">Journal</button>`,
                 "Le fil des événements de l'application, un fichier par jour."
+              ],
+              [
+                html`<button type="button" class="btn btn-carre"><${IconeSoleil} /></button>`,
+                html`Bascule entre le thème sombre et le thème clair. L'icône montre le thème vers
+                  lequel elle emmène : un soleil quand on est en sombre, une lune quand on est en
+                  clair. Le choix est mémorisé sur le poste.`
               ],
               [
                 html`<button type="button" class="btn">⚙ Réglages</button>`,
@@ -812,12 +819,15 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           />
 
           <h3>Le menu du clic droit</h3>
-          <${Demo} legende="Six actions sur le fichier visé, sans quitter la liste.">
+          <${Demo} legende="Chaque côté a ses deux entrées : ouvrir le fichier, ou le montrer dans l'explorateur.">
             <div class="aide-menu">
               <div class="menu-titre mono">GPNET\\Controles\\Entete.ascx</div>
               <button type="button" class="menu-entree">Ouvrir la version locale</button>
               <button type="button" class="menu-entree">Ouvrir la version production</button>
-              <button type="button" class="menu-entree">Afficher dans l'explorateur</button>
+              <div class="menu-separateur"></div>
+              <button type="button" class="menu-entree">Afficher le local dans l'explorateur</button>
+              <button type="button" class="menu-entree">Afficher la production dans l'explorateur</button>
+              <div class="menu-separateur"></div>
               <button type="button" class="menu-entree">Copier le chemin relatif</button>
               <button type="button" class="menu-entree">Voir les versions archivées</button>
               <button type="button" class="menu-entree danger">Exclure ce fichier</button>
@@ -828,7 +838,13 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             entetes=${['Entrée', 'Effet']}
             lignes=${[
               ['Ouvrir la version locale / production', 'Ouvre le fichier avec le programme associé sur votre poste. Grisé si le fichier n\'existe pas de ce côté.'],
-              ['Afficher dans l\'explorateur', 'Ouvre le dossier contenant et sélectionne le fichier.'],
+              [
+                'Afficher le local / la production dans l\'explorateur',
+                html`Ouvre l'explorateur Windows sur le dossier contenant et y sélectionne le
+                  fichier. Les deux côtés ont leur entrée : aucune ne se rabat sur l'autre, pour
+                  qu'on sache toujours quelle arborescence on a sous les yeux. Grisée si le fichier
+                  n'existe pas de ce côté.`
+              ],
               ['Copier le chemin relatif', 'Met le chemin dans le presse-papiers, prêt à coller dans un compte rendu.'],
               ['Voir les versions archivées', 'Toutes les versions « avant modification » de ce fichier retrouvées sous la racine AVMDF.'],
               [
@@ -1052,30 +1068,24 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             jamais besoin.
           </p>
           <p>
-            <strong>La demande devient alors facultative.</strong> Rien n'est rangé, donc il n'y a
-            rien à ranger quelque part : on ne vous demande plus d'ouvrir une demande de travaux
-            pour pousser une feuille de style. Le dossier d'archives n'est même pas consulté, et le
-            lecteur réseau peut être déconnecté sans que cela empêche quoi que ce soit.
+            <strong>La case gouverne tout le versant AVMDF.</strong> Décochée, la demande n'est plus
+            demandée, plus lue, et plus rien ne s'écrit sous la racine des archives : ni les
+            versions remplacées, ni le manifeste qui les recense. On ne vous demande plus d'ouvrir
+            une demande de travaux pour pousser une feuille de style. Le dossier d'archives n'est
+            même pas consulté, et le lecteur réseau peut être déconnecté sans que cela empêche quoi
+            que ce soit.
           </p>
-          <${Repere}
-            entetes=${['Sans archivage, la demande est…', 'Ce qui se passe']}
-            lignes=${[
-              [
-                'indiquée quand même',
-                'Le manifeste et le récapitulatif sont écrits dans le dossier de sprint, avec l\'empreinte de chaque version remplacée. Le passage apparaît dans l\'historique et le tableau de bord. Seule la copie de sauvegarde n\'a pas lieu.'
-              ],
-              [
-                'laissée vide',
-                'Aucune écriture dans les archives : ni manifeste, ni récapitulatif. Le passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Le journal en garde la ligne, et le rapport final reste affiché.'
-              ]
-            ]}
-          />
+          <p class="attenue">
+            Une destination choisie avant de décocher est simplement mise de côté : le bandeau
+            affiche « aucun archivage » à sa place, et elle revient si la case est recochée. La
+            confirmation ne parle alors plus de demande du tout et se valide en recopiant le nombre
+            de fichiers.
+          </p>
           <div class="encart encart-danger">
             <strong>Ce qui se perd, se perd.</strong> Sans copie de sauvegarde, il n'y a rien à
-            remettre : l'écran Historique marque ce passage${' '}
-            <span class="etiquette etiquette-danger">sans AVMDF</span> et refuse le retour arrière.
-            L'empreinte du fichier écrasé reste dans le manifeste, ce qui permet de dire ce qui a
-            changé, pas de le rendre. Dans le doute, laissez la case cochée.
+            remettre. Sans manifeste, le passage n'apparaît ni dans l'historique ni dans le tableau
+            de bord : seul le journal en garde la ligne, et le rapport final reste affiché à
+            l'écran. Dans le doute, laissez la case cochée.
           </div>
           <p class="attenue">
             La case revient d'elle-même à « cochée » après chaque mise en production réelle : le
@@ -1201,11 +1211,11 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 'Vous avez décoché « Archiver » : les versions de production seront écrasées sans copie de sauvegarde, et ce passage ne pourra pas être annulé. La liste des fichiers concernés est donnée.'
               ],
               [
-                'Aucune demande choisie',
-                'Ni manifeste ni récapitulatif ne seront écrits : ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Indiquez une demande si vous voulez le retrouver plus tard.'
+                'Sans archivage, ni manifeste ni récapitulatif',
+                'Rien ne sera écrit dans les archives : ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord, seul le journal en gardera la ligne. Recochez « Archiver » si vous voulez le retrouver plus tard.'
               ],
               ['Fichier source modifié depuis l\'analyse', 'C\'est la version actuelle qui partira, pas celle que vous avez examinée.'],
-              ['Espace disponible non mesurable', 'Le partage n\'a pas répondu. Vérifiez à l\'œil.']
+              ['Espace disponible non mesurable', 'Le partage n\'a pas répondu à la question. Vérifiez à l\'œil qu\'il reste de la place.']
             ]}
           />
 
@@ -1379,6 +1389,19 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           titre="Les réglages"
           chapeau="Tout se fait sur un brouillon : rien n'est écrit tant que « Enregistrer » n'a pas été utilisé."
         >
+          <h3>Le premier démarrage</h3>
+          <p>
+            Au tout premier lancement, l'application ne connaît ni vos sources ni votre production :
+            elle ne les invente pas. Un écran d'accueil demande les trois racines, une bonne fois.
+            Chaque chemin saisi est contrôlé pour de vrai - existence et lecture - et le résultat
+            s'affiche dessous, avant même la première analyse.
+          </p>
+          <p class="attenue">
+            Seule la racine des archives arrive préremplie, à${' '}
+            <span class="mono">Z:\\AvMdf</span> : celle-là est la même pour tout le monde. Les deux
+            autres dépendent du poste. Tout reste modifiable ici ensuite.
+          </p>
+
           <${Repere}
             entetes=${['Section', 'Ce qu\'on y règle']}
             lignes=${[
@@ -1524,9 +1547,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             </li>
             <li>
               <strong>Tout est tracé</strong> : un manifeste et un récapitulatif dans le dossier de
-              sprint, un journal quotidien côté application. Un passage sans archivage et sans
-              demande n'écrit rien dans les archives, mais le journal en garde la ligne, marquée
-              ALERTE.
+              sprint, un journal quotidien côté application. Un passage fait sans archivage n'écrit
+              rien dans les archives, mais le journal en garde la ligne, marquée ALERTE.
             </li>
           </ul>
         <//>
@@ -1547,6 +1569,23 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [
                 'L\'analyse ne trouve aucun écart',
                 'C\'est peut-être vrai. Sinon, vérifiez que le projet vise bien les bons dossiers, et regardez le panneau Éléments ignorés : une exclusion trop large masque parfois tout un dossier.'
+              ],
+              [
+                html`<strong>Analyse impossible</strong>, avec un dossier marqué${' '}
+                  <span class="aide-danger-texte">✕</span>`,
+                html`Un des deux dossiers ne se lit pas : introuvable, accès refusé, ou ce n'est pas
+                  un dossier. L'analyse est refusée avant de commencer, exprès. Si elle partait quand
+                  même, le côté illisible rendrait zéro fichier et tout l'autre côté ressortirait en
+                  « nouveau » ou en « orphelin » : une liste énorme, parfaitement lisible et
+                  parfaitement fausse. Le panneau indique lequel des deux bloque, et pourquoi.`
+              ],
+              [
+                html`<strong>Ces deux dossiers n'ont aucun fichier en commun</strong>`,
+                html`Presque toujours une erreur de cible : un projet qui vise le mauvais
+                  sous-dossier de production. Le message compte les fichiers de chaque côté et
+                  ceux qui portent le même chemin. Il ne bloque rien - un tout premier déploiement
+                  ressemble à ça - mais si l'écran affiche des centaines d'orphelins, vérifiez le
+                  projet avant de cocher quoi que ce soit.`
               ],
               [
                 'Un fichier ressort modifié à chaque fois',

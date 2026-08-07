@@ -80,6 +80,9 @@ const CONTENU_APP_OFFLINE_DEFAUT = [
 /** Nom du fichier dont l'exclusion est expliquée dans l'interface. */
 const FICHIER_SENSIBLE = 'web.config';
 
+/** Racine des archives « avant modification », identique sur tous les postes. */
+const RACINE_AVMDF_DEFAUT = 'Z:\\AvMdf';
+
 // ---------------------------------------------------------------------------
 // Valeurs par défaut
 // ---------------------------------------------------------------------------
@@ -94,10 +97,16 @@ function reglagesParDefaut(contexte = {}) {
 
   return {
     version: VERSION_CONFIG,
+    // Les deux premières racines sont propres au poste : personne ne peut les
+    // deviner à la place de qui s'installe, et une valeur inventée serait
+    // pire que rien - elle donnerait l'illusion d'un outil déjà réglé. Elles
+    // restent vides, et l'écran de premier démarrage les demande.
+    // La troisième, elle, est la même pour tout le monde : les « avant
+    // modification » vivent sous Z:\AvMdf.
     racines: {
-      locale: 'E:\\F Guerrin\\Process',
-      prod: 'Z:\\',
-      avmdf: 'Z:\\AvMdf'
+      locale: '',
+      prod: '',
+      avmdf: RACINE_AVMDF_DEFAUT
     },
     projets: [
       creerProjet({ nom: 'GPNet', dossierLocal: 'GPNET', dossierProd: 'GPNet' }),
@@ -604,6 +613,7 @@ function mettreDeCote(cheminFichier, contenu) {
 module.exports = {
   VERSION_CONFIG,
   FICHIER_SENSIBLE,
+  RACINE_AVMDF_DEFAUT,
   CONTENU_APP_OFFLINE_DEFAUT,
   reglagesParDefaut,
   creerProjet,
