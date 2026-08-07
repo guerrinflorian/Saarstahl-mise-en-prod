@@ -1,8 +1,9 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useRef, useState } from '../vendor/hooks.module.js';
-import { MARQUEURS, LIBELLES, STATUTS, formaterNombre } from './arborescence.js';
+import { MARQUEURS, PLURIELS, STATUTS, formaterNombre } from './arborescence.js';
 import { MODE_CONTIENT, MODE_GLOB, MODE_REGEX, creerFiltreTexte, estVierge } from './filtres.js';
+import { IconeDeplier, IconeEntonnoir, IconeLoupe, IconeReplier } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -13,6 +14,11 @@ const CHOIX_DATE = [
   { valeur: '30jours', libelle: '30 derniers jours' },
   { valeur: 'choisie', libelle: 'depuis une date…' }
 ];
+
+/** « modifiés » → « Modifiés ». */
+function capitale(mot) {
+  return mot.charAt(0).toUpperCase() + mot.slice(1);
+}
 
 /** Petit panneau qui se referme au clic à l'extérieur ou sur Échap. */
 function Popover({ libelle, actif, children, titre }) {
@@ -52,8 +58,12 @@ function Popover({ libelle, actif, children, titre }) {
 }
 
 /**
- * Barre de recherche et de filtres. Tout se combine en ET logique, et le
- * bandeau du bas rappelle en permanence combien de fichiers sont masqués.
+ * Barre de recherche et de filtres.
+ *
+ * Trois niveaux de lecture, du plus utilisé au moins utilisé : la recherche,
+ * les quatre statuts, puis les filtres avancés qui restent repliés tant qu'on
+ * ne s'en sert pas. Tout se combine en ET logique, et le pied de la barre
+ * rappelle en permanence combien de fichiers sont masqués.
  */
 export function BarreFiltres({
   criteres,
@@ -71,6 +81,13 @@ export function BarreFiltres({
   const filtre = creerFiltreTexte(criteres.requete, criteres.mode);
   const [dateChoisie, setDateChoisie] = useState('');
   const [choixDate, setChoixDate] = useState('');
+  const [avancesOuverts, setAvancesOuverts] = useState(false);
+
+  const avancesActifs =
+    (criteres.extensions ? 1 : 0) +
+    (criteres.depuis ? 1 : 0) +
+    (criteres.dossier ? 1 : 0) +
+    (criteres.dansLeContenu ? 1 : 0);
 
   const majStatut = (statut, valeur) =>
     onCriteres({ ...criteres, statuts: { ...criteres.statuts, [statut]: valeur } });
@@ -101,17 +118,19 @@ export function BarreFiltres({
 
   return html`
     <div class="filtres">
-      <div class="filtres-ligne">
+      <div class="filtres-recherche">
+        <${IconeLoupe} classe="filtres-loupe" />
         <input
           type="search"
-          class="filtres-recherche mono"
-          placeholder="Rechercher dans les chemins…"
+          class="mono"
+          placeholder="Rechercher un chemin…"
           spellcheck="false"
           aria-label="Rechercher"
           value=${criteres.requete}
           onInput=${(e) => onCriteres({ ...criteres, requete: e.target.value })}
         />
         <select
+          class="filtres-mode"
           value=${criteres.mode}
           aria-label="Mode de recherche"
           title="Mode de recherche"
@@ -125,14 +144,125 @@ export function BarreFiltres({
 
       ${!filtre.valide ? html`<div class="filtres-erreur">${filtre.erreur}</div>` : null}
 
-      <label class="case filtres-contenu" title="Lit le contenu des fichiers texte des deux côtés">
-        <input
-          type="checkbox"
-          checked=${criteres.dansLeContenu}
-          onChange=${(e) => onCriteres({ ...criteres, dansLeContenu: e.target.checked })}
-        />
-        <span>Chercher aussi dans le contenu des fichiers</span>
-      </label>
+      <div class="statuts">
+        ${STATUTS.map((statut) => {
+          const actif = Boolean(criteres.statuts[statut]);
+          return html`
+            <button
+              type="button"
+              class=${'statut statut-' + statut + (actif ? ' actif' : '')}
+              key=${statut}
+              aria-pressed=${actif}
+              title=${(actif ? 'Masquer' : 'Afficher') + ' les fichiers ' + PLURIELS[statut]}
+              onClick=${() => majStatut(statut, !actif)}
+            >
+              <span class="statut-marqueur">${MARQUEURS[statut]}</span>
+              <span class="statut-nom">${capitale(PLURIELS[statut])}</span>
+              <span class="statut-nombre">${formaterNombre(compteurs[statut] || 0)}</span>
+            </button>
+          `;
+        })}
+      </div>
+
+      <button
+        type="button"
+        class=${'filtres-avances' + (avancesOuverts ? ' ouvert' : '')}
+        aria-expanded=${avancesOuverts}
+        onClick=${() => setAvancesOuverts(!avancesOuverts)}
+      >
+        <span class="chevron">${avancesOuverts ? '▾' : '▸'}</span>
+        <${IconeEntonnoir} />
+        <span>Filtres avancés</span>
+        ${avancesActifs ? html`<span class="pastille">${avancesActifs}</span>` : null}
+      </button>
+
+      ${avancesOuverts
+        ? html`
+            <div class="filtres-panneau">
+              <label class="case filtres-contenu" title="Lit le contenu des fichiers texte des deux côtés">
+                <input
+                  type="checkbox"
+                  checked=${criteres.dansLeContenu}
+                  onChange=${(e) => onCriteres({ ...criteres, dansLeContenu: e.target.checked })}
+                />
+                <span>Chercher aussi dans le contenu des fichiers</span>
+              </label>
+
+              <div class="filtres-ligne">
+                <${Popover} libelle="Extensions" titre="Filtrer par extension" actif=${Boolean(criteres.extensions)}>
+                  <div class="popover-entete">
+                    <button
+                      type="button"
+                      class="btn btn-mini btn-plat"
+                      onClick=${() => onCriteres({ ...criteres, extensions: null })}
+                    >
+                      Toutes
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-mini btn-plat"
+                      onClick=${() => onCriteres({ ...criteres, extensions: new Set() })}
+                    >
+                      Aucune
+                    </button>
+                  </div>
+                  <div class="popover-liste">
+                    ${extensions.map(
+                      (entree) => html`
+                        <label class="case" key=${entree.extension}>
+                          <input
+                            type="checkbox"
+                            checked=${!criteres.extensions || criteres.extensions.has(entree.extension)}
+                            onChange=${(e) => majExtension(entree.extension, e.target.checked)}
+                          />
+                          <span class="mono">${entree.extension || '(sans extension)'}</span>
+                          <span class="attenue">${formaterNombre(entree.nombre)}</span>
+                        </label>
+                      `
+                    )}
+                  </div>
+                <//>
+
+                <select
+                  value=${choixDate}
+                  aria-label="Modifiés localement depuis"
+                  title="Modifiés localement depuis"
+                  class=${criteres.depuis ? 'marque' : ''}
+                  onChange=${(e) => surChoixDate(e.target.value)}
+                >
+                  ${CHOIX_DATE.map((choix) => html`<option value=${choix.valeur} key=${choix.valeur}>${choix.libelle}</option>`)}
+                </select>
+              </div>
+
+              ${choixDate === 'choisie'
+                ? html`<input
+                    type="date"
+                    value=${dateChoisie}
+                    aria-label="Date de début"
+                    onInput=${(e) => {
+                      setDateChoisie(e.target.value);
+                      onCriteres({ ...criteres, depuis: e.target.value ? new Date(e.target.value).getTime() : null });
+                    }}
+                  />`
+                : null}
+
+              <input
+                type="text"
+                class=${'mono' + (criteres.dossier ? ' marque' : '')}
+                list="liste-dossiers"
+                placeholder="Restreindre à un dossier…"
+                spellcheck="false"
+                aria-label="Restreindre à un dossier"
+                value=${criteres.dossier}
+                onInput=${(e) => onCriteres({ ...criteres, dossier: e.target.value })}
+              />
+              <datalist id="liste-dossiers">
+                ${dossiers.slice(0, 400).map((dossier) => html`<option value=${dossier} key=${dossier}></option>`)}
+              </datalist>
+            </div>
+          `
+        : null}
+
       ${rechercheContenu && rechercheContenu.enCours
         ? html`<div class="filtres-avancement mono">
             Lecture ${formaterNombre(rechercheContenu.faits)} / ${formaterNombre(rechercheContenu.total)}
@@ -145,99 +275,21 @@ export function BarreFiltres({
           </div>`
         : null}
 
-      <div class="filtres-statuts">
-        ${STATUTS.map(
-          (statut) => html`
-            <label class=${'bascule bascule-' + statut} key=${statut} title=${'Afficher les fichiers ' + LIBELLES[statut] + 's'}>
-              <input
-                type="checkbox"
-                checked=${Boolean(criteres.statuts[statut])}
-                onChange=${(e) => majStatut(statut, e.target.checked)}
-              />
-              <span class="marqueur">${MARQUEURS[statut]}</span>
-              <span class="bascule-nombre">${formaterNombre(compteurs[statut] || 0)}</span>
-            </label>
-          `
-        )}
-      </div>
-
-      <div class="filtres-ligne">
-        <${Popover}
-          libelle="ext"
-          titre="Filtrer par extension"
-          actif=${Boolean(criteres.extensions)}
-        >
-          <div class="popover-entete">
-            <button type="button" class="btn btn-mini btn-plat" onClick=${() => onCriteres({ ...criteres, extensions: null })}>
-              Toutes
-            </button>
-            <button type="button" class="btn btn-mini btn-plat" onClick=${() => onCriteres({ ...criteres, extensions: new Set() })}>
-              Aucune
-            </button>
-          </div>
-          <div class="popover-liste">
-            ${extensions.map(
-              (entree) => html`
-                <label class="case" key=${entree.extension}>
-                  <input
-                    type="checkbox"
-                    checked=${!criteres.extensions || criteres.extensions.has(entree.extension)}
-                    onChange=${(e) => majExtension(entree.extension, e.target.checked)}
-                  />
-                  <span class="mono">${entree.extension || '(sans extension)'}</span>
-                  <span class="attenue">${formaterNombre(entree.nombre)}</span>
-                </label>
-              `
-            )}
-          </div>
-        <//>
-
-        <select
-          value=${choixDate}
-          aria-label="Modifiés localement depuis"
-          title="Modifiés localement depuis"
-          class=${criteres.depuis ? 'marque' : ''}
-          onChange=${(e) => surChoixDate(e.target.value)}
-        >
-          ${CHOIX_DATE.map((choix) => html`<option value=${choix.valeur} key=${choix.valeur}>${choix.libelle}</option>`)}
-        </select>
-        ${choixDate === 'choisie'
-          ? html`<input
-              type="date"
-              value=${dateChoisie}
-              aria-label="Date de début"
-              onInput=${(e) => {
-                setDateChoisie(e.target.value);
-                onCriteres({ ...criteres, depuis: e.target.value ? new Date(e.target.value).getTime() : null });
-              }}
-            />`
-          : null}
-
-        <input
-          type="text"
-          class=${'filtres-dossier mono' + (criteres.dossier ? ' marque' : '')}
-          list="liste-dossiers"
-          placeholder="dossier…"
-          spellcheck="false"
-          aria-label="Restreindre à un dossier"
-          value=${criteres.dossier}
-          onInput=${(e) => onCriteres({ ...criteres, dossier: e.target.value })}
-        />
-        <datalist id="liste-dossiers">
-          ${dossiers.slice(0, 400).map((dossier) => html`<option value=${dossier} key=${dossier}></option>`)}
-        </datalist>
-      </div>
-
       <div class="filtres-resume">
         <span>
-          <strong>${formaterNombre(nombreAffiches)}</strong> fichiers affichés sur ${formaterNombre(nombreTotal)}
+          <strong>${formaterNombre(nombreAffiches)}</strong> sur ${formaterNombre(nombreTotal)} fichiers
         </span>
         <div style="flex:1"></div>
-        <button type="button" class="btn btn-mini btn-plat" title="Tout déplier" onClick=${onToutDeplier}>Tout déplier</button>
-        <button type="button" class="btn btn-mini btn-plat" title="Tout replier" onClick=${onToutReplier}>Tout replier</button>
+        <button type="button" class="btn btn-mini btn-plat btn-carre" title="Tout déplier" onClick=${onToutDeplier}>
+          <${IconeDeplier} />
+        </button>
+        <button type="button" class="btn btn-mini btn-plat btn-carre" title="Tout replier" onClick=${onToutReplier}>
+          <${IconeReplier} />
+        </button>
         <button
           type="button"
           class="btn btn-mini"
+          title="Remettre tous les filtres à leur état de départ"
           disabled=${estVierge(criteres)}
           onClick=${() => {
             setChoixDate('');

@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION_CONFIG = 2;
+const VERSION_CONFIG = 3;
 
 /**
  * Motifs ajoutés aux exclusions par la version 2 : l'application compare du
@@ -46,6 +46,20 @@ const AJOUTS_EXCLUSIONS_V2 = {
     'Web.Debug.config',
     'Web.Release.config'
   ]
+};
+
+/**
+ * Motifs ajoutés par la version 3 : le code-behind VB des pages ASP.NET.
+ *
+ * Dans une application web compilée, `Default.aspx.vb`, son
+ * `Default.aspx.designer.vb` et le `Global.asax.vb` ne partent jamais sur le
+ * serveur - c'est la DLL de `bin` qui les remplace. Ils existent en local,
+ * jamais en production : sans exclusion, chaque analyse les remonte en
+ * « nouveaux » alors qu'il n'y a rien à déployer.
+ */
+const AJOUTS_EXCLUSIONS_V3 = {
+  dossiers: [],
+  fichiers: ['*.aspx.vb', '*.aspx.designer.vb', '*.asax.vb']
 };
 
 const CONTENU_APP_OFFLINE_DEFAUT = [
@@ -113,7 +127,8 @@ function reglagesParDefaut(contexte = {}) {
         'Thumbs.db',
         'desktop.ini',
         '*.tmp',
-        ...AJOUTS_EXCLUSIONS_V2.fichiers
+        ...AJOUTS_EXCLUSIONS_V2.fichiers,
+        ...AJOUTS_EXCLUSIONS_V3.fichiers
       ]
     },
     extensionsTexte: [
@@ -226,15 +241,16 @@ function normaliser(brut, contexte = {}) {
 
   const projets = Array.isArray(source.projets) ? source.projets.map(creerProjet) : defauts.projets;
 
-  // Migration v1 → v2 : les nouveaux motifs d'exclusion rejoignent une liste
-  // personnalisée sans écraser les choix de l'utilisateur (union, pas
-  // remplacement). Une configuration déjà en version 2 n'est pas retouchée.
+  // Migrations : chaque version apporte ses nouveaux motifs d'exclusion à une
+  // liste personnalisée sans écraser les choix de l'utilisateur (union, pas
+  // remplacement). Une configuration déjà à jour n'est pas retouchée.
   const versionSource = Number.isInteger(source.version) ? source.version : 1;
   let dossiersExclus = listeDeTextes(exclusions.dossiers, defauts.exclusions.dossiers);
   let fichiersExclus = listeDeTextes(exclusions.fichiers, defauts.exclusions.fichiers);
-  if (versionSource < 2) {
-    dossiersExclus = listeDeTextes(dossiersExclus.concat(AJOUTS_EXCLUSIONS_V2.dossiers), []);
-    fichiersExclus = listeDeTextes(fichiersExclus.concat(AJOUTS_EXCLUSIONS_V2.fichiers), []);
+  for (const [version, ajouts] of [[2, AJOUTS_EXCLUSIONS_V2], [3, AJOUTS_EXCLUSIONS_V3]]) {
+    if (versionSource >= version) continue;
+    dossiersExclus = listeDeTextes(dossiersExclus.concat(ajouts.dossiers), []);
+    fichiersExclus = listeDeTextes(fichiersExclus.concat(ajouts.fichiers), []);
   }
 
   return {

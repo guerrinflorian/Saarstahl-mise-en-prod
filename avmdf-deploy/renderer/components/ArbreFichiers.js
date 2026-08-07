@@ -2,6 +2,7 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
 import { BarreFiltres } from './BarreFiltres.js';
+import { IconeDossier, IconeFichier } from './icones.js';
 import {
   MARQUEURS,
   LIBELLES,
@@ -15,8 +16,9 @@ import {
 
 const html = htm.bind(h);
 
-const HAUTEUR_LIGNE = 22;
+const HAUTEUR_LIGNE = 24;
 const MARGE = 10;
+const PAS_INDENTATION = 13;
 
 /**
  * Panneau gauche : recherche, filtres, arborescence pliable et éléments ignorés.
@@ -393,6 +395,7 @@ function Ligne({
   const cochable = estDossier ? etat !== 'vide' || fichiersDe(noeud).some(estDeployable) : true;
 
   const classes = ['ligne'];
+  if (estDossier) classes.push('ligne-dossier');
   if (actif) classes.push('actif');
   if (curseur) classes.push('curseur');
   if (noeud.statut) classes.push('statut-' + noeud.statut);
@@ -400,7 +403,7 @@ function Ligne({
   return html`
     <div
       class=${classes.join(' ')}
-      style=${`top:${haut}px;padding-left:${6 + profondeur * 14}px`}
+      style=${`top:${haut}px`}
       role="treeitem"
       aria-expanded=${estDossier ? ouvert : undefined}
       aria-selected=${actif}
@@ -409,6 +412,10 @@ function Ligne({
       onClick=${() => (estDossier ? onBasculerDossier(noeud.cle) : onChoisir(noeud))}
       onContextMenu=${(evenement) => onMenu(evenement, noeud)}
     >
+      ${profondeur
+        ? html`<span class="ligne-indent" style=${`width:${profondeur * PAS_INDENTATION}px`}></span>`
+        : null}
+
       <input
         type="checkbox"
         class="ligne-case"
@@ -422,11 +429,13 @@ function Ligne({
         onChange=${() => (estDossier ? onBasculerBranche(noeud) : onBasculerFichier(noeud))}
       />
 
+      <span class=${'chevron' + (estDossier ? '' : ' chevron-vide')}>
+        ${estDossier ? (ouvert ? '▾' : '▸') : ''}
+      </span>
+
       ${estDossier
-        ? html`<span class="chevron">${ouvert ? '▾' : '▸'}</span>`
-        : html`<span class=${'marqueur marqueur-' + noeud.statut} title=${LIBELLES[noeud.statut]}>
-            ${MARQUEURS[noeud.statut]}
-          </span>`}
+        ? html`<${IconeDossier} ouvert=${ouvert} classe="icone-dossier" />`
+        : html`<${IconeFichier} extension=${noeud.extension || noeud.nom} />`}
 
       <span class=${'ligne-nom' + (estDossier ? ' dossier' : '')}>${noeud.nom}</span>
 
@@ -440,7 +449,12 @@ function Ligne({
               `
             )}
           </span>`
-        : null}
+        : html`<span
+            class=${'ligne-statut marqueur marqueur-' + noeud.statut}
+            title=${'Fichier ' + LIBELLES[noeud.statut]}
+          >
+            ${MARQUEURS[noeud.statut]}
+          </span>`}
     </div>
   `;
 }

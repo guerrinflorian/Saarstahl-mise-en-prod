@@ -15,6 +15,8 @@ const html = htm.bind(h);
 export function BandeauDeploiement({
   simulation,
   onSimulation,
+  archiver,
+  onArchiver,
   selection,
   destination,
   modeLibre,
@@ -26,6 +28,7 @@ export function BandeauDeploiement({
   const reel = !simulation;
   const total = selection.deployables + selection.orphelins;
   const mixte = operation === 'mixte';
+  const suppression = operation === 'suppression';
 
   const raisonBlocage = modeLibre
     ? 'La comparaison libre ne permet pas de mise en production.'
@@ -37,7 +40,7 @@ export function BandeauDeploiement({
           ? 'Choisissez d\'abord la demande et le dossier de sprint.'
           : '';
 
-  const libelleAction = operation === 'suppression' ? 'Supprimer en production' : 'Mettre en production';
+  const libelleAction = suppression ? 'Supprimer en production' : 'Mettre en production';
 
   return html`
     <footer class=${'bandeau' + (reel ? ' reel' : '')}>
@@ -72,9 +75,22 @@ export function BandeauDeploiement({
 
       <div class="bandeau-actions">
         ${raisonBlocage ? html`<span class="attenue bandeau-raison">${raisonBlocage}</span>` : null}
+        ${!archiver && !suppression
+          ? html`<span class="bandeau-etat sans-archive" title="Aucune copie de sauvegarde : ce passage ne pourra pas être annulé">
+              Sans AVMDF
+            </span>`
+          : null}
         <span class=${'bandeau-etat ' + (reel ? 'reel' : 'simulation')}>
           ${reel ? 'Écriture réelle' : 'Simulation'}
         </span>
+        ${suppression
+          ? null
+          : html`<${Case}
+              libelle="Archiver"
+              coche=${archiver}
+              titre="Copier la version de production dans le dossier de sprint avant de l'écraser. Décoché, rien n'est conservé et le retour arrière devient impossible."
+              onChange=${onArchiver}
+            />`}
         <${Case}
           libelle="Simulation"
           coche=${simulation}

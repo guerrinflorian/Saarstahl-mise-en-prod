@@ -139,6 +139,9 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                             : manifeste.operation === 'suppression'
                               ? html`<span class="etiquette">suppression</span>`
                               : null}
+                          ${manifeste.archivage === false
+                            ? html`<span class="etiquette etiquette-danger">sans AVMDF</span>`
+                            : null}
                           ${manifeste.simulation ? html`<span class="etiquette">simulation</span>` : null}
                         </div>
                         <div class="historique-ligne2 attenue">
@@ -187,11 +190,23 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                               </div>`
                             : null}
 
+                          ${choisi.archivage === false && !choisi.simulation
+                            ? html`<div class="encart encart-danger" style="margin:12px 0">
+                                <strong>Passage effectué sans archivage AVMDF.</strong>
+                                Les versions remplacées n'ont pas été conservées : il n'y a rien à restaurer.
+                                Le tableau ci-dessous garde l'empreinte de ce qui a été écrasé, et les fichiers
+                                créés par ce passage peuvent toujours être retirés à la main.
+                              </div>`
+                            : null}
+
                           <div style="display:flex;gap:6px;margin:12px 0">
                             <button
                               type="button"
                               class="btn btn-danger"
-                              disabled=${choisi.simulation || occupe}
+                              disabled=${choisi.simulation || choisi.archivage === false || occupe}
+                              title=${choisi.archivage === false
+                                ? 'Aucune version archivée : ce déploiement ne peut pas être annulé'
+                                : ''}
                               onClick=${preparerRetour}
                             >
                               Revenir en arrière
@@ -337,7 +352,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                   <button type="button" class="btn btn-plat" onClick=${() => setDiff(null)}>Fermer ✕</button>
                 </div>
                 <div class="historique-diff">
-                  <${VueDiff} diff=${diff} onOuvrirExterne=${() => {}} onNotifier=${onNotifier} />
+                  <${VueDiff} diff=${diff} onOuvrirExterne=${() => {}} onNotifier=${onNotifier} inversable=${false} />
                 </div>
               </div>
             </div>

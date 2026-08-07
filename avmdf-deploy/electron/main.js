@@ -698,6 +698,9 @@ function construirePlan(parametres) {
       dossierSauvegarde: destination.chemin,
       auteur: actuels.options.auteur,
       simulation: Boolean(parametres.simulation),
+      // L'archivage se fait, sauf demande explicite du contraire : le défaut
+      // n'est jamais la perte de l'état antérieur.
+      archiver: parametres.archiver !== false,
       operation,
       appOffline: actuels.options.appOffline,
       fichiers
@@ -754,9 +757,10 @@ function handlersDeploiement() {
     const signal = fsindex.creerSignal();
     operationEnCours = signal;
     carnet.ecrire(
-      'INFO',
+      plan.archiver ? 'INFO' : 'ALERTE',
       `${plan.simulation ? 'simulation' : 'mise en production'} : ${plan.fichiers.length} fichier(s) ` +
-        `vers ${plan.dossierSauvegarde} (${plan.operation})`
+        `vers ${plan.dossierSauvegarde} (${plan.operation})` +
+        (plan.archiver ? '' : ' - SANS archivage AVMDF, passage non réversible')
     );
 
     try {
@@ -811,6 +815,7 @@ function resumePlan(plan) {
     auteur: plan.auteur,
     operation: plan.operation,
     simulation: plan.simulation,
+    archiver: plan.archiver,
     parStatut,
     octets,
     fichiers: plan.fichiers.map((fichier) => ({

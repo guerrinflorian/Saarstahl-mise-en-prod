@@ -118,6 +118,14 @@ aussi, depuis la version 2 des réglages : `$tf` et `My Project` (dossiers), `*.
 en version 1 reçoit ces motifs à son premier chargement, par union : les motifs ajoutés à la main
 sont conservés, et les motifs par défaut retirés volontairement ne reviennent pas.
 
+La version 3 des réglages ajoute le code-behind VB : `*.aspx.vb`, `*.aspx.designer.vb` et
+`*.asax.vb`. Dans une application web compilée, ces fichiers ne partent jamais sur le serveur,
+c'est la DLL de `bin` qui les remplace : ils existent en local et pas en production, et c'est
+normal. Sans exclusion, chaque analyse les remonterait en « nouveaux » alors qu'il n'y a rien à
+déployer. Même mécanisme de migration par union. Les code-behind d'autres types de pages
+(`*.ascx.vb`, `*.master.vb`…) ne sont pas exclus par défaut : à ajouter à la main si le besoin se
+présente.
+
 ## Format du manifeste
 
 Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<horodatage>.json`
@@ -133,6 +141,7 @@ Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<hor
   "racineLocale": "E:\\F Guerrin\\Process\\GPNET",
   "racineProd": "Z:\\GPNet",
   "dossierSauvegarde": "Z:\\AvMdf\\AVMDF4611\\AVMDF4611_3",
+  "archivage": true,
   "simulation": false,
   "fichiers": [
     {
@@ -152,8 +161,10 @@ Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<hor
 ```
 
 Champs propres à l'outil : `operation` vaut `deploiement`, `suppression` ou `restauration` ;
+`archivage` à `false` marque un passage fait sans archivage AVMDF, donc non réversible ;
 `archiveNonRemplace` signale un fichier archivé dont la copie a échoué ; `sauvegardeConservee`
-signale une archive héritée d'un passage précédent dans le même sprint.
+signale une archive héritée d'un passage précédent dans le même sprint ; `sansArchive` marque une
+entrée dont la version de production a été écrasée sans copie de sauvegarde.
 
 C'est ce fichier que relit l'écran Historique pour proposer le retour arrière. Un
 `_recapitulatif.md` lisible est complété dans le même dossier à chaque passage : c'est lui qu'on
@@ -241,10 +252,56 @@ créent pas de trait.
 ## Interface
 
 - Les deux panneaux de l'analyse se redimensionnent à la souris (double-clic sur la poignée pour
-  revenir à la largeur d'origine). La largeur, le mode côte à côte ou unifié, le défilement lié
-  et l'affichage des blancs sont mémorisés d'une session à l'autre.
-- La navigation se fait par onglets : Analyse, Tableau de bord. Historique et Journal restent
-  accessibles en permanence.
+  revenir à la largeur d'origine). La largeur, le mode côte à côte ou unifié, le défilement lié,
+  l'affichage des blancs et l'ordre des deux côtés du comparateur sont mémorisés d'une session à
+  l'autre.
+- Dans le comparateur, **le local est à gauche et la production à droite** par défaut ; le bouton
+  `⇄` intervertit les deux, et le libellé rappelle l'ordre en cours. Intervertir ne change pas le
+  sens des signes : le diff se calcule toujours production → local, donc `+` reste ce qui sera
+  ajouté en production et `−` ce qui en sera retiré. Le bouton n'apparaît que sur la comparaison
+  de l'analyse : celles de l'historique et des versions archivées n'opposent pas du local à de la
+  production et gardent leur ordre propre (`inversable={false}`).
+- La navigation se fait par onglets : Analyse, Tableau de bord, Aide. Historique et Journal
+  restent accessibles en permanence.
+
+### Panneau de gauche
+
+L'arborescence porte une icône par ligne : dossier fermé, dossier ouvert, et **une icône par
+famille de fichier**, forme et teinte comprises. Des guides d'indentation verticaux marquent la
+profondeur, et le marqueur de statut est rejeté à droite : les noms s'alignent à gauche, les
+marqueurs forment une colonne qui se relit d'un seul mouvement. La couleur de l'icône dit le
+**type**, le marqueur de droite dit l'**état** : deux informations, deux colonnes.
+
+Les icônes sont des tracés SVG en `currentColor` dans `renderer/components/icones.js` : ni police
+d'icônes ni fichier extérieur, la politique de sécurité du contenu interdit les deux. Seize
+familles couvrent tout, avec repli sur « inconnu » : pages et balisage (`.aspx`, `.ascx`,
+`.master`, `.html`…), code serveur (`.vb`, `.cs`…), scripts navigateur (`.js`, `.ts`…), composants
+Vue, feuilles de style, données et configuration, bases de données, scripts de commande, images,
+textes, tableurs, documents, archives, binaires, polices, sons et vidéos. Une extension composée
+se résout sur sa dernière partie : `Default.aspx.vb` est du code serveur, pas une page.
+
+Les teintes sont celles de la coloration syntaxique du comparateur, donc les deux familles de
+l'identité, vert et gris-bleu ; seuls les fichiers qui ne se lisent pas, binaires et archives,
+empruntent le rouge sourd. La légende complète, icône par icône et extension par extension, est
+dans l'onglet Aide.
+
+La barre de filtres se lit sur trois niveaux, du plus utilisé au moins utilisé : la recherche, les
+quatre pastilles de statut (marqueur, mot entier, nombre), puis les filtres avancés - contenu,
+extensions, dates, dossier - repliés tant qu'on ne s'en sert pas, avec le nombre de filtres actifs
+rappelé sur le repli pour qu'aucun ne se cache.
+
+## Aide intégrée
+
+L'onglet « Aide » documente l'application depuis l'application : à quoi elle sert, un plan
+cliquable de l'écran, le parcours complet en neuf étapes, les quatre statuts, la barre de filtres,
+l'arborescence, le comparateur, le bandeau, la destination AVMDF, les contrôles préalables, le
+rapport, l'historique, le tableau de bord, les réglages, les raccourcis, les garanties, un guide de
+dépannage et un glossaire.
+
+Parti pris : **montrer plutôt que décrire**. Les morceaux d'interface y sont reproduits avec leurs
+vraies classes CSS, donc avec leurs vraies couleurs et leurs vrais glyphes. Le jour où une teinte
+de statut change, l'aide change avec elle. Les reproductions sont inertes (`.aide-demo`), seule la
+navigation clique.
 
 ## Versions archivées d'un fichier
 
@@ -274,9 +331,31 @@ avant la première écriture et dit quoi faire : recycler le pool ou déposer un
 Le dépôt automatique de `app_offline.htm` reste disponible en option dans les réglages, désactivé
 par défaut.
 
+## Mise en production sans archivage
+
+Toutes les mises en production ne méritent pas leur dossier d'archives : une feuille de style, une
+correction d'affichage, une retouche sans enjeu. La case **Archiver** du bandeau, cochée par
+défaut, se décoche pour un passage. Le reste ne change pas : la demande et le dossier de sprint
+restent obligatoires, le manifeste et le récapitulatif y sont écrits, l'empreinte de chaque version
+remplacée y figure, et le passage apparaît dans l'historique et le tableau de bord. Seule la copie
+de sauvegarde n'a pas lieu.
+
+Le choix se voit à chaque étape : un pavé `SANS AVMDF` dans le bandeau, un avertissement dans les
+contrôles préalables avec la liste des fichiers concernés, un encart rouge dans la confirmation,
+une ligne dédiée dans le récapitulatif, une étiquette `sans AVMDF` dans l'historique, et une ligne
+`ALERTE` au journal. Le manifeste porte `"archivage": false` et chaque entrée touchée
+`"sansArchive": true`.
+
+Conséquence assumée : **le retour arrière est refusé sur ces passages**, avec un message qui
+distingue « rien n'a jamais été archivé » de « l'archive a disparu ». La case revient d'elle-même à
+« cochée » après chaque mise en production réelle : le choix se refait à chaque passage, il ne se
+subit pas. Un lot mélangeant fichiers sans enjeu et fichiers à conserver se traite en deux
+passages, faute de quoi le manifeste ne dirait plus s'il est réversible.
+
 ## Ce que l'outil ne fait jamais
 
-- déployer sans avoir archivé la version écrasée ;
+- déployer sans avoir archivé la version écrasée, hors renoncement explicite tracé dans le
+  manifeste (voir ci-dessus) ;
 - écraser une archive déjà présente dans un sprint - la version « avant modification » d'origine
   gagne toujours, un second passage la conserve ;
 - ré-encoder, reformater ou normaliser les fins de ligne : la copie est binaire, octet pour octet ;

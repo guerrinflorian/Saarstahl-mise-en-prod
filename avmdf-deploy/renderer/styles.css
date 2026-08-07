@@ -25,11 +25,21 @@
   --accent-voile: rgba(171, 208, 131, 0.1);
   --sur-accent: #14180f;
 
-  /* Statuts */
+  /* Statuts. Les variantes voilée et bordure sont écrites en rgba plutôt que
+     dérivées : Chromium 108, embarqué pour Windows Server 2012 R2, ne connaît
+     ni color-mix() ni la syntaxe de couleur relative. */
   --modifie: #8fa6b8;
+  --modifie-voile: rgba(143, 166, 184, 0.13);
+  --modifie-bord: rgba(143, 166, 184, 0.42);
   --nouveau: #abd083;
+  --nouveau-voile: rgba(171, 208, 131, 0.13);
+  --nouveau-bord: rgba(171, 208, 131, 0.42);
   --orphelin: #c08c84;
+  --orphelin-voile: rgba(192, 140, 132, 0.13);
+  --orphelin-bord: rgba(192, 140, 132, 0.42);
   --identique: #66727d;
+  --identique-voile: rgba(102, 114, 125, 0.14);
+  --identique-bord: rgba(102, 114, 125, 0.45);
 
   /* Diff */
   --diff-ajout: #1c2617;
@@ -231,6 +241,28 @@ textarea {
   height: 21px;
   padding: 0 7px;
   font-size: 12px;
+}
+
+/* Bouton carré qui ne porte qu'une icône. */
+.btn-carre {
+  width: var(--hauteur-controle);
+  padding: 0;
+}
+
+.btn-mini.btn-carre {
+  width: 21px;
+}
+
+/* Icônes vectorielles : la couleur vient de l'élément qui les porte. */
+.icone {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 input[type="text"],
@@ -587,6 +619,14 @@ label {
   background: var(--accent);
   color: var(--sur-accent);
   font-weight: 700;
+}
+
+/* L'archivage écarté est une exception : elle se voit, sans crier. */
+.bandeau-etat.sans-archive {
+  border: 1px solid var(--danger-bord);
+  background: var(--danger-fond);
+  color: var(--danger);
+  font-weight: 600;
 }
 
 /* --------------------------------------------------------------------------
@@ -956,11 +996,11 @@ label {
    ========================================================================== */
 
 .filtres {
-  padding: 6px 8px;
+  padding: 8px;
   border-bottom: 1px solid var(--separateur);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 7px;
 }
 
 .filtres-ligne {
@@ -969,9 +1009,33 @@ label {
   gap: 5px;
 }
 
+/* Recherche : la loupe est posée dans le champ, le mode reste à l'étroit pour
+   laisser la place au texte cherché. */
 .filtres-recherche {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.filtres-recherche input[type="search"] {
   flex: 1;
   min-width: 0;
+  padding-left: 26px;
+}
+
+.filtres-loupe {
+  position: absolute;
+  left: 7px;
+  color: var(--texte-faible);
+  pointer-events: none;
+}
+
+.filtres-mode {
+  flex: none;
+  width: 84px;
+  padding: 0 4px;
+  color: var(--texte-attenue);
 }
 
 .filtres-erreur {
@@ -992,70 +1056,136 @@ label {
   color: var(--texte-attenue);
 }
 
-.filtres-statuts {
-  display: flex;
+/* Statuts : quatre pastilles en deux colonnes. Marqueur, mot entier, nombre.
+   Éteinte, la pastille reste lisible mais s'efface ; allumée, elle prend la
+   teinte de son statut. */
+.statuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
 }
 
-.bascule {
-  display: inline-flex;
+.statut {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 6px 1px 4px;
+  gap: 6px;
+  min-width: 0;
+  height: 25px;
+  padding: 0 8px 0 6px;
+  background: var(--champ);
   border: 1px solid var(--separateur);
   border-radius: var(--rayon);
-  background: var(--champ);
+  color: var(--texte-faible);
   cursor: pointer;
-  user-select: none;
-  font-size: 12px;
+  text-align: left;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.bascule:hover {
+.statut:hover {
   border-color: var(--separateur-clair);
-}
-
-.bascule input[type="checkbox"] {
-  width: 12px;
-  height: 12px;
-}
-
-.bascule-nombre {
-  font-family: var(--police-mono);
   color: var(--texte-attenue);
 }
 
-.marqueur {
-  display: inline-block;
-  width: 12px;
+.statut-marqueur {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  line-height: 15px;
   text-align: center;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.28);
   font-family: var(--police-mono);
+  font-size: 11px;
   font-weight: 700;
 }
 
-.marqueur-modifie,
-.bascule-modifie .marqueur,
-.compteur-modifie {
+.statut-nom {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.statut-nombre {
+  flex: none;
+  font-family: var(--police-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statut.actif {
+  color: var(--texte);
+}
+
+.statut.actif.statut-modifie {
+  background: var(--modifie-voile);
+  border-color: var(--modifie-bord);
+}
+.statut.actif.statut-modifie .statut-marqueur {
   color: var(--modifie);
 }
-.marqueur-nouveau,
-.bascule-nouveau .marqueur,
-.compteur-nouveau {
+.statut.actif.statut-nouveau {
+  background: var(--nouveau-voile);
+  border-color: var(--nouveau-bord);
+}
+.statut.actif.statut-nouveau .statut-marqueur {
   color: var(--nouveau);
 }
-.marqueur-orphelin,
-.bascule-orphelin .marqueur,
-.compteur-orphelin {
+.statut.actif.statut-orphelin {
+  background: var(--orphelin-voile);
+  border-color: var(--orphelin-bord);
+}
+.statut.actif.statut-orphelin .statut-marqueur {
   color: var(--orphelin);
 }
-.marqueur-identique,
-.bascule-identique .marqueur,
-.compteur-identique {
+.statut.actif.statut-identique {
+  background: var(--identique-voile);
+  border-color: var(--identique-bord);
+}
+.statut.actif.statut-identique .statut-marqueur {
   color: var(--identique);
 }
 
-.filtres-dossier {
+/* Filtres avancés : repliés tant qu'on ne s'en sert pas, avec le nombre de
+   filtres actifs rappelé sur le repli. */
+.filtres-avances {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--texte-attenue);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.filtres-avances:hover {
+  color: var(--texte);
+}
+
+.filtres-avances .pastille {
+  margin-left: 0;
+}
+
+.filtres-panneau {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--champ);
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+}
+
+.filtres-panneau select,
+.filtres-panneau input[type="text"],
+.filtres-panneau input[type="date"] {
   flex: 1;
-  min-width: 80px;
+  min-width: 0;
 }
 
 .marque,
@@ -1076,8 +1206,8 @@ select.marque {
   gap: 5px;
   font-size: 12px;
   color: var(--texte-attenue);
-  padding-top: 3px;
-  border-top: 1px dotted var(--separateur);
+  padding-top: 6px;
+  border-top: 1px solid var(--separateur);
 }
 
 .filtres-resume > span:first-child {
@@ -1087,6 +1217,33 @@ select.marque {
 .filtres-resume strong {
   color: var(--texte);
   font-family: var(--police-mono);
+}
+
+/* Marqueurs de statut, partagés par l'arborescence, les récapitulatifs et
+   l'aide. */
+.marqueur {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  font-family: var(--police-mono);
+  font-weight: 700;
+}
+
+.marqueur-modifie,
+.compteur-modifie {
+  color: var(--modifie);
+}
+.marqueur-nouveau,
+.compteur-nouveau {
+  color: var(--nouveau);
+}
+.marqueur-orphelin,
+.compteur-orphelin {
+  color: var(--orphelin);
+}
+.marqueur-identique,
+.compteur-identique {
+  color: var(--identique);
 }
 
 /* Popover ----------------------------------------------------------------- */
@@ -1200,11 +1357,11 @@ select.marque {
   position: absolute;
   left: 0;
   right: 0;
-  height: 22px;
+  height: 24px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding-right: 8px;
+  gap: 6px;
+  padding: 0 8px 0 6px;
   cursor: default;
   white-space: nowrap;
   user-select: none;
@@ -1223,16 +1380,100 @@ select.marque {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Guides d'indentation : un trait discret par niveau, tracé exactement sous
+   le décalage de la ligne. Sans eux, une arborescence profonde se lit mal. */
+.ligne-indent {
+  flex: none;
+  align-self: stretch;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--separateur-clair) 0,
+    var(--separateur-clair) 1px,
+    transparent 1px,
+    transparent 13px
+  );
+}
+
 .ligne-case {
   flex: none;
 }
 
 .chevron {
   display: inline-block;
-  width: 12px;
+  width: 11px;
+  flex: none;
   text-align: center;
   color: var(--texte-faible);
   font-size: 10px;
+}
+
+.chevron-vide {
+  visibility: hidden;
+}
+
+.icone-dossier {
+  color: var(--texte-attenue);
+}
+
+/* Familles de fichiers : une forme et une teinte par type. Les teintes sont
+   celles de la coloration syntaxique du comparateur, donc les deux familles de
+   l'identité - vert et gris-bleu. Seuls les fichiers qui ne se lisent pas
+   empruntent le rouge sourd. */
+.icone-fichier {
+  stroke-width: 1.15;
+  color: var(--texte-faible);
+}
+
+.famille-page {
+  color: #96bd7c;
+}
+.famille-code {
+  color: var(--accent);
+}
+.famille-script {
+  color: #c9d2a6;
+}
+.famille-composant {
+  color: #bcd09c;
+}
+.famille-style {
+  color: #a5bfce;
+}
+.famille-donnees {
+  color: #9fb0bd;
+}
+.famille-requete {
+  color: #8fa6b8;
+}
+.famille-terminal {
+  color: #a5bfce;
+}
+.famille-image {
+  color: #8fa6b8;
+}
+.famille-texte {
+  color: #9fb0bd;
+}
+.famille-tableur {
+  color: #8fa6b8;
+}
+.famille-document {
+  color: #8fa6b8;
+}
+.famille-archive {
+  color: var(--orphelin);
+}
+.famille-binaire {
+  color: var(--orphelin);
+}
+.famille-police {
+  color: #7e8b96;
+}
+.famille-media {
+  color: #7e8b96;
+}
+.famille-inconnu {
+  color: var(--texte-faible);
 }
 
 .ligne-nom {
@@ -1243,6 +1484,15 @@ select.marque {
 .ligne-nom.dossier {
   color: var(--texte);
   font-weight: 600;
+}
+
+/* Le statut d'un fichier est rejeté à droite : les noms s'alignent, et l'œil
+   ne relit qu'une seule colonne pour retrouver les marqueurs. */
+.ligne-statut {
+  flex: none;
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 12px;
 }
 
 .ligne-compteurs {
@@ -2572,4 +2822,542 @@ select {
   bottom: -1px;
   width: 7px;
   border-bottom: 1px solid rgba(133, 151, 165, 0.3);
+}
+
+/* ==========================================================================
+   Aide
+
+   L'aide reproduit des morceaux d'interface avec leurs vraies classes, donc
+   avec leurs vraies couleurs : ce qui est expliqué ressemble exactement à ce
+   qui est à l'écran. Les reproductions sont inertes, seule la navigation clique.
+   ========================================================================== */
+
+.aide {
+  display: grid;
+  grid-template-columns: 234px minmax(0, 1fr);
+  min-height: 0;
+  background: var(--fond);
+}
+
+/* Sommaire ---------------------------------------------------------------- */
+
+.aide-sommaire {
+  overflow: auto;
+  padding: 14px 10px 40px;
+  background: var(--panneau);
+  border-right: 1px solid var(--separateur);
+}
+
+.aide-sommaire-titre {
+  padding: 0 8px 8px;
+  color: var(--texte-faible);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.aide-groupe {
+  margin-bottom: 12px;
+}
+
+.aide-groupe-titre {
+  padding: 0 8px 3px;
+  color: var(--texte-attenue);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.aide-lien {
+  display: block;
+  width: 100%;
+  padding: 3px 8px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0 2px 2px 0;
+  color: var(--texte-attenue);
+  cursor: pointer;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.aide-lien:hover {
+  background: var(--panneau-releve);
+  color: var(--texte);
+}
+
+.aide-lien.actif {
+  background: var(--accent-voile);
+  border-left-color: var(--accent);
+  color: var(--texte);
+  font-weight: 600;
+}
+
+/* Contenu ----------------------------------------------------------------- */
+
+.aide-contenu {
+  position: relative;
+  overflow: auto;
+  padding: 22px 26px 70px;
+}
+
+.aide-section {
+  max-width: 880px;
+  margin-bottom: 34px;
+  scroll-margin-top: 14px;
+}
+
+.aide-section h2 {
+  margin: 0 0 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--separateur);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.aide-section h3 {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texte-attenue);
+}
+
+.aide-section p {
+  margin: 8px 0;
+  max-width: 76ch;
+}
+
+.aide-chapeau {
+  margin: 8px 0 14px !important;
+  color: var(--texte-attenue);
+  font-size: 13.5px;
+}
+
+.aide-section .encart {
+  margin: 12px 0;
+}
+
+.aide-liste {
+  margin: 8px 0;
+  padding-left: 18px;
+  max-width: 76ch;
+}
+
+.aide-liste li {
+  margin-bottom: 7px;
+}
+
+.aide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.aide-fin {
+  margin-top: 22px;
+  padding: 16px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-radius: 5px;
+}
+
+.aide-oui {
+  color: var(--accent);
+}
+
+.aide-non,
+.aide-alerte-texte {
+  color: var(--alerte);
+}
+
+.aide-part,
+.aide-danger-texte {
+  color: var(--danger);
+}
+
+/* Touches du clavier ------------------------------------------------------ */
+
+.aide-touche {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  background: var(--panneau-releve);
+  border: 1px solid var(--separateur-clair);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  color: var(--texte);
+  font-family: var(--police-mono);
+  font-size: 11px;
+  line-height: 17px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Tableaux de repères ----------------------------------------------------- */
+
+.aide-tableau {
+  margin: 10px 0 4px;
+}
+
+.aide-tableau td:first-child {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.aide-tableau td {
+  vertical-align: top;
+}
+
+/* Démonstrations ---------------------------------------------------------- */
+
+.aide-demo {
+  margin: 12px 0;
+}
+
+.aide-demo-scene {
+  display: inline-block;
+  max-width: 100%;
+  padding: 12px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-radius: 5px;
+}
+
+.aide-demo-large .aide-demo-scene {
+  display: block;
+}
+
+.aide-demo figcaption {
+  margin-top: 6px;
+  color: var(--texte-faible);
+  font-size: 12px;
+  max-width: 76ch;
+}
+
+/* Rien de ce qui est reproduit ne réagit : c'est une illustration. */
+.aide-demo input,
+.aide-demo select,
+.aide-demo .btn,
+.aide-demo .onglet,
+.aide-demo .statut,
+.aide-demo .ligne,
+.aide-demo .menu-entree,
+.aide-demo .diff-repli,
+.aide-tableau .btn,
+.aide-tableau .onglet,
+.aide-tableau input {
+  pointer-events: none;
+}
+
+/* Le schéma d'ensemble ---------------------------------------------------- */
+
+.aide-flux {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin: 14px 0 0;
+  flex-wrap: wrap;
+}
+
+.aide-flux-bas {
+  margin-top: 10px;
+}
+
+.aide-flux-boite {
+  flex: 1;
+  min-width: 210px;
+  padding: 12px 14px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-left: 3px solid var(--separateur-clair);
+  border-radius: 5px;
+}
+
+.aide-flux-archive {
+  border-left-color: var(--accent-sourd);
+}
+
+.aide-flux-titre {
+  margin-bottom: 3px;
+  font-weight: 600;
+}
+
+.aide-flux-note {
+  margin-top: 5px;
+  color: var(--texte-faible);
+  font-size: 12px;
+}
+
+.aide-flux-fleche {
+  display: flex;
+  flex: none;
+  max-width: 190px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.aide-flux-verbe {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.aide-flux-fleche .fleche {
+  font-size: 18px;
+}
+
+/* Plan cliquable de l'écran ----------------------------------------------- */
+
+.aide-plan {
+  display: grid;
+  grid-template-columns: minmax(150px, 260px) minmax(0, 1fr);
+  gap: 6px;
+  margin: 14px 0 6px;
+  padding: 8px;
+  background: var(--panneau);
+  border: 1px solid var(--separateur);
+  border-radius: 6px;
+  grid-template-areas:
+    'entete  entete'
+    'filtres diff'
+    'arbre   diff'
+    'ignores diff'
+    'bandeau bandeau';
+}
+
+.aire-entete {
+  grid-area: entete;
+}
+.aire-filtres {
+  grid-area: filtres;
+}
+.aire-arbre {
+  grid-area: arbre;
+}
+.aire-ignores {
+  grid-area: ignores;
+}
+.aire-diff {
+  grid-area: diff;
+}
+.aire-bandeau {
+  grid-area: bandeau;
+}
+
+.aide-zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 10px 34px;
+  background: var(--fond);
+  border: 1px solid var(--separateur);
+  border-radius: 4px;
+  color: var(--texte-attenue);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.aide-zone:hover {
+  background: var(--panneau-releve);
+  border-color: var(--accent-sourd);
+}
+
+.aide-numero {
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  width: 17px;
+  height: 17px;
+  background: var(--accent-fond);
+  border: 1px solid var(--accent-sourd);
+  border-radius: 50%;
+  color: var(--accent);
+  font-family: var(--police-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+
+.aide-zone-nom {
+  color: var(--texte);
+  font-weight: 600;
+}
+
+.aide-zone-texte {
+  font-size: 12px;
+  color: var(--texte-faible);
+}
+
+/* Arborescence reproduite ------------------------------------------------- */
+
+.aide-arbre {
+  min-width: 320px;
+  background: var(--panneau);
+}
+
+.aide-arbre .ligne {
+  position: static;
+}
+
+/* Menu contextuel reproduit ----------------------------------------------- */
+
+.aide-menu {
+  min-width: 250px;
+  padding: 4px;
+  background: var(--panneau-releve);
+  border: 1px solid var(--separateur-clair);
+  border-radius: var(--rayon);
+}
+
+/* Comparateur reproduit --------------------------------------------------- */
+
+.aide-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: var(--police-mono);
+  font-size: 12px;
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+  overflow: hidden;
+}
+
+.aide-diff-colonne {
+  min-width: 0;
+  border-right: 1px solid var(--separateur);
+}
+
+.aide-diff-colonne:last-child {
+  border-right: none;
+}
+
+.aide-diff .diff-ligne {
+  overflow: hidden;
+}
+
+/* Légende des icônes de fichier ------------------------------------------- */
+
+.aide-icone-vedette {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--champ);
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+}
+
+.aide-icone-vedette .icone {
+  width: 16px;
+  height: 16px;
+}
+
+.aide-icones-ligne {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.aide-extensions {
+  display: inline-block;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--texte-attenue);
+  word-break: break-word;
+}
+
+.aide-signe {
+  display: inline-block;
+  width: 18px;
+  text-align: center;
+  font-family: var(--police-mono);
+  font-weight: 700;
+  color: var(--texte-faible);
+}
+
+.aide-signe.plus {
+  color: var(--nouveau);
+}
+.aide-signe.moins {
+  color: var(--orphelin);
+}
+.aide-signe.tilde,
+.aide-signe.espace {
+  color: var(--modifie);
+}
+
+/* Bandeau reproduit ------------------------------------------------------- */
+
+.aide-bandeau {
+  height: auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-radius: var(--rayon);
+}
+
+/* Étapes du tutoriel ------------------------------------------------------ */
+
+.aide-etape {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--separateur);
+}
+
+.aide-etape:last-of-type {
+  border-bottom: none;
+}
+
+.aide-etape-numero {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  background: var(--accent-fond);
+  border: 1px solid var(--accent-sourd);
+  border-radius: 50%;
+  color: var(--accent);
+  font-family: var(--police-mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+}
+
+.aide-etape-corps {
+  min-width: 0;
+  flex: 1;
+}
+
+.aide-etape-corps h3 {
+  margin: 3px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--texte);
+}
+
+.aide-etape-corps p {
+  margin: 4px 0;
+}
+
+@media (max-width: 1000px) {
+  .aide {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .aide-contenu {
+    padding: 18px 16px 60px;
+  }
 }

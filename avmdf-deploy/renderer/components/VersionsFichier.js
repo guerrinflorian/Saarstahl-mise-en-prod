@@ -14,7 +14,7 @@ const LIBELLES_ACTION = {
 };
 
 /**
- * Toutes les versions « avant modification » d'un fichier, tous demandes et
+ * Toutes les versions « avant modification » d'un fichier, toutes demandes et
  * sprints confondus : on les compare à la production actuelle et on peut en
  * remettre une en place.
  *
@@ -167,7 +167,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
                               `}
                         </div>
                         <div class="historique-diff">
-                          <${VueDiff} diff=${diff} onOuvrirExterne=${() => {}} />
+                          <${VueDiff} diff=${diff} onOuvrirExterne=${() => {}} inversable=${false} />
                         </div>
                       `
                     : html`<div class="etat-vide">

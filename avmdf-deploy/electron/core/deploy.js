@@ -7,7 +7,9 @@
  * Module Node pur : aucune dépendance à Electron ni au DOM.
  *
  * Règles non négociables :
- *   - rien n'est écrasé sans avoir été archivé au préalable, aucune exception ;
+ *   - rien n'est écrasé sans avoir été archivé au préalable, sauf renoncement
+ *     explicite pour le passage entier (`plan.archiver` à faux), qui est alors
+ *     inscrit dans le manifeste et interdit le retour arrière ;
  *   - la copie est binaire, octet pour octet : aucun ré-encodage, aucune
  *     normalisation des fins de ligne ;
  *   - toute destination est vérifiée comme étant sous la racine de production
@@ -269,7 +271,26 @@ async function preflight(plan, options = {}) {
     );
   }
 
-  // 5. web.config
+  // 5. Archivage écarté : ce passage ne sera pas réversible.
+  if (plan.archiver === false && plan.operation !== OPERATION_SUPPRESSION) {
+    const remplaces = [];
+    for (const fichier of plan.fichiers) {
+      if (await existe(joindreRelatif(plan.racineProd, fichier.chemin))) remplaces.push(fichier.chemin);
+    }
+    if (remplaces.length) {
+      problemes.push(
+        probleme(
+          AVERTISSEMENT,
+          'sans-archive',
+          `Archivage AVMDF écarté : ${remplaces.length} version(s) de production seront écrasées sans copie de sauvegarde.`,
+          'Le retour arrière sera impossible pour ce passage. Le manifeste sera écrit malgré tout, avec l\'empreinte de ce qui a été remplacé.',
+          remplaces
+        )
+      );
+    }
+  }
+
+  // 6. web.config
   const sensibles = plan.fichiers.filter((f) => /(^|\\)web\.config$/i.test(f.chemin));
   if (sensibles.length) {
     problemes.push(
@@ -283,7 +304,7 @@ async function preflight(plan, options = {}) {
     );
   }
 
-  // 6. Espace disque
+  // 7. Espace disque
   const octetsNecessaires = plan.fichiers.reduce(
     (total, fichier) => total + (fichier.local ? fichier.local.taille : 0) + (fichier.prod ? fichier.prod.taille : 0),
     0
@@ -414,6 +435,7 @@ async function executer(plan, options = {}) {
     racineLocale: plan.racineLocale,
     racineProd: plan.racineProd,
     dossierSauvegarde: plan.dossierSauvegarde,
+    archivage: plan.archiver !== false,
     simulation,
     annule: signal.annule,
     fichiers: resultats
@@ -433,6 +455,7 @@ async function executer(plan, options = {}) {
 
 async function traiterFichier(fichier, plan, contexte) {
   const { simulation, extensionsTexte, ignorerEspaces, invaliderCache } = contexte;
+  const archiver = plan.archiver !== false;
   const cheminProd = joindreRelatif(plan.racineProd, fichier.chemin);
   const cheminLocal = fichier.local ? fichier.local.absolu : joindreRelatif(plan.racineLocale, fichier.chemin);
   const cheminSauvegarde = joindreRelatif(plan.dossierSauvegarde, fichier.chemin);
@@ -450,33 +473,44 @@ async function traiterFichier(fichier, plan, contexte) {
     lignesSupprimees: null,
     erreur: null,
     archiveNonRemplace: false,
-    sauvegardeConservee: false
+    sauvegardeConservee: false,
+    sansArchive: false
   };
 
   try {
     const presentEnProd = await existe(cheminProd);
 
-    // 1. Archivage de la version écrasée. Sans exception : si l'archivage
-    //    échoue, on ne touche pas au fichier de production.
+    // 1. Archivage de la version écrasée. Si l'archivage échoue, on ne touche
+    //    pas au fichier de production.
+    //
+    //    L'archivage peut être écarté pour un passage entier (`plan.archiver`
+    //    à faux) : une feuille de style ou une retouche mineure ne mérite pas
+    //    toujours son dossier AVMDF. L'empreinte et la taille de la version
+    //    écrasée restent relevées - le manifeste dit alors ce qui a été perdu,
+    //    même s'il ne peut plus le rendre.
     if (presentEnProd) {
       if (!suppression) entree.action = ACTION_REMPLACEMENT;
       const etatProd = await fsp.stat(cheminLong(cheminProd));
       entree.tailleAvant = etatProd.size;
       entree.hashAvant = await hashFichier(cheminProd);
 
-      if (!estSousRacine(cheminSauvegarde, plan.racineAvmdf)) {
-        throw new Error('destination d\'archivage hors du dossier d\'archives');
-      }
+      if (archiver) {
+        if (!estSousRacine(cheminSauvegarde, plan.racineAvmdf)) {
+          throw new Error('destination d\'archivage hors du dossier d\'archives');
+        }
 
-      // Un sprint peut être complété en plusieurs passages. La version « avant
-      // modification » du sprint est celle du premier passage : on ne l'écrase
-      // jamais, sinon l'état d'origine de la demande serait définitivement perdu.
-      const dejaArchive = await existe(cheminSauvegarde);
-      if (!simulation && !dejaArchive) {
-        await copierAvecDate(cheminProd, cheminSauvegarde);
+        // Un sprint peut être complété en plusieurs passages. La version « avant
+        // modification » du sprint est celle du premier passage : on ne l'écrase
+        // jamais, sinon l'état d'origine de la demande serait définitivement perdu.
+        const dejaArchive = await existe(cheminSauvegarde);
+        if (!simulation && !dejaArchive) {
+          await copierAvecDate(cheminProd, cheminSauvegarde);
+        }
+        entree.sauvegarde = fichier.chemin;
+        entree.sauvegardeConservee = dejaArchive;
+      } else {
+        entree.sansArchive = true;
       }
-      entree.sauvegarde = fichier.chemin;
-      entree.sauvegardeConservee = dejaArchive;
     }
 
     if (suppression) {
@@ -608,6 +642,12 @@ function redigerRecapitulatif(manifeste) {
       (resume.echecs ? `, **${resume.echecs} en échec**` : '')
   );
   lignes.push(`- **Lignes** : +${resume.lignesAjoutees} −${resume.lignesSupprimees}`);
+  if (manifeste.archivage === false) {
+    lignes.push(
+      '- **Archivage AVMDF** : écarté pour ce passage. Les versions remplacées n\'ont pas été ' +
+        'conservées ; leur empreinte figure dans le manifeste, mais le retour arrière est impossible.'
+    );
+  }
   if (manifeste.simulation) lignes.push('- **Simulation** : aucun fichier n\'a été écrit.');
   lignes.push('');
   lignes.push('| Fichier | Action | Lignes | Sauvegarde | Résultat |');
@@ -617,7 +657,9 @@ function redigerRecapitulatif(manifeste) {
       fichier.lignesAjoutees === null ? '-' : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`;
     const sauvegarde = fichier.sauvegarde
       ? '`' + fichier.sauvegarde + '`' + (fichier.sauvegardeConservee ? ' (passage précédent)' : '')
-      : '-';
+      : fichier.sansArchive
+        ? '**non archivé**'
+        : '-';
     lignes.push(
       `| \`${fichier.chemin}\` | ${fichier.action} | ${lignesTexte} | ${sauvegarde} | ` +
         `${fichier.erreur ? '**échec : ' + fichier.erreur + '**' : 'ok'} |`
@@ -751,12 +793,19 @@ async function preparerRestauration(manifeste, options = {}) {
     );
   }
   if (sauvegardesManquantes.length) {
+    // Deux causes très différentes : soit l'archivage avait été écarté à la
+    // demande, soit l'archive a disparu depuis. Le message le dit.
+    const sansArchivage = manifeste.archivage === false;
     problemes.push(
       probleme(
         BLOQUANT,
         'sauvegarde',
-        `${sauvegardesManquantes.length} sauvegarde(s) sont introuvables dans ${manifeste.dossierSauvegarde}.`,
-        'Sans la version archivée, le retour arrière n\'a rien à restaurer.',
+        sansArchivage
+          ? `Ce déploiement a été fait sans archivage AVMDF : ${sauvegardesManquantes.length} fichier(s) n'ont aucune version « avant modification ».`
+          : `${sauvegardesManquantes.length} sauvegarde(s) sont introuvables dans ${manifeste.dossierSauvegarde}.`,
+        sansArchivage
+          ? 'Rien n\'a été conservé de l\'état antérieur : le retour arrière est impossible pour ce passage. Le manifeste garde l\'empreinte des versions remplacées, à défaut de leur contenu.'
+          : 'Sans la version archivée, le retour arrière n\'a rien à restaurer.',
         sauvegardesManquantes
       )
     );

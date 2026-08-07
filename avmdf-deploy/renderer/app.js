@@ -13,6 +13,7 @@ import { RapportDeploiement } from './components/RapportDeploiement.js';
 import { Historique } from './components/Historique.js';
 import { Journal } from './components/Journal.js';
 import { TableauDeBord } from './components/TableauDeBord.js';
+import { Aide } from './components/Aide.js';
 import { VersionsFichier } from './components/VersionsFichier.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { joindreChemin } from './components/chemins.js';
@@ -54,6 +55,9 @@ function App() {
   const [diff, setDiff] = useState({ etat: 'vide' });
 
   const [destination, setDestination] = useState(null);
+  // L'archivage AVMDF est le comportement normal. Le décocher est un choix
+  // explicite, refait à chaque passage : il ne survit pas à un déploiement.
+  const [archiver, setArchiver] = useState(true);
   const [versionsDe, setVersionsDe] = useState(null);
   const [deploiement, setDeploiement] = useState(null);
   const [rapport, setRapport] = useState(null);
@@ -384,6 +388,7 @@ function App() {
       demande: destination.demande,
       sprint: destination.sprint,
       operation,
+      archiver,
       simulation: config.options.simulation
     });
     if (!reponse.ok) {
@@ -407,6 +412,7 @@ function App() {
       demande: destination.demande,
       sprint: destination.sprint,
       operation,
+      archiver,
       simulation: config.options.simulation
     });
     if (!reponse.ok) {
@@ -422,6 +428,7 @@ function App() {
     setRapport(reponse);
     if (!reponse.manifeste.simulation) {
       setSelection(new Set());
+      setArchiver(true);
       notifier({
         type: reponse.rapport.echecs ? 'erreur' : 'succes',
         titre: reponse.rapport.echecs
@@ -544,6 +551,13 @@ function App() {
             onEchec=${(reponse) => notifierEchec(reponse, 'Statistiques indisponibles.')}
             onOuvrirHistorique=${() => setEcran('historique')}
           />`
+        : vue === 'aide'
+        ? html`<${Aide}
+            onVue=${setVue}
+            onOuvrirReglages=${() => setEcran('reglages')}
+            onOuvrirHistorique=${() => setEcran('historique')}
+            onOuvrirJournal=${() => setEcran('journal')}
+          />`
         : html`
       <div class="corps" style=${'grid-template-columns:' + largeurPanneau + 'px 5px minmax(0, 1fr)'}>
         <${ArbreFichiers}
@@ -600,6 +614,8 @@ function App() {
         ? html`<${BandeauDeploiement}
             simulation=${config.options.simulation}
             onSimulation=${changerSimulation}
+            archiver=${archiver}
+            onArchiver=${setArchiver}
             selection=${resumeSelection}
             destination=${destination}
             modeLibre=${modeLibre}

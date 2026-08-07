@@ -106,7 +106,18 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
               <tr><th>Opération</th><td>${suppression ? 'suppression de fichiers orphelins' : 'mise en production'}</td></tr>
               <tr><th>Auteur</th><td>${resume.auteur || '-'}</td></tr>
               <tr><th>Destination production</th><td class="mono">${resume.racineProd}</td></tr>
-              <tr><th>Dossier de sauvegarde</th><td class="mono">${resume.dossierSauvegarde}</td></tr>
+              <tr>
+                <th>Archivage AVMDF</th>
+                <td>
+                  ${resume.archiver === false
+                    ? html`<span class="rouge">écarté pour ce passage</span>`
+                    : 'les versions remplacées sont conservées'}
+                </td>
+              </tr>
+              <tr>
+                <th>${resume.archiver === false ? 'Dossier du manifeste' : 'Dossier de sauvegarde'}</th>
+                <td class="mono">${resume.dossierSauvegarde}</td>
+              </tr>
               <tr>
                 <th>Fichiers</th>
                 <td>
@@ -146,6 +157,15 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
                 `
               : null}
           </div>
+
+          ${resume.archiver === false && !suppression
+            ? html`<div class="encart encart-danger" style="margin-top:14px">
+                <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
+                écrasées sans être conservées. Le manifeste sera écrit et gardera leur empreinte, mais
+                <strong>ce passage ne pourra pas être annulé</strong>. Recochez « Archiver » dans le
+                bandeau du bas pour revenir au comportement normal.
+              </div>`
+            : null}
 
           ${resume.simulation
             ? html`<div class="encart" style="margin-top:14px">

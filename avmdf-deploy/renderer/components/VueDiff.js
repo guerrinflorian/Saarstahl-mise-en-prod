@@ -135,19 +135,25 @@ function contenu(cote, espacesVisibles, jetons) {
 
 /**
  * Panneau droit : comparaison ligne à ligne.
- * Production à gauche - l'existant ; local à droite - ce qui va partir.
+ *
+ * Par défaut le local est à gauche - ce qui va partir - et la production à
+ * droite - l'existant. Le bouton ⇄ intervertit les deux côtés, et le choix est
+ * mémorisé. Ce que veulent dire les signes ne bouge pas pour autant : « + »
+ * reste ce qui sera ajouté en production et « − » ce qui en sera retiré, quel
+ * que soit l'ordre des colonnes.
  *
  * La précision sur les blancs est un point d'honneur : les lignes qui ne
  * diffèrent que par les espaces sont signalées, et un mode d'affichage rend
  * chaque espace, tabulation et espace insécable visible.
  */
-export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
+export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, inversable = true }) {
   const prefs = useMemo(lirePrefs, []);
   const [unifie, setUnifie] = useState(() => Boolean(prefs.unifie));
   const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
   const [espacesVisibles, setEspacesVisibles] = useState(() => Boolean(prefs.espaces));
   const [couleur, setCouleur] = useState(() => prefs.couleur !== false);
   const [guidesVisibles, setGuidesVisibles] = useState(() => prefs.guides !== false);
+  const [localAGauche, setLocalAGauche] = useState(() => prefs.localAGauche !== false);
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
@@ -165,12 +171,19 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
     try {
       localStorage.setItem(
         'avmdf.diff',
-        JSON.stringify({ unifie, synchronise, espaces: espacesVisibles, couleur, guides: guidesVisibles })
+        JSON.stringify({
+          unifie,
+          synchronise,
+          espaces: espacesVisibles,
+          couleur,
+          guides: guidesVisibles,
+          localAGauche
+        })
       );
     } catch (err) {
       /* stockage local indisponible : les préférences ne survivront pas */
     }
-  }, [unifie, synchronise, espacesVisibles, couleur, guidesVisibles]);
+  }, [unifie, synchronise, espacesVisibles, couleur, guidesVisibles, localAGauche]);
 
   useEffect(() => {
     setReplisOuverts(new Set());
@@ -308,7 +321,10 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
           <div class="etat-vide">
             <div class="etat-vide-titre">Aucun fichier sélectionné</div>
             <div class="etat-vide-texte">
-              La comparaison affiche la production à gauche et vos sources locales à droite.
+              ${inversable && localAGauche
+                ? 'La comparaison affiche vos sources locales à gauche et la production à droite.'
+                : 'La comparaison affiche la production à gauche et vos sources locales à droite.'}
+              ${' '}Le bouton ⇄ intervertit les deux côtés.
             </div>
           </div>
         </div>
@@ -345,6 +361,17 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
 
   const titreGauche = donnees.titreGauche || 'Production';
   const titreDroite = donnees.titreDroite || 'Local';
+
+  // Le diff est toujours calculé dans le sens gauche → droite, c'est-à-dire
+  // production → local : c'est de là que « + » et « − » tiennent leur sens.
+  // Seul l'ordre d'affichage des deux colonnes suit la préférence.
+  const inverse = inversable && localAGauche;
+  const colonnes = [
+    { cote: 'gauche', titre: titreGauche },
+    { cote: 'droite', titre: titreDroite }
+  ];
+  if (inverse) colonnes.reverse();
+
   const texteDiff = donnees.type === 'texte';
   const modifsEspaces = texteDiff ? donnees.compteurs.modificationsEspaces || 0 : 0;
 
@@ -421,6 +448,20 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
               >
                 Changement suivant (F8)
               </button>
+              ${!unifie && inversable
+                ? html`<button
+                    type="button"
+                    class="btn btn-mini"
+                    title=${'Intervertir les deux côtés. Actuellement : ' +
+                    colonnes[0].titre.toLowerCase() +
+                    ' à gauche, ' +
+                    colonnes[1].titre.toLowerCase() +
+                    ' à droite.'}
+                    onClick=${() => setLocalAGauche(!localAGauche)}
+                  >
+                    ⇄ Inverser
+                  </button>`
+                : null}
               <label class="case" title="Aligner le défilement des deux panneaux">
                 <input type="checkbox" checked=${synchronise} onChange=${(e) => setSynchronise(e.target.checked)} />
                 <span>Défilement lié</span>
@@ -559,65 +600,43 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions }) {
                           </div>
                         </div>
                       `
-                    : html`
-                        <div class="diff-colonne">
-                          <div class="diff-titre">
-                            <span>${titreGauche}</span>
-                            ${sousTitre(donnees.gauche)}
+                    : colonnes.map(
+                        (colonne, position) => html`
+                          <div class="diff-colonne" key=${position}>
+                            <div class="diff-titre">
+                              <span>${colonne.titre}</span>
+                              ${sousTitre(donnees[colonne.cote])}
+                            </div>
+                            <div
+                              class="diff-lignes"
+                              ref=${position === 0 ? panneauGauche : panneauDroit}
+                              onScroll=${surDefilement(position === 0 ? panneauDroit : panneauGauche)}
+                            >
+                              ${rangsAffiches.map((rang, index) => {
+                                if (rang.genre === 'repli') {
+                                  return html`<${Repli}
+                                    key=${colonne.cote + 'r' + index}
+                                    rang=${rang}
+                                    onOuvrir=${basculerRepli}
+                                  />`;
+                                }
+                                const cote = rang.ligne[colonne.cote];
+                                return html`<${LigneCote}
+                                  key=${colonne.cote + index}
+                                  cote=${cote}
+                                  type=${rang.ligne.type}
+                                  espaces=${espacesVisibles}
+                                  jetons=${jetons && cote ? jetons[colonne.cote].get(cote.numero) : null}
+                                  guides=${guides && cote ? guides[colonne.cote].get(cote.numero) : null}
+                                  espacesSeuls=${rang.ligne.espacesUniquement}
+                                  surligne=${trouvees[positionTrouvee] === index}
+                                  courante=${changementCourant === index}
+                                />`;
+                              })}
+                            </div>
                           </div>
-                          <div class="diff-lignes" ref=${panneauGauche} onScroll=${surDefilement(panneauDroit)}>
-                            ${rangsAffiches.map(
-                              (rang, index) =>
-                                rang.genre === 'repli'
-                                  ? html`<${Repli} key=${'rg' + index} rang=${rang} onOuvrir=${basculerRepli} />`
-                                  : html`<${LigneCote}
-                                      key=${'g' + index}
-                                      cote=${rang.ligne.gauche}
-                                      type=${rang.ligne.type}
-                                      espaces=${espacesVisibles}
-                                      jetons=${jetons && rang.ligne.gauche
-                                        ? jetons.gauche.get(rang.ligne.gauche.numero)
-                                        : null}
-                                      guides=${guides && rang.ligne.gauche
-                                        ? guides.gauche.get(rang.ligne.gauche.numero)
-                                        : null}
-                                      espacesSeuls=${rang.ligne.espacesUniquement}
-                                      surligne=${trouvees[positionTrouvee] === index}
-                                      courante=${changementCourant === index}
-                                    />`
-                            )}
-                          </div>
-                        </div>
-
-                        <div class="diff-colonne">
-                          <div class="diff-titre">
-                            <span>${titreDroite}</span>
-                            ${sousTitre(donnees.droite)}
-                          </div>
-                          <div class="diff-lignes" ref=${panneauDroit} onScroll=${surDefilement(panneauGauche)}>
-                            ${rangsAffiches.map(
-                              (rang, index) =>
-                                rang.genre === 'repli'
-                                  ? html`<${Repli} key=${'rd' + index} rang=${rang} onOuvrir=${basculerRepli} />`
-                                  : html`<${LigneCote}
-                                      key=${'d' + index}
-                                      cote=${rang.ligne.droite}
-                                      type=${rang.ligne.type}
-                                      espaces=${espacesVisibles}
-                                      jetons=${jetons && rang.ligne.droite
-                                        ? jetons.droite.get(rang.ligne.droite.numero)
-                                        : null}
-                                      guides=${guides && rang.ligne.droite
-                                        ? guides.droite.get(rang.ligne.droite.numero)
-                                        : null}
-                                      espacesSeuls=${rang.ligne.espacesUniquement}
-                                      surligne=${trouvees[positionTrouvee] === index}
-                                      courante=${changementCourant === index}
-                                    />`
-                            )}
-                          </div>
-                        </div>
-                      `}
+                        `
+                      )}
                 </div>
                 ${tronque
                   ? html`<div class="diff-pied">

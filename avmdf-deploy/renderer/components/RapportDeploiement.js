@@ -49,6 +49,14 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
               </div>`
             : null}
 
+          ${manifeste.archivage === false && !simulation
+            ? html`<div class="encart encart-alerte" style="margin-bottom:12px">
+                <strong>Passage effectué sans archivage AVMDF.</strong>
+                Les versions remplacées n'ont pas été conservées : le retour arrière est impossible pour
+                ce déploiement. Le manifeste garde leur empreinte, à défaut de leur contenu.
+              </div>`
+            : null}
+
           ${archivesNonRemplaces.length
             ? html`<div class="encart encart-danger" style="margin-bottom:12px">
                 <strong>${formaterNombre(archivesNonRemplaces.length)} fichier(s) ont été archivés mais PAS
@@ -140,7 +148,9 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                         : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`}
                     </td>
                     <td class="mono">
-                      ${fichier.sauvegarde || '-'}
+                      ${fichier.sansArchive
+                        ? html`<span class="attenue" title="Archivage écarté pour ce passage">non archivé</span>`
+                        : fichier.sauvegarde || '-'}
                       ${fichier.sauvegardeConservee
                         ? html`<span class="attenue" title="Archive d'un passage précédent dans ce sprint"> (déjà archivé)</span>`
                         : null}

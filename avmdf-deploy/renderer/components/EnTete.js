@@ -61,6 +61,15 @@ export function EnTete({
         >
           Tableau de bord
         </button>
+        <button
+          type="button"
+          class=${'onglet' + (vue === 'aide' ? ' actif' : '')}
+          aria-current=${vue === 'aide' ? 'page' : 'false'}
+          title="Comprendre l'interface, les statuts, le déroulé d'une mise en production"
+          onClick=${() => onVue('aide')}
+        >
+          Aide
+        </button>
       </nav>
 
       ${vue === 'analyse'

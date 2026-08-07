@@ -135,7 +135,7 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
             ${chargement ? html`<div class="attenue">Lecture du dossier d'archives…</div>` : null}
             <div class="champs">
               <div class="champ">
-                <label for="filtre-demande">Demandes existants</label>
+                <label for="filtre-demande">Demandes existantes</label>
                 <div class="champ-corps">
                   <input
                     type="search"
