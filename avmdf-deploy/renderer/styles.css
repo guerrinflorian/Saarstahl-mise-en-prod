@@ -2403,7 +2403,10 @@ button.bandeau-destination:hover {
 }
 
 .blanc {
-  color: color-mix(in srgb, var(--texte-faible) 62%, transparent);
+  /* --texte-faible (#66727d) à 62 % : écrit en rgba car color-mix demande
+     Chromium 111, or l'application doit tourner sur Windows Server 2012 R2
+     (Electron 22, Chromium 108). */
+  color: rgba(102, 114, 125, 0.62);
 }
 
 .fragment .blanc {
@@ -2553,7 +2556,8 @@ select {
   top: 0;
   bottom: 0;
   width: 0;
-  border-left: 1px solid color-mix(in srgb, var(--texte-attenue) 30%, transparent);
+  /* --texte-attenue (#8597a5) à 30 %, en rgba pour Chromium 108 (cf. .blanc). */
+  border-left: 1px solid rgba(133, 151, 165, 0.3);
   pointer-events: none;
 }
 
@@ -2567,5 +2571,5 @@ select {
   left: 0;
   bottom: -1px;
   width: 7px;
-  border-bottom: 1px solid color-mix(in srgb, var(--texte-attenue) 30%, transparent);
+  border-bottom: 1px solid rgba(133, 151, 165, 0.3);
 }

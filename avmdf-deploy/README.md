@@ -34,6 +34,18 @@ npm run build
 Produit `dist\AVMDF-MiseEnProd-<version>.exe` : un fichier unique, sans installeur ni droits
 administrateur. À lancer depuis n'importe quel poste ayant accès à `Z:\`.
 
+L'application embarque **Electron 22** (Chromium 108), dernière lignée compatible avec
+**Windows Server 2012 R2**, où tourne le serveur de développement. Ne pas monter la version
+d'Electron sans vérifier que ce serveur a été mis à niveau : Electron 23 et suivants exigent
+Windows 10 / Server 2016. Conséquence dans le code : pas de fonctionnalités CSS ou JS
+postérieures à Chromium 108 (par exemple `color-mix`, remplacé par des valeurs `rgba` calculées
+depuis la palette).
+
+L'exécutable portable s'auto-extrait dans `%TEMP%` au lancement. Sur les serveurs où l'exécution
+depuis `%TEMP%` est bloquée (stratégie de groupe, antivirus), utiliser la variante
+`AVMDF-MiseEnProd-<version>-dossier.zip` de la release : décompresser le dossier où l'on veut et
+lancer `AVMDF Mise en production.exe` sur place.
+
 ---
 
 ## Organisation du code

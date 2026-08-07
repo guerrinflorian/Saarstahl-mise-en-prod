@@ -1,6 +1,6 @@
 {
   "name": "avmdf-deploy",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Comparaison des sources locales et de la production IIS, archivage AVMDF et mise en production assistée.",
   "main": "electron/main.js",
@@ -16,7 +16,7 @@
     "prismjs": "^1.30.0"
   },
   "devDependencies": {
-    "electron": "^43.3.0",
+    "electron": "^22.3.27",
     "electron-builder": "^26.15.3"
   },
   "build": {
