@@ -335,10 +335,21 @@ par défaut.
 
 Toutes les mises en production ne méritent pas leur dossier d'archives : une feuille de style, une
 correction d'affichage, une retouche sans enjeu. La case **Archiver** du bandeau, cochée par
-défaut, se décoche pour un passage. Le reste ne change pas : la demande et le dossier de sprint
-restent obligatoires, le manifeste et le récapitulatif y sont écrits, l'empreinte de chaque version
-remplacée y figure, et le passage apparaît dans l'historique et le tableau de bord. Seule la copie
-de sauvegarde n'a pas lieu.
+défaut, se décoche pour un passage.
+
+**La demande devient alors facultative** : rien n'est rangé, donc il n'y a rien à ranger quelque
+part. Personne ne devrait avoir à ouvrir une demande de travaux pour pousser une feuille de style.
+Le dossier d'archives n'est même pas consulté, et le lecteur réseau peut être déconnecté sans que
+cela empêche quoi que ce soit.
+
+| Sans archivage, la demande est… | Ce qui se passe |
+|---|---|
+| indiquée quand même | Manifeste et récapitulatif écrits dans le dossier de sprint, avec l'empreinte de chaque version remplacée. Le passage apparaît dans l'historique et le tableau de bord. Seule la copie de sauvegarde n'a pas lieu. |
+| laissée vide | Aucune écriture dans les archives. Le passage n'apparaît ni dans l'historique ni dans le tableau de bord ; le journal en garde la ligne et le rapport final reste affiché. |
+
+Sans demande, la confirmation se fait en recopiant le **nombre de fichiers** au lieu du numéro de
+demande : le geste reste le même, et il oblige à relire ce qui part. Ce qu'il ne faut surtout pas,
+c'est un champ vide qui se valide seul.
 
 Le choix se voit à chaque étape : un pavé `SANS AVMDF` dans le bandeau, un avertissement dans les
 contrôles préalables avec la liste des fichiers concernés, un encart rouge dans la confirmation,

@@ -53,7 +53,10 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
             ? html`<div class="encart encart-alerte" style="margin-bottom:12px">
                 <strong>Passage effectué sans archivage AVMDF.</strong>
                 Les versions remplacées n'ont pas été conservées : le retour arrière est impossible pour
-                ce déploiement. Le manifeste garde leur empreinte, à défaut de leur contenu.
+                ce déploiement.
+                ${chemins && chemins.manifeste
+                  ? ' Le manifeste garde leur empreinte, à défaut de leur contenu.'
+                  : ''}
               </div>`
             : null}
 
@@ -103,9 +106,17 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                   </div>
                 </div>
               `
-            : html`<div class="encart" style="margin:12px 0">
-                Aucun fichier n'a été écrit : ni en production, ni dans les archives, ni de manifeste.
-              </div>`}
+            : simulation
+              ? html`<div class="encart" style="margin:12px 0">
+                  Aucun fichier n'a été écrit : ni en production, ni dans les archives, ni de manifeste.
+                </div>`
+              : html`<div class="encart encart-alerte" style="margin:12px 0">
+                  <strong>Aucune trace écrite dans les archives.</strong>
+                  Les fichiers sont bien partis en production, mais sans demande choisie il n'y a ni
+                  manifeste ni récapitulatif : ce passage n'apparaîtra ni dans l'historique ni dans le
+                  tableau de bord. Le journal en garde la ligne, et le tableau ci-dessous l'empreinte
+                  de ce qui a été remplacé.
+                </div>`}
 
           <div class="filtres-ligne" style="margin-bottom:6px">
             ${[

@@ -30,13 +30,18 @@ export function BandeauDeploiement({
   const mixte = operation === 'mixte';
   const suppression = operation === 'suppression';
 
+  // La destination ne sert qu'à ranger les versions remplacées et le manifeste.
+  // Sans archivage, elle reste possible mais n'est plus exigée : personne ne
+  // devrait avoir à ouvrir une demande pour pousser une feuille de style.
+  const destinationRequise = archiver || operation === 'suppression';
+
   const raisonBlocage = modeLibre
     ? 'La comparaison libre ne permet pas de mise en production.'
     : total === 0
       ? 'Cochez au moins un fichier dans l\'arborescence.'
       : mixte
         ? 'Ne mélangez pas déploiement et suppression : traitez les orphelins à part.'
-        : !destination
+        : !destination && destinationRequise
           ? 'Choisissez d\'abord la demande et le dossier de sprint.'
           : '';
 
@@ -66,10 +71,14 @@ export function BandeauDeploiement({
               type="button"
               class="btn btn-mini"
               disabled=${modeLibre}
-              title=${modeLibre ? 'Indisponible en comparaison libre' : 'Choisir la demande et le sprint'}
+              title=${modeLibre
+                ? 'Indisponible en comparaison libre'
+                : destinationRequise
+                  ? 'Choisir la demande et le sprint'
+                  : 'Facultatif sans archivage. Une demande fait quand même écrire le manifeste, donc apparaître ce passage dans l\'historique.'}
               onClick=${onChoisirDestination}
             >
-              Choisir la destination…
+              ${destinationRequise ? 'Choisir la destination…' : 'Aucune demande (facultatif)'}
             </button>`}
       </div>
 

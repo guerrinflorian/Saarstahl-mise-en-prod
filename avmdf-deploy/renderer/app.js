@@ -378,15 +378,17 @@ function App() {
   );
 
   const lancerPreflight = useCallback(async () => {
-    if (!destination) {
+    // La destination ne sert qu'à ranger les versions remplacées et le
+    // manifeste. Sans archivage, elle reste facultative.
+    if (!destination && archiver) {
       setEcran('destination');
       return;
     }
     setDeploiement({ etape: 'preflight', progression: null, occupe: false });
     const reponse = await window.avmdf.deploiement.preflight({
       cles: [...selection],
-      demande: destination.demande,
-      sprint: destination.sprint,
+      demande: destination ? destination.demande : null,
+      sprint: destination ? destination.sprint : null,
       operation,
       archiver,
       simulation: config.options.simulation
@@ -403,14 +405,14 @@ function App() {
       occupe: false,
       progression: null
     });
-  }, [destination, selection, operation, config, notifierEchec]);
+  }, [destination, archiver, selection, operation, config, notifierEchec]);
 
   const confirmerDeploiement = useCallback(async () => {
     setDeploiement((precedent) => ({ ...precedent, occupe: true }));
     const reponse = await window.avmdf.deploiement.executer({
       cles: [...selection],
-      demande: destination.demande,
-      sprint: destination.sprint,
+      demande: destination ? destination.demande : null,
+      sprint: destination ? destination.sprint : null,
       operation,
       archiver,
       simulation: config.options.simulation

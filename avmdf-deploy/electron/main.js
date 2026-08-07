@@ -678,13 +678,26 @@ function construirePlan(parametres) {
     };
   }
 
+  // L'archivage se fait, sauf renoncement explicite : le défaut n'est jamais
+  // la perte de l'état antérieur.
+  const archiver = parametres.archiver !== false;
+
+  // La demande et le sprint disent où ranger les versions remplacées. Sans
+  // archivage, il n'y a rien à ranger : ils deviennent facultatifs. Indiqués
+  // quand même, ils servent à déposer le manifeste, donc à faire apparaître le
+  // passage dans l'historique et le tableau de bord.
   const demande = avmdf.normaliserDemande(parametres.demande);
-  if (!demande) {
-    return { erreur: echec('Aucune demande choisie.', 'Choisissez ou créez une demande AVMDF dans le panneau de destination.') };
-  }
-  const destination = avmdf.resoudreDestination(actuels.racines.avmdf, demande.nom, parametres.sprint);
-  if (!destination.valide) {
-    return { erreur: echec(destination.erreur, 'Corrigez le nom du dossier de sprint.') };
+  const destinationDemandee = archiver || Boolean(String(parametres.demande || '').trim());
+
+  let destination = null;
+  if (destinationDemandee) {
+    if (!demande) {
+      return { erreur: echec('Aucune demande choisie.', 'Choisissez ou créez une demande AVMDF dans le panneau de destination.') };
+    }
+    destination = avmdf.resoudreDestination(actuels.racines.avmdf, demande.nom, parametres.sprint);
+    if (!destination.valide) {
+      return { erreur: echec(destination.erreur, 'Corrigez le nom du dossier de sprint.') };
+    }
   }
 
   return {
@@ -693,14 +706,12 @@ function construirePlan(parametres) {
       racineLocale: dernierScan.cheminLocal,
       racineProd: dernierScan.cheminProd,
       racineAvmdf: actuels.racines.avmdf,
-      demande: demande.nom,
-      sprint: parametres.sprint.trim(),
-      dossierSauvegarde: destination.chemin,
+      demande: destination ? demande.nom : null,
+      sprint: destination ? parametres.sprint.trim() : null,
+      dossierSauvegarde: destination ? destination.chemin : null,
       auteur: actuels.options.auteur,
       simulation: Boolean(parametres.simulation),
-      // L'archivage se fait, sauf demande explicite du contraire : le défaut
-      // n'est jamais la perte de l'état antérieur.
-      archiver: parametres.archiver !== false,
+      archiver,
       operation,
       appOffline: actuels.options.appOffline,
       fichiers
@@ -759,8 +770,10 @@ function handlersDeploiement() {
     carnet.ecrire(
       plan.archiver ? 'INFO' : 'ALERTE',
       `${plan.simulation ? 'simulation' : 'mise en production'} : ${plan.fichiers.length} fichier(s) ` +
-        `vers ${plan.dossierSauvegarde} (${plan.operation})` +
-        (plan.archiver ? '' : ' - SANS archivage AVMDF, passage non réversible')
+        `vers ${plan.racineProd} (${plan.operation})` +
+        (plan.dossierSauvegarde ? ` - archives ${plan.dossierSauvegarde}` : '') +
+        (plan.archiver ? '' : ' - SANS archivage AVMDF, passage non réversible') +
+        (!plan.archiver && !plan.dossierSauvegarde ? ' et sans manifeste' : '')
     );
 
     try {

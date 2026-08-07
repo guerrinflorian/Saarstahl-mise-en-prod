@@ -484,10 +484,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               convention déjà en place.
             </p>
             <p class="attenue">
-              Si ce passage ne mérite pas d'archive, une feuille de style ou une retouche sans
-              enjeu, décochez <strong>Archiver</strong> dans le bandeau : la demande et le sprint
-              restent nécessaires pour y écrire le manifeste, mais aucune copie de sauvegarde n'est
-              faite. Le passage devient alors définitif.
+              Étape facultative si ce passage ne mérite pas d'archive. Une feuille de style ou une
+              retouche sans enjeu : décochez <strong>Archiver</strong> dans le bandeau et vous pouvez
+              partir sans demande du tout. Le passage devient alors définitif et ne laisse de trace
+              que dans le journal.
             </p>
           </${Etape}>
 
@@ -1042,11 +1042,24 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             jamais besoin.
           </p>
           <p>
-            Le reste ne change pas. La demande et le dossier de sprint restent obligatoires, le
-            manifeste et le récapitulatif y sont écrits comme d'habitude, l'empreinte de chaque
-            version remplacée y figure, et le passage apparaît dans l'historique et le tableau de
-            bord. Seule la copie de sauvegarde n'a pas lieu.
+            <strong>La demande devient alors facultative.</strong> Rien n'est rangé, donc il n'y a
+            rien à ranger quelque part : on ne vous demande plus d'ouvrir une demande de travaux
+            pour pousser une feuille de style. Le dossier d'archives n'est même pas consulté, et le
+            lecteur réseau peut être déconnecté sans que cela empêche quoi que ce soit.
           </p>
+          <${Repere}
+            entetes=${['Sans archivage, la demande est…', 'Ce qui se passe']}
+            lignes=${[
+              [
+                'indiquée quand même',
+                'Le manifeste et le récapitulatif sont écrits dans le dossier de sprint, avec l\'empreinte de chaque version remplacée. Le passage apparaît dans l\'historique et le tableau de bord. Seule la copie de sauvegarde n\'a pas lieu.'
+              ],
+              [
+                'laissée vide',
+                'Aucune écriture dans les archives : ni manifeste, ni récapitulatif. Le passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Le journal en garde la ligne, et le rapport final reste affiché.'
+              ]
+            ]}
+          />
           <div class="encart encart-danger">
             <strong>Ce qui se perd, se perd.</strong> Sans copie de sauvegarde, il n'y a rien à
             remettre : l'écran Historique marque ce passage${' '}
@@ -1075,7 +1088,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               [
                 'Choisissez d\'abord la demande et le dossier de sprint.',
-                'Aucune destination d\'archivage n\'est encore désignée.'
+                html`Aucune destination d'archivage n'est encore désignée. Ce blocage tombe si vous décochez${' '}<strong>Archiver</strong> : sans archive, la demande devient facultative.`
               ],
               [
                 'La comparaison libre ne permet pas de mise en production.',
@@ -1177,6 +1190,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 'Archivage AVMDF écarté',
                 'Vous avez décoché « Archiver » : les versions de production seront écrasées sans copie de sauvegarde, et ce passage ne pourra pas être annulé. La liste des fichiers concernés est donnée.'
               ],
+              [
+                'Aucune demande choisie',
+                'Ni manifeste ni récapitulatif ne seront écrits : ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Indiquez une demande si vous voulez le retrouver plus tard.'
+              ],
               ['Fichier source modifié depuis l\'analyse', 'C\'est la version actuelle qui partira, pas celle que vous avez examinée.'],
               ['Espace disponible non mesurable', 'Le partage n\'a pas répondu. Vérifiez à l\'œil.']
             ]}
@@ -1188,6 +1205,11 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             dossier de sauvegarde et le détail des fichiers avec leur volume. Pour valider, il faut${' '}
             <strong>saisir le numéro de la demande</strong>. C'est volontaire : un bouton unique
             s'appuie sans réfléchir, un numéro se recopie en regardant.
+          </p>
+          <p class="attenue">
+            Quand il n'y a pas de demande, parce que le passage se fait sans archivage, c'est le${' '}
+            <strong>nombre de fichiers</strong> qu'on recopie. Le geste reste le même, et il oblige à
+            relire ce qui part.
           </p>
         <//>
 
@@ -1478,12 +1500,15 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               dès que ce n'est plus le cas.
             </li>
             <li>
-              <strong>Toute écriture est confirmée par la saisie du numéro de demande</strong>, y
-              compris les retours arrière et les remises en production d'une version ancienne.
+              <strong>Toute écriture est confirmée par une saisie</strong> : le numéro de demande, ou
+              le nombre de fichiers quand il n'y a pas de demande. Y compris les retours arrière et
+              les remises en production d'une version ancienne.
             </li>
             <li>
               <strong>Tout est tracé</strong> : un manifeste et un récapitulatif dans le dossier de
-              sprint, un journal quotidien côté application.
+              sprint, un journal quotidien côté application. Un passage sans archivage et sans
+              demande n'écrit rien dans les archives, mais le journal en garde la ligne, marquée
+              ALERTE.
             </li>
           </ul>
         <//>

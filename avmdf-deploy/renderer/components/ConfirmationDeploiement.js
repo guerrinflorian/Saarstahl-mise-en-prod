@@ -37,8 +37,13 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
     `;
   }
 
-  const numero = String(resume.demande || '').replace(/\D/g, '');
-  const saisieCorrecte = saisie.trim() === numero;
+  const numeroDemande = String(resume.demande || '').replace(/\D/g, '');
+  // Sans demande, il n'y a pas de numéro à recopier. On confirme alors sur le
+  // nombre de fichiers : le geste reste le même, et il force à relire ce qui
+  // part. Ce qu'il ne faut surtout pas, c'est un champ vide qui se valide seul.
+  const aRecopier = numeroDemande || String(resume.fichiers.length);
+  const libelleSaisie = numeroDemande ? 'le numéro de la demande' : 'le nombre de fichiers';
+  const saisieCorrecte = saisie.trim() === aRecopier;
   const suppression = resume.operation === 'suppression';
   const peutPartir = controle.ok && saisieCorrecte && !occupe;
 
@@ -116,7 +121,9 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
               </tr>
               <tr>
                 <th>${resume.archiver === false ? 'Dossier du manifeste' : 'Dossier de sauvegarde'}</th>
-                <td class="mono">${resume.dossierSauvegarde}</td>
+                <td class=${resume.dossierSauvegarde ? 'mono' : ''}>
+                  ${resume.dossierSauvegarde || html`<span class="rouge">aucun : rien ne sera écrit dans les archives</span>`}
+                </td>
               </tr>
               <tr>
                 <th>Fichiers</th>
@@ -126,8 +133,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
                     .map(
                       ([statut, nombre]) => html`
                         <span class=${'compteur compteur-' + statut} key=${statut}>
-                          ${MARQUEURS[statut]} ${formaterNombre(nombre)}
-                          ${nombre > 1 ? PLURIELS[statut] : LIBELLES[statut]}
+                          ${MARQUEURS[statut]} ${formaterNombre(nombre)} ${nombre > 1 ? PLURIELS[statut] : LIBELLES[statut]}
                         </span>
                       `
                     )}
@@ -161,9 +167,11 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
           ${resume.archiver === false && !suppression
             ? html`<div class="encart encart-danger" style="margin-top:14px">
                 <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
-                écrasées sans être conservées. Le manifeste sera écrit et gardera leur empreinte, mais
-                <strong>ce passage ne pourra pas être annulé</strong>. Recochez « Archiver » dans le
-                bandeau du bas pour revenir au comportement normal.
+                écrasées sans être conservées, et <strong>ce passage ne pourra pas être annulé</strong>.
+                ${resume.dossierSauvegarde
+                  ? ' Le manifeste sera écrit malgré tout et gardera leur empreinte.'
+                  : ' Sans demande choisie, aucun manifeste ne sera écrit non plus : ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord, seul le journal en gardera la ligne.'}${' '}
+                Recochez « Archiver » dans le bandeau du bas pour revenir au comportement normal.
               </div>`
             : null}
 
@@ -178,7 +186,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
 
         <div class="modale-pied">
           <label for="confirmation-demande" class=${controle.ok ? '' : 'attenue'}>
-            Saisissez le numéro de la demande (<span class="mono">${numero}</span>) pour confirmer :
+            Saisissez ${libelleSaisie} (<span class="mono">${aRecopier}</span>) pour confirmer :
           </label>
           <input
             type="text"

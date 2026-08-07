@@ -106,12 +106,18 @@ async function preflight(plan, options = {}) {
   const problemes = [];
   const etatsProd = new Map();
 
+  // Sans dossier de sauvegarde, ce passage ne touche pas aux archives : ni
+  // copie de sauvegarde, ni manifeste. Tout ce qui les concerne est écarté des
+  // contrôles, à commencer par l'accès à la racine AVMDF.
+  const avecArchives = Boolean(plan.dossierSauvegarde);
+
   // 1. Racines accessibles
-  for (const [libelle, racine] of [
+  const racines = [
     ['locale', plan.racineLocale],
-    ['de production', plan.racineProd],
-    ['des archives AVMDF', plan.racineAvmdf]
-  ]) {
+    ['de production', plan.racineProd]
+  ];
+  if (avecArchives) racines.push(['des archives AVMDF', plan.racineAvmdf]);
+  for (const [libelle, racine] of racines) {
     try {
       const etat = await fsp.stat(cheminLong(racine));
       if (!etat.isDirectory()) throw Object.assign(new Error('pas un dossier'), { code: 'ENOTDIR' });
@@ -128,7 +134,7 @@ async function preflight(plan, options = {}) {
   }
 
   // 2. Périmètre : aucune écriture hors des racines configurées
-  if (!estSousRacine(plan.dossierSauvegarde, plan.racineAvmdf)) {
+  if (avecArchives && !estSousRacine(plan.dossierSauvegarde, plan.racineAvmdf)) {
     problemes.push(
       probleme(
         BLOQUANT,
@@ -154,16 +160,18 @@ async function preflight(plan, options = {}) {
   }
 
   // 3. Écriture réellement possible dans le dossier de sauvegarde
-  const testEcriture = await verifierEcriture(plan.dossierSauvegarde, plan.racineAvmdf);
-  if (!testEcriture.ok) {
-    problemes.push(
-      probleme(
-        BLOQUANT,
-        'ecriture',
-        `Impossible d'écrire dans le dossier de sauvegarde (${testEcriture.raison}) : ${testEcriture.dossier}`,
-        'Vérifiez vos droits sur le dossier d\'archives.'
-      )
-    );
+  if (avecArchives) {
+    const testEcriture = await verifierEcriture(plan.dossierSauvegarde, plan.racineAvmdf);
+    if (!testEcriture.ok) {
+      problemes.push(
+        probleme(
+          BLOQUANT,
+          'ecriture',
+          `Impossible d'écrire dans le dossier de sauvegarde (${testEcriture.raison}) : ${testEcriture.dossier}`,
+          'Vérifiez vos droits sur le dossier d\'archives.'
+        )
+      );
+    }
   }
 
   // 4. État de chaque fichier : source disparue, destination verrouillée,
@@ -283,11 +291,25 @@ async function preflight(plan, options = {}) {
           AVERTISSEMENT,
           'sans-archive',
           `Archivage AVMDF écarté : ${remplaces.length} version(s) de production seront écrasées sans copie de sauvegarde.`,
-          'Le retour arrière sera impossible pour ce passage. Le manifeste sera écrit malgré tout, avec l\'empreinte de ce qui a été remplacé.',
+          avecArchives
+            ? 'Le retour arrière sera impossible pour ce passage. Le manifeste sera écrit malgré tout, avec l\'empreinte de ce qui a été remplacé.'
+            : 'Le retour arrière sera impossible pour ce passage.',
           remplaces
         )
       );
     }
+  }
+
+  // 6 bis. Aucune destination : ce passage ne laissera aucune trace écrite.
+  if (!avecArchives) {
+    problemes.push(
+      probleme(
+        AVERTISSEMENT,
+        'sans-manifeste',
+        'Aucune demande choisie : ni manifeste, ni récapitulatif ne seront écrits.',
+        'Ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord. Seul le journal en gardera la trace. Choisissez une demande si vous voulez le retrouver plus tard.'
+      )
+    );
   }
 
   // 6. web.config
@@ -402,7 +424,7 @@ async function executer(plan, options = {}) {
   const resultats = [];
   let appOfflineDepose = false;
 
-  if (!simulation) {
+  if (!simulation && plan.dossierSauvegarde) {
     await fsp.mkdir(cheminLong(plan.dossierSauvegarde), { recursive: true });
   }
 
@@ -441,8 +463,10 @@ async function executer(plan, options = {}) {
     fichiers: resultats
   };
 
+  // Sans dossier de sauvegarde, il n'y a nulle part où déposer le manifeste :
+  // le passage ne laisse de trace que dans le journal, et le rapport le dit.
   const chemins = { manifeste: null, recapitulatif: null };
-  if (!simulation) {
+  if (!simulation && plan.dossierSauvegarde) {
     const suffixe = horodatageFichier(debut);
     chemins.manifeste = path.join(plan.dossierSauvegarde, `_deploiement_${suffixe}.json`);
     chemins.recapitulatif = path.join(plan.dossierSauvegarde, '_recapitulatif.md');
@@ -455,10 +479,14 @@ async function executer(plan, options = {}) {
 
 async function traiterFichier(fichier, plan, contexte) {
   const { simulation, extensionsTexte, ignorerEspaces, invaliderCache } = contexte;
-  const archiver = plan.archiver !== false;
+  // Pas de dossier de sauvegarde, pas d'archivage : l'invariant tient quoi que
+  // dise le drapeau.
+  const archiver = plan.archiver !== false && Boolean(plan.dossierSauvegarde);
   const cheminProd = joindreRelatif(plan.racineProd, fichier.chemin);
   const cheminLocal = fichier.local ? fichier.local.absolu : joindreRelatif(plan.racineLocale, fichier.chemin);
-  const cheminSauvegarde = joindreRelatif(plan.dossierSauvegarde, fichier.chemin);
+  const cheminSauvegarde = plan.dossierSauvegarde
+    ? joindreRelatif(plan.dossierSauvegarde, fichier.chemin)
+    : null;
   const suppression = (plan.operation || OPERATION_DEPLOIEMENT) === OPERATION_SUPPRESSION;
 
   const entree = {
