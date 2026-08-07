@@ -1166,8 +1166,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ['Écriture impossible dans le dossier de sauvegarde', 'Droits insuffisants sur le dossier d\'archives. Un fichier témoin est réellement créé puis effacé pour le vérifier.'],
               ['Fichier source disparu depuis l\'analyse', 'Quelque chose a bougé sur votre poste. Relancez une analyse.'],
               [
-                'Fichier verrouillé en production',
-                'IIS tient le fichier. Recyclez le pool d\'applications, ou activez le dépôt d\'un app_offline.htm dans les réglages.'
+                'Fichier impossible à remplacer',
+                html`L'outil a essayé d'ouvrir le fichier de production en écriture, sans rien modifier, et le système a dit non. Le message précise laquelle des trois causes c'est, et le code d'erreur. Voir${' '}<strong>En cas de problème</strong>.`
               ],
               [
                 'Fichier changé en production depuis votre analyse',
@@ -1539,8 +1539,16 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 html`Des fichiers qui n'existent que côté développement. Ajoutez un motif dans <strong>Fichiers exclus</strong>, ou utilisez « Exclure ce fichier » au clic droit.`
               ],
               [
-                'Fichier verrouillé en production',
-                'IIS tient le fichier. Recyclez le pool d\'applications, ou activez le dépôt d\'un app_offline.htm dans les réglages : il est posé avant la copie et retiré après.'
+                html`<strong>ouvert par un autre programme</strong> (EBUSY)`,
+                html`Quelqu'un le tient. Sur le serveur : Gestion de l'ordinateur, Outils système, Dossiers partagés, Fichiers ouverts, pour voir qui. Un éditeur resté ouvert sur le partage, un antivirus ou une sauvegarde en cours suffisent. Si c'est une DLL du dossier${' '}<span class="mono">bin</span>, c'est IIS lui-même : recyclez le pool d'applications ou activez le dépôt d'un app_offline.htm dans les réglages.`
+              ],
+              [
+                html`<strong>en lecture seule</strong> (EPERM, EACCES)`,
+                html`L'attribut « lecture seule » est posé sur le fichier. Clic droit, Propriétés, décochez la case, ou${' '}<span class="mono">attrib -R</span> sur le serveur. Arrive après une restauration de sauvegarde ou une copie mal réglée.`
+              ],
+              [
+                html`<strong>droits insuffisants</strong> (EPERM, EACCES)`,
+                'Vous pouvez lire le fichier mais pas le remplacer. Vos permissions NTFS sur le dossier ne vous accordent pas l\'écriture : faites-les ouvrir, ou déployez depuis un compte qui les a.'
               ],
               [
                 'Fichier changé en production depuis votre analyse',
@@ -1591,7 +1599,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ['Contrôles préalables', 'Les vérifications passées avant la première écriture : racines, périmètre, droits, verrous, modifications concurrentes, espace disque.'],
               ['Simulation', 'Tout le processus se déroule et le rapport complet est produit, mais aucun octet n\'est écrit.'],
               ['Empreinte SHA-256', 'La signature du contenu d\'un fichier. Deux fichiers de même empreinte sont identiques octet pour octet.'],
-              ['Verrou IIS', 'Un fichier tenu par le pool d\'applications du serveur. Il se laisse lire mais refuse d\'être remplacé.'],
+              [
+                'Fichier tenu',
+                html`Un fichier qu'un programme garde ouvert : il se laisse lire mais refuse d'être remplacé. IIS ne tient que ce qu'il a chargé, la DLL du dossier${' '}<span class="mono">bin</span> et ses satellites ; une page, une feuille de style ou une image sont lues, envoyées et refermées. Un fichier statique bloqué vient donc presque toujours d'ailleurs : un éditeur, un antivirus, une sauvegarde.`
+              ],
               [
                 html`<span class="mono">app_offline.htm</span>`,
                 'Un fichier déposé à la racine du site pour le mettre hors service le temps de la copie, puis retiré. Son contenu est réglable.'

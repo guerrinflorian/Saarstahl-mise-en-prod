@@ -70,23 +70,149 @@ async function existe(chemin) {
   }
 }
 
+// Un fichier de production peut refuser d'être remplacé pour des raisons très
+// différentes, et le remède n'est pas le même. Les confondre sous le mot
+// « verrouillé » envoie chercher au mauvais endroit.
+const CAUSE_OUVERT = 'ouvert';
+const CAUSE_LECTURE_SEULE = 'lecture-seule';
+const CAUSE_DROITS = 'droits';
+const CAUSE_ILLISIBLE = 'illisible';
+const CAUSE_INCONNUE = 'inconnue';
+
 /**
- * Le fichier de destination est-il tenu par IIS ?
- * Une ouverture en écriture est le seul test fiable : un fichier verrouillé se
- * laisse lire mais refuse `r+`.
+ * IIS ne tient que ce qu'il a chargé : la DLL de l'application et ses
+ * satellites. Une page, une feuille de style ou une image sont lues, envoyées
+ * et refermées - recycler le pool n'y changera rien.
  */
-async function estVerrouille(chemin) {
+const TENU_PAR_IIS = /(^|[\\/])bin[\\/]|\.(dll|exe|pdb)$/i;
+
+/**
+ * Le fichier de destination peut-il être remplacé ?
+ *
+ * Une ouverture en écriture est le seul test fiable : un fichier tenu par un
+ * autre programme se laisse lire mais refuse `r+`. Reste à savoir pourquoi le
+ * système a dit non.
+ *
+ * @param {string} chemin
+ * @returns {Promise<null|{cause:string, code:string}>} null si le fichier est
+ *   remplaçable, ou simplement absent
+ */
+async function obstacleEcriture(chemin) {
   let poignee = null;
   try {
     poignee = await fsp.open(cheminLong(chemin), 'r+');
     return null;
   } catch (err) {
     if (err.code === 'ENOENT') return null;
-    if (['EBUSY', 'EPERM', 'EACCES'].includes(err.code)) return err.code;
-    return err.code || 'inconnu';
+    if (err.code === 'EBUSY') return { cause: CAUSE_OUVERT, code: err.code };
+    if (err.code === 'EPERM' || err.code === 'EACCES') {
+      // Sous Windows, Node éteint le bit d'écriture du mode quand l'attribut
+      // « lecture seule » est posé. C'est ce qui sépare un fichier protégé d'un
+      // droit NTFS manquant, deux situations qui ne se corrigent pas pareil.
+      try {
+        const etat = await fsp.stat(cheminLong(chemin));
+        if (!(etat.mode & 0o200)) return { cause: CAUSE_LECTURE_SEULE, code: err.code };
+      } catch (autre) {
+        /* même la lecture de l'état est refusée : on s'en tient aux droits */
+      }
+      return { cause: CAUSE_DROITS, code: err.code };
+    }
+    return { cause: CAUSE_INCONNUE, code: err.code || 'inconnu' };
   } finally {
     if (poignee) await poignee.close().catch(() => {});
   }
+}
+
+const LIBELLES_OBSTACLE = {
+  [CAUSE_OUVERT]: {
+    message: (n) =>
+      n > 1
+        ? `${n} fichiers sont ouverts par un autre programme en production.`
+        : '1 fichier est ouvert par un autre programme en production.',
+    conseil:
+      'Pour savoir qui le tient, sur le serveur : Gestion de l\'ordinateur, Outils système, ' +
+      'Dossiers partagés, Fichiers ouverts. Un éditeur resté ouvert sur le partage, un antivirus ' +
+      'ou une sauvegarde en cours suffisent à bloquer un fichier.'
+  },
+  [CAUSE_LECTURE_SEULE]: {
+    message: (n) =>
+      n > 1
+        ? `${n} fichiers sont en lecture seule en production.`
+        : '1 fichier est en lecture seule en production.',
+    conseil:
+      'Retirez l\'attribut « lecture seule » : clic droit sur le fichier, Propriétés, puis ' +
+      'décochez la case. En ligne de commande sur le serveur : attrib -R suivi du chemin.'
+  },
+  [CAUSE_DROITS]: {
+    message: (n) =>
+      n > 1
+        ? `${n} fichiers refusent l'écriture : droits insuffisants.`
+        : '1 fichier refuse l\'écriture : droits insuffisants.',
+    conseil:
+      'Vous pouvez lire ces fichiers mais pas les remplacer. Faites ouvrir vos droits en écriture ' +
+      'sur le dossier concerné, ou déployez depuis un compte qui les a.'
+  },
+  [CAUSE_ILLISIBLE]: {
+    message: (n) =>
+      n > 1
+        ? `${n} fichiers de production n'ont pas pu être lus.`
+        : '1 fichier de production n\'a pas pu être lu.',
+    conseil:
+      'Le fichier a peut-être disparu ou changé de droits depuis l\'analyse. Relancez une analyse ' +
+      'pour repartir de l\'état réel.'
+  },
+  [CAUSE_INCONNUE]: {
+    message: (n) =>
+      n > 1
+        ? `${n} fichiers ne peuvent pas être remplacés en production.`
+        : '1 fichier ne peut pas être remplacé en production.',
+    conseil:
+      'Le système a refusé l\'ouverture en écriture sans motif reconnu. Vérifiez le fichier à la ' +
+      'main sur le serveur avant de recommencer.'
+  }
+};
+
+/** Accumule les obstacles rencontrés, une entrée par cause. */
+function creerRegistreObstacles() {
+  const parCause = new Map();
+  return {
+    noter(cause, code, chemin) {
+      let entree = parCause.get(cause);
+      if (!entree) {
+        entree = { fichiers: [], codes: new Set() };
+        parCause.set(cause, entree);
+      }
+      entree.fichiers.push(chemin);
+      entree.codes.add(code);
+    },
+    /**
+     * Un point bloquant par cause, avec son conseil propre. Le conseil sur le
+     * pool IIS n'apparaît que si au moins un fichier concerné est de ceux qu'IIS
+     * tient réellement.
+     */
+    problemes() {
+      const sortie = [];
+      for (const [cause, { fichiers, codes }] of parCause) {
+        const libelle = LIBELLES_OBSTACLE[cause] || LIBELLES_OBSTACLE[CAUSE_INCONNUE];
+        let conseil = libelle.conseil;
+        if (cause === CAUSE_OUVERT && fichiers.some((chemin) => TENU_PAR_IIS.test(chemin))) {
+          conseil +=
+            ' Pour une DLL du dossier bin, c\'est IIS lui-même qui la tient : recyclez le pool ' +
+            'd\'applications, ou activez le dépôt d\'un app_offline.htm dans les réglages.';
+        }
+        sortie.push(
+          probleme(
+            BLOQUANT,
+            'verrou',
+            `${libelle.message(fichiers.length)} (${[...codes].sort().join(', ')})`,
+            conseil,
+            fichiers
+          )
+        );
+      }
+      return sortie;
+    }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +303,7 @@ async function preflight(plan, options = {}) {
   // 4. État de chaque fichier : source disparue, destination verrouillée,
   //    modification concurrente depuis l'analyse.
   const disparus = [];
-  const verrouilles = [];
+  const obstacles = creerRegistreObstacles();
   const concurrents = [];
   const tailleChangee = [];
   let faits = 0;
@@ -200,8 +326,8 @@ async function preflight(plan, options = {}) {
         }
       }
 
-      const codeVerrou = await estVerrouille(cheminProd);
-      if (codeVerrou) verrouilles.push(fichier.chemin);
+      const obstacle = await obstacleEcriture(cheminProd);
+      if (obstacle) obstacles.noter(obstacle.cause, obstacle.code, fichier.chemin);
 
       if (await existe(cheminProd)) {
         try {
@@ -222,7 +348,9 @@ async function preflight(plan, options = {}) {
             }
           }
         } catch (err) {
-          verrouilles.push(fichier.chemin);
+          // Le fichier existe mais ne se laisse ni mesurer ni lire : ce n'est
+          // pas le même problème qu'une ouverture en écriture refusée.
+          obstacles.noter(CAUSE_ILLISIBLE, err.code || 'inconnu', fichier.chemin);
         }
       }
 
@@ -245,17 +373,7 @@ async function preflight(plan, options = {}) {
       )
     );
   }
-  if (verrouilles.length) {
-    problemes.push(
-      probleme(
-        BLOQUANT,
-        'verrou',
-        `${verrouilles.length} fichier(s) sont verrouillés en production.`,
-        'Fichier verrouillé en production - recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
-        verrouilles
-      )
-    );
-  }
+  problemes.push(...obstacles.problemes());
   if (concurrents.length) {
     problemes.push(
       probleme(
@@ -764,7 +882,7 @@ async function preparerRestauration(manifeste, options = {}) {
   const operations = [];
   const problemes = [];
   const modifiesDepuis = [];
-  const verrouilles = [];
+  const obstacles = creerRegistreObstacles();
   const sauvegardesManquantes = [];
 
   await pool(
@@ -776,8 +894,8 @@ async function preparerRestauration(manifeste, options = {}) {
         ? joindreRelatif(manifeste.dossierSauvegarde, fichier.sauvegarde)
         : null;
 
-      const codeVerrou = await estVerrouille(cheminProd);
-      if (codeVerrou) verrouilles.push(fichier.chemin);
+      const obstacle = await obstacleEcriture(cheminProd);
+      if (obstacle) obstacles.noter(obstacle.cause, obstacle.code, fichier.chemin);
 
       if (await existe(cheminProd)) {
         try {
@@ -786,7 +904,7 @@ async function preparerRestauration(manifeste, options = {}) {
             modifiesDepuis.push(fichier.chemin);
           }
         } catch (err) {
-          verrouilles.push(fichier.chemin);
+          obstacles.noter(CAUSE_ILLISIBLE, err.code || 'inconnu', fichier.chemin);
         }
       }
 
@@ -809,17 +927,7 @@ async function preparerRestauration(manifeste, options = {}) {
     signal
   );
 
-  if (verrouilles.length) {
-    problemes.push(
-      probleme(
-        BLOQUANT,
-        'verrou',
-        `${verrouilles.length} fichier(s) sont verrouillés en production.`,
-        'Fichier verrouillé en production - recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
-        verrouilles
-      )
-    );
-  }
+  problemes.push(...obstacles.problemes());
   if (sauvegardesManquantes.length) {
     // Deux causes très différentes : soit l'archivage avait été écarté à la
     // demande, soit l'archive a disparu depuis. Le message le dit.
@@ -1012,18 +1120,12 @@ async function restaurerVersion(plan, options = {}) {
       throw new Error('destination d\'archivage hors du dossier d\'archives');
     }
 
-    const codeVerrou = await estVerrouille(cheminProd);
-    if (codeVerrou) {
-      problemes.push(
-        probleme(
-          BLOQUANT,
-          'verrou',
-          `Le fichier est verrouillé en production (${codeVerrou}).`,
-          'Fichier verrouillé en production : recyclez le pool IIS ou déposez un app_offline.htm avant de continuer.',
-          [plan.chemin]
-        )
-      );
-      throw new Error('fichier verrouillé en production');
+    const obstacle = await obstacleEcriture(cheminProd);
+    if (obstacle) {
+      const registre = creerRegistreObstacles();
+      registre.noter(obstacle.cause, obstacle.code, plan.chemin);
+      problemes.push(...registre.problemes());
+      throw new Error('le fichier ne peut pas être remplacé en production');
     }
 
     // 1. Archivage de la version actuelle, sans exception.
@@ -1097,6 +1199,7 @@ module.exports = {
   restaurer,
   restaurerVersion,
   formaterOctets,
-  estVerrouille,
+  obstacleEcriture,
+  creerRegistreObstacles,
   copierAvecDate
 };

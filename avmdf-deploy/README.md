@@ -326,10 +326,28 @@ production : c'est une opération distincte. On les coche seuls, le bouton du ba
 retirée, et l'opération produit son propre manifeste - donc elle est réversible comme les autres.
 Cocher un dossier ne mélange jamais les deux natures.
 
-**Pools IIS.** L'outil ne pilote pas le serveur. S'il détecte un fichier verrouillé, il bloque
-avant la première écriture et dit quoi faire : recycler le pool ou déposer un `app_offline.htm`.
-Le dépôt automatique de `app_offline.htm` reste disponible en option dans les réglages, désactivé
-par défaut.
+**Pools IIS.** L'outil ne pilote pas le serveur. S'il ne peut pas remplacer un fichier, il bloque
+avant la première écriture et dit quoi faire.
+
+Le test est le seul fiable : ouvrir le fichier de production en écriture (`r+`), sans rien
+modifier. Reste à savoir pourquoi le système a dit non, car le remède n'est pas le même, et
+« verrouillé » envoie chercher au mauvais endroit :
+
+| Code | Cause | Ce que dit le message |
+|---|---|---|
+| `EBUSY` | un programme tient le fichier ouvert | où voir qui le tient : Gestion de l'ordinateur, Dossiers partagés, Fichiers ouverts |
+| `EPERM` / `EACCES` sans bit d'écriture | attribut « lecture seule » | comment le retirer (Propriétés, ou `attrib -R`) |
+| `EPERM` / `EACCES` avec bit d'écriture | droits NTFS insuffisants | faire ouvrir les droits, ou déployer depuis un compte qui les a |
+| autre | refus non reconnu | le code brut, pour ne rien inventer |
+
+La distinction lecture seule / droits repose sur le mode renvoyé par `fs.stat` : sous Windows,
+Node éteint le bit d'écriture quand l'attribut « lecture seule » est posé.
+
+**Le conseil sur le pool d'applications n'apparaît que s'il sert.** IIS ne tient que ce qu'il a
+chargé : la DLL de `bin` et ses satellites (`*.dll`, `*.exe`, `*.pdb`). Une page, une feuille de
+style ou une image sont lues, envoyées et refermées. Recycler le pool pour un `.css` bloqué n'aurait
+aucun effet, donc l'outil ne le propose pas. Le dépôt automatique de `app_offline.htm` reste
+disponible en option dans les réglages, désactivé par défaut.
 
 ## Mise en production sans archivage
 
