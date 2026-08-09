@@ -15,6 +15,7 @@ const html = htm.bind(h);
  */
 export function ConfirmationDeploiement({ etape, controle, resume, occupe, progression, onConfirmer, onFermer }) {
   const [saisie, setSaisie] = useState('');
+  const [commentaire, setCommentaire] = useState('');
   const [listeDepliee, setListeDepliee] = useState(false);
 
   if (etape === 'preflight') {
@@ -169,6 +170,23 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
               : null}
           </div>
 
+          <div class="champ-commentaire">
+            <label for="commentaire-passage">Commentaire <span class="attenue">(facultatif)</span></label>
+            <input
+              type="text"
+              id="commentaire-passage"
+              maxlength="600"
+              placeholder="Pourquoi ce passage part : correctif recherche article, écran stock…"
+              autocomplete="off"
+              disabled=${occupe}
+              value=${commentaire}
+              onInput=${(e) => setCommentaire(e.target.value)}
+            />
+            <div class="champ-aide" style="grid-column:auto">
+              Une phrase qui suivra ce passage partout : manifeste, récapitulatif de traçabilité, historique.
+            </div>
+          </div>
+
           ${resume.archiver === false && !suppression
             ? html`<div class="encart encart-danger" style="margin-top:14px">
                 <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
@@ -203,7 +221,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             value=${saisie}
             onInput=${(e) => setSaisie(e.target.value)}
             onKeyDown=${(e) => {
-              if (e.key === 'Enter' && peutPartir) onConfirmer();
+              if (e.key === 'Enter' && peutPartir) onConfirmer(commentaire);
             }}
           />
           <div style="flex:1"></div>
@@ -213,7 +231,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             class="btn btn-accent"
             disabled=${!peutPartir}
             title=${controle.ok ? '' : 'Un point bloquant empêche la mise en production'}
-            onClick=${onConfirmer}
+            onClick=${() => onConfirmer(commentaire)}
           >
             ${occupe
               ? 'En cours…'

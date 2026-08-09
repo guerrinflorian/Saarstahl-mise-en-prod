@@ -609,6 +609,9 @@ async function executer(plan, options = {}) {
     date: debut.toISOString(),
     projet: plan.projet,
     operation: plan.operation || OPERATION_DEPLOIEMENT,
+    // Le mot du déployeur : pourquoi ce passage. Il suit le manifeste partout,
+    // du récapitulatif à l'historique.
+    commentaire: plan.commentaire || null,
     racineLocale: plan.racineLocale,
     racineProd: plan.racineProd,
     dossierSauvegarde: plan.dossierSauvegarde,
@@ -817,6 +820,7 @@ function redigerRecapitulatif(manifeste) {
   lignes.push(`- **Sprint** : ${manifeste.sprint}`);
   lignes.push(`- **Auteur** : ${manifeste.auteur || '-'}`);
   lignes.push(`- **Opération** : ${libelleOperation(manifeste)}`);
+  if (manifeste.commentaire) lignes.push(`- **Commentaire** : ${manifeste.commentaire}`);
   lignes.push(`- **Source** : \`${manifeste.racineLocale}\``);
   lignes.push(`- **Destination** : \`${manifeste.racineProd}\``);
   lignes.push(

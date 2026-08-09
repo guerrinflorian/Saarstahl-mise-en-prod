@@ -73,6 +73,10 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
               </div>`
             : null}
 
+          ${manifeste.commentaire
+            ? html`<p class="rapport-commentaire">« ${manifeste.commentaire} »</p>`
+            : null}
+
           <div class="chiffres">
             <div class="chiffre"><span class="valeur">${formaterNombre(rapport.total)}</span><span>fichiers</span></div>
             <div class="chiffre"><span class="valeur">${formaterNombre(rapport.remplacements)}</span><span>remplacés</span></div>

@@ -484,7 +484,7 @@ function App() {
     });
   }, [destination, archivageAvmdf, selection, operation, config, notifierEchec]);
 
-  const confirmerDeploiement = useCallback(async () => {
+  const confirmerDeploiement = useCallback(async (commentaire) => {
     const cible = archivageAvmdf ? destination : null;
     setDeploiement((precedent) => ({ ...precedent, occupe: true }));
     const reponse = await window.avmdf.deploiement.executer({
@@ -493,7 +493,8 @@ function App() {
       sprint: cible ? cible.sprint : null,
       operation,
       archiver: archivageAvmdf,
-      simulation: config.options.simulation
+      simulation: config.options.simulation,
+      commentaire: typeof commentaire === 'string' ? commentaire : ''
     });
     if (!reponse.ok) {
       setDeploiement((precedent) =>

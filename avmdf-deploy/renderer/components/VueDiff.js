@@ -6,8 +6,16 @@ import { calculerColoration, langueDe } from './coloration.js';
 
 const html = htm.bind(h);
 
-const HAUTEUR_LIGNE = 18;
 const MAX_LIGNES_AFFICHEES = 6000;
+
+/** Corps de texte du comparateur : police et interligne vont ensemble. */
+const TAILLES = [
+  { police: 11, ligne: 16 },
+  { police: 12, ligne: 18 },
+  { police: 13, ligne: 20 },
+  { police: 14, ligne: 23 }
+];
+const TAILLE_NORMALE = 1;
 
 const SIGNES = { identique: ' ', ajout: '+', suppression: '−', modification: '~' };
 
@@ -154,6 +162,9 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
   const [couleur, setCouleur] = useState(() => prefs.couleur !== false);
   const [guidesVisibles, setGuidesVisibles] = useState(() => prefs.guides !== false);
   const [localAGauche, setLocalAGauche] = useState(() => prefs.localAGauche !== false);
+  const [taille, setTaille] = useState(() =>
+    Number.isInteger(prefs.taille) && TAILLES[prefs.taille] ? prefs.taille : TAILLE_NORMALE
+  );
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
@@ -177,13 +188,14 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
           espaces: espacesVisibles,
           couleur,
           guides: guidesVisibles,
-          localAGauche
+          localAGauche,
+          taille
         })
       );
     } catch (err) {
       /* stockage local indisponible : les préférences ne survivront pas */
     }
-  }, [unifie, synchronise, espacesVisibles, couleur, guidesVisibles, localAGauche]);
+  }, [unifie, synchronise, espacesVisibles, couleur, guidesVisibles, localAGauche, taille]);
 
   useEffect(() => {
     setReplisOuverts(new Set());
@@ -244,7 +256,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
   }, [rangsAffiches, recherche]);
 
   function allerA(index) {
-    const haut = Math.max(0, index * HAUTEUR_LIGNE - 80);
+    const haut = Math.max(0, index * TAILLES[taille].ligne - 80);
     for (const panneau of [panneauGauche.current, panneauDroit.current]) {
       if (panneau) panneau.scrollTop = haut;
     }
@@ -492,6 +504,24 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
               <button type="button" class="btn btn-mini" onClick=${() => setUnifie(!unifie)}>
                 ${unifie ? 'Côte à côte' : 'Unifié'}
               </button>
+              <button
+                type="button"
+                class="btn btn-mini"
+                title="Réduire le texte de la comparaison"
+                disabled=${taille === 0}
+                onClick=${() => setTaille(Math.max(0, taille - 1))}
+              >
+                A−
+              </button>
+              <button
+                type="button"
+                class="btn btn-mini"
+                title="Agrandir le texte de la comparaison"
+                disabled=${taille === TAILLES.length - 1}
+                onClick=${() => setTaille(Math.min(TAILLES.length - 1, taille + 1))}
+              >
+                A+
+              </button>
             `
           : null}
       </div>
@@ -597,7 +627,10 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
                 <div class="etat-vide"><div class="attenue">Ce fichier n'existe d'aucun côté.</div></div>
               </div>`
             : html`
-                <div class=${'diff' + (unifie ? ' diff-unifie' : '')}>
+                <div
+                  class=${'diff' + (unifie ? ' diff-unifie' : '')}
+                  style=${'--diff-police:' + TAILLES[taille].police + 'px;--diff-ligne:' + TAILLES[taille].ligne + 'px'}
+                >
                   ${unifie
                     ? html`
                         <div class="diff-colonne">

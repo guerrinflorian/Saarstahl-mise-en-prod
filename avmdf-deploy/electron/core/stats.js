@@ -161,6 +161,7 @@ function calculer(manifestes, maintenant = new Date()) {
       projet: manifeste.projet,
       auteur: manifeste.auteur,
       operation: manifeste.operation || 'deploiement',
+      commentaire: manifeste.commentaire || null,
       total: (manifeste.resume || {}).total || 0,
       echecs: (manifeste.resume || {}).echecs || 0
     }))

@@ -1238,6 +1238,26 @@ label {
   font-size: 12px;
 }
 
+/* Commentaire de passage, dans la confirmation de mise en production. */
+.champ-commentaire {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.champ-commentaire > label {
+  font-weight: 600;
+}
+
+.champ-commentaire input {
+  width: 100%;
+}
+
+.champ-commentaire .champ-aide {
+  margin-top: 0;
+}
+
 .ligne-options {
   display: flex;
   flex-wrap: wrap;
@@ -2395,13 +2415,13 @@ select.marque {
   min-height: 0;
   overflow: auto;
   font-family: var(--police-mono);
-  font-size: 12px;
+  font-size: var(--diff-police, 12px);
 }
 
 .diff-ligne {
   display: flex;
-  height: 18px;
-  line-height: 18px;
+  height: var(--diff-ligne, 18px);
+  line-height: var(--diff-ligne, 18px);
   white-space: pre;
 }
 
@@ -2475,8 +2495,8 @@ select.marque {
 .diff-repli {
   display: block;
   width: 100%;
-  height: 18px;
-  line-height: 18px;
+  height: var(--diff-ligne, 18px);
+  line-height: var(--diff-ligne, 18px);
   padding: 0 0 0 62px;
   background: var(--repli-fond);
   border: none;
@@ -2793,6 +2813,48 @@ select.marque {
 }
 
 /* Historique -------------------------------------------------------------- */
+
+.historique-outils {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--separateur);
+  background: var(--panneau);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.historique-outils input[type="search"] {
+  width: 100%;
+}
+
+.historique-outils .case {
+  font-size: 12px;
+  color: var(--texte-attenue);
+}
+
+.historique-commentaire,
+.recent-commentaire,
+.rapport-commentaire {
+  color: var(--accent-texte);
+  font-size: 12px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rapport-commentaire {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--accent-voile);
+  border-left: 3px solid var(--accent-sourd);
+  border-radius: var(--rayon);
+  font-size: 13px;
+  white-space: normal;
+}
 
 .historique {
   flex: 1;

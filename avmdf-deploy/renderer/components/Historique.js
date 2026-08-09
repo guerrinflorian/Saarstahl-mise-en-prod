@@ -35,6 +35,8 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
   const [restauration, setRestauration] = useState(null);
   const [saisie, setSaisie] = useState('');
   const [occupe, setOccupe] = useState(false);
+  const [filtre, setFiltre] = useState('');
+  const [sansSimulations, setSansSimulations] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -100,6 +102,24 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
 
   const numero = choisi ? String(choisi.demande || '').replace(/\D/g, '') : '';
 
+  // La recherche balaie tout ce qu'on peut avoir en tête en rouvrant
+  // l'historique : le numéro de demande, le sprint, le projet, l'auteur, le
+  // commentaire du passage, et jusqu'aux chemins des fichiers déployés.
+  const aiguille = filtre.trim().toLowerCase();
+  const affiches = manifestes.filter((manifeste) => {
+    if (sansSimulations && manifeste.simulation) return false;
+    if (!aiguille) return true;
+    const champs = [
+      manifeste.demande,
+      manifeste.sprint,
+      manifeste.projet,
+      manifeste.auteur,
+      manifeste.commentaire,
+      ...(manifeste.fichiers || []).map((f) => f.chemin)
+    ];
+    return champs.some((champ) => champ && String(champ).toLowerCase().includes(aiguille));
+  });
+
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Historique des déploiements">
       <div class="modale modale-plein">
@@ -117,6 +137,23 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
           : html`
               <div class="historique">
                 <div class="historique-liste">
+                  <div class="historique-outils">
+                    <input
+                      type="search"
+                      placeholder="Demande, fichier, commentaire…"
+                      aria-label="Filtrer l'historique"
+                      value=${filtre}
+                      onInput=${(e) => setFiltre(e.target.value)}
+                    />
+                    <label class="case" title="Ne montrer que les passages qui ont réellement écrit">
+                      <input
+                        type="checkbox"
+                        checked=${sansSimulations}
+                        onChange=${(e) => setSansSimulations(e.target.checked)}
+                      />
+                      <span>Masquer les simulations</span>
+                    </label>
+                  </div>
                   ${manifestes.length === 0
                     ? html`<div class="etat-vide">
                         <div class="etat-vide-titre">Aucun déploiement enregistré</div>
@@ -125,7 +162,15 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                         </div>
                       </div>`
                     : null}
-                  ${manifestes.map(
+                  ${manifestes.length > 0 && affiches.length === 0
+                    ? html`<div class="etat-vide">
+                        <div class="etat-vide-titre">Rien ne correspond.</div>
+                        <div class="etat-vide-texte">
+                          ${formaterNombre(manifestes.length)} déploiement(s) sont masqués par la recherche ou le filtre.
+                        </div>
+                      </div>`
+                    : null}
+                  ${affiches.map(
                     (manifeste) => html`
                       <button
                         type="button"
@@ -157,6 +202,9 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                             ? html`<span class="rouge"> · ${formaterNombre(manifeste.resume.echecs)} échec(s)</span>`
                             : null}
                         </div>
+                        ${manifeste.commentaire
+                          ? html`<div class="historique-commentaire">« ${manifeste.commentaire} »</div>`
+                          : null}
                       </button>
                     `
                   )}
@@ -180,6 +228,9 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                               <tr><th>Demande</th><td class="mono">${choisi.demande} / ${choisi.sprint}</td></tr>
                               <tr><th>Date</th><td>${formaterHorodatage(choisi.date)}</td></tr>
                               <tr><th>Auteur</th><td>${choisi.auteur || '-'}</td></tr>
+                              ${choisi.commentaire
+                                ? html`<tr><th>Commentaire</th><td>« ${choisi.commentaire} »</td></tr>`
+                                : null}
                               <tr><th>Projet</th><td>${choisi.projet}</td></tr>
                               <tr><th>Production</th><td class="mono">${choisi.racineProd}</td></tr>
                               <tr><th>Sauvegarde</th><td class="mono">${choisi.dossierSauvegarde}</td></tr>

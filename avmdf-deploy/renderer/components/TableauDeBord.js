@@ -258,6 +258,9 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
                       ${formaterHorodatage(entree.date)} · ${entree.projet} · ${entree.auteur || '-'}
                       · ${formaterNombre(entree.total)} fichier${entree.total > 1 ? 's' : ''}
                     </div>
+                    ${entree.commentaire
+                      ? html`<div class="recent-commentaire">« ${entree.commentaire} »</div>`
+                      : null}
                   </div>
                 </div>
               `

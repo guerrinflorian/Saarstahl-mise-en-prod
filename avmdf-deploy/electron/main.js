@@ -1035,6 +1035,9 @@ function construirePlan(parametres) {
       simulation: Boolean(parametres.simulation),
       archiver,
       operation,
+      // Une phrase au plus : le commentaire explique le passage, il ne raconte
+      // pas le sprint.
+      commentaire: String(parametres.commentaire || '').trim().slice(0, 600) || null,
       appOffline: actuels.options.appOffline,
       fichiers
     },

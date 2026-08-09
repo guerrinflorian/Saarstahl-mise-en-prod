@@ -14,6 +14,7 @@ export function Journal({ onFermer, onEchec }) {
   const [choisi, setChoisi] = useState(null);
   const [lignes, setLignes] = useState([]);
   const [filtre, setFiltre] = useState('');
+  const [niveau, setNiveau] = useState('tous');
   const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
@@ -52,7 +53,15 @@ export function Journal({ onFermer, onEchec }) {
   }, [onFermer]);
 
   const aiguille = filtre.trim().toLowerCase();
-  const affichees = aiguille ? lignes.filter((ligne) => ligne.toLowerCase().includes(aiguille)) : lignes;
+  const parNiveau = { tous: lignes.length, alerte: 0, erreur: 0 };
+  for (const ligne of lignes) {
+    const n = niveauDe(ligne).trim();
+    if (n) parNiveau[n] += 1;
+  }
+  const affichees = lignes.filter((ligne) => {
+    if (niveau !== 'tous' && niveauDe(ligne).trim() !== niveau) return false;
+    return !aiguille || ligne.toLowerCase().includes(aiguille);
+  });
 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Journal">
@@ -70,6 +79,22 @@ export function Journal({ onFermer, onEchec }) {
               ${fichiers.length === 0 ? html`<option value="">aucun journal</option>` : null}
               ${fichiers.map((fichier) => html`<option value=${fichier.nom} key=${fichier.nom}>${fichier.jour}</option>`)}
             </select>
+            ${[
+              ['tous', 'Tout (' + formaterNombre(parNiveau.tous) + ')'],
+              ['alerte', 'Alertes (' + formaterNombre(parNiveau.alerte) + ')'],
+              ['erreur', 'Erreurs (' + formaterNombre(parNiveau.erreur) + ')']
+            ].map(
+              ([valeur, libelle]) => html`
+                <button
+                  type="button"
+                  class=${'btn btn-mini' + (niveau === valeur ? ' btn-marque' : '')}
+                  key=${valeur}
+                  onClick=${() => setNiveau(valeur)}
+                >
+                  ${libelle}
+                </button>
+              `
+            )}
             <input
               type="search"
               class="mono"
