@@ -4,6 +4,7 @@ import { useState } from '../vendor/hooks.module.js';
 import { formaterNombre } from './arborescence.js';
 import { EnTeteModale } from './Modale.js';
 import { IconeExpedier, IconeHistorique } from './icones.js';
+import { EncartVerification, Verdict } from './Verification.js';
 
 const html = htm.bind(h);
 
@@ -17,8 +18,21 @@ const LIBELLES_ACTION = {
 /** Rapport final : ce qui est parti, ce qui a échoué, et où sont les traces. */
 export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) {
   const [filtre, setFiltre] = useState('tous');
+  const [verification, setVerification] = useState(null);
+  const [verificationEnCours, setVerificationEnCours] = useState(false);
   const { manifeste, rapport, chemins } = resultat;
   const simulation = manifeste.simulation;
+
+  async function verifierProduction() {
+    setVerificationEnCours(true);
+    const reponse = await window.avmdf.historique.verifierProduction(chemins.manifeste);
+    setVerificationEnCours(false);
+    if (!reponse.ok) return;
+    setVerification({
+      resultat: reponse.verification,
+      parChemin: new Map(reponse.verification.resultats.map((r) => [r.chemin, r.verdict]))
+    });
+  }
 
   const enEchec = manifeste.fichiers.filter((f) => f.erreur);
   const archivesNonRemplaces = manifeste.fichiers.filter((f) => f.archiveNonRemplace);
@@ -112,6 +126,15 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                     <button type="button" class="btn btn-mini" onClick=${() => onReveler(chemins.manifeste)}>
                       Afficher dans l'explorateur
                     </button>
+                    <button
+                      type="button"
+                      class="btn btn-mini btn-marque"
+                      disabled=${verificationEnCours}
+                      title="Re-hashe chaque fichier du passage en production et le confronte au manifeste qui vient d'être écrit. Ne lit que, n'écrit rien."
+                      onClick=${verifierProduction}
+                    >
+                      ${verificationEnCours ? 'Vérification…' : 'Vérifier en production'}
+                    </button>
                   </div>
                 </div>
               `
@@ -126,6 +149,8 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                   tableau de bord. Le journal en garde la ligne, et le tableau ci-dessous l'empreinte
                   de ce qui a été remplacé.
                 </div>`}
+
+          ${verification ? html`<${EncartVerification} verification=${verification.resultat} />` : null}
 
           <div class="filtres-ligne" style="margin-bottom:6px">
             ${[
@@ -154,6 +179,7 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                 <th>Lignes</th>
                 <th>Sauvegarde</th>
                 <th>Résultat</th>
+                ${verification ? html`<th>En prod</th>` : null}
               </tr>
             </thead>
             <tbody>
@@ -176,6 +202,13 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
                         : null}
                     </td>
                     <td>${fichier.erreur ? html`<span class="rouge">${fichier.erreur}</span>` : 'ok'}</td>
+                    ${verification
+                      ? html`<td>
+                          ${verification.parChemin.has(fichier.chemin)
+                            ? html`<${Verdict} verdict=${verification.parChemin.get(fichier.chemin)} />`
+                            : html`<span class="attenue">-</span>`}
+                        </td>`
+                      : null}
                   </tr>
                 `
               )}

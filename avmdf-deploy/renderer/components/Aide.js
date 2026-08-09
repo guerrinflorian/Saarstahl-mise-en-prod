@@ -832,7 +832,11 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [html`<${T}>↑<//> <${T}>↓<//>`, 'Déplacent le curseur dans la liste.'],
               [html`<${T}>→<//> <${T}>←<//>`, 'Déplient et replient le dossier sous le curseur.'],
               [html`<${T}>Espace<//>`, 'Coche ou décoche la ligne sous le curseur, branche entière pour un dossier.'],
-              [html`<${T}>Entrée<//>`, 'Ouvre la comparaison du fichier sous le curseur.']
+              [html`<${T}>Entrée<//>`, 'Ouvre la comparaison du fichier sous le curseur.'],
+              [
+                html`<${T}>Maj<//> + clic sur une case`,
+                'Coche toute la plage depuis la dernière case cochée jusqu\'à celle-ci. Toujours cocher, jamais basculer : une plage se constitue, elle ne se devine pas. La règle de non-mélange déploiement / suppression s\'applique aussi ici.'
+              ]
             ]}
           />
 
@@ -1072,6 +1076,19 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ]
             ]}
           />
+
+          <h3>La mini-carte des changements</h3>
+          <p>
+            Le long du bord droit, une colonne de quelques pixels dessine la
+            <strong>silhouette du fichier</strong> : un trait vert par bloc ajouté, rouge sourd par
+            bloc supprimé, gris-bleu par bloc modifié, chacun à sa hauteur relative. D'un coup
+            d'œil : où ça change, et combien. Un clic dans la colonne saute à l'endroit visé.
+          </p>
+          <p class="attenue">
+            À l'ouverture d'un fichier, la vue se place d'elle-même sur le premier changement -
+            c'est lui qu'on est venu voir - et <span class="aide-touche">F8</span> enchaîne sur le
+            suivant.
+          </p>
 
           <h3>Ce que l'en-tête vous dit d'autre</h3>
           <p>
@@ -1514,6 +1531,28 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             Sur chaque ligne du détail, <strong>Voir ce qui a changé</strong> compare la sauvegarde
             à ce qui est actuellement en production. Utile pour répondre à la question « est-ce que
             ma modification est toujours là ? » longtemps après coup.
+          </p>
+
+          <h3>Vérifier l'état en production</h3>
+          <p>
+            <strong>Vérifier l'état en production</strong> répond à la question qui revient des
+            semaines après un passage : « ma production est-elle toujours celle que j'ai
+            livrée ? ». Chaque fichier du manifeste est re-hashé en production et confronté à
+            l'empreinte enregistrée au moment du passage. Rien n'est écrit, nulle part.
+          </p>
+          <${Repere}
+            entetes=${['Verdict', 'Sens']}
+            lignes=${[
+              [html`<span class="verdict verdict-conforme">intact</span>`, 'L\'empreinte actuelle est celle du manifeste : le fichier n\'a pas bougé depuis ce passage.'],
+              [html`<span class="verdict verdict-modifie">modifié depuis</span>`, 'Le contenu a changé après ce passage - souvent un passage plus récent, parfois une retouche à la main. L\'historique dit lequel.'],
+              [html`<span class="verdict verdict-absent">absent de la production</span>`, 'Le fichier livré ne se trouve plus sur le serveur.'],
+              [html`<span class="verdict verdict-absent">réapparu</span>`, 'Un fichier supprimé par ce passage est revenu.'],
+              [html`<span class="verdict verdict-modifie">invérifiable</span>`, 'Le fichier ne se laisse pas lire, ou le manifeste n\'a pas d\'empreinte pour lui.']
+            ]}
+          />
+          <p class="attenue">
+            Le même contrôle est proposé dans le rapport, juste après un passage réel : la
+            vérification immédiate qui confirme que ce qui devait partir est bien arrivé.
           </p>
 
           <h3>Revenir en arrière</h3>

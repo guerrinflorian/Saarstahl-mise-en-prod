@@ -242,6 +242,21 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
     [rangsAffiches]
   );
 
+  // À l'ouverture d'un fichier, la vue se place d'elle-même sur le premier
+  // changement : c'est lui qu'on est venu voir, pas l'en-tête du fichier.
+  // F8 enchaîne ensuite naturellement sur le deuxième.
+  const dernierSautAuto = useRef(null);
+  useEffect(() => {
+    if (!donnees || donnees.type !== 'texte') return undefined;
+    if (dernierSautAuto.current === donnees.cle) return undefined;
+    if (!changements.length) return undefined;
+    dernierSautAuto.current = donnees.cle;
+    const cible = changements[0];
+    setChangementCourant(cible);
+    const minuteur = setTimeout(() => allerA(cible), 0);
+    return () => clearTimeout(minuteur);
+  }, [donnees && donnees.cle, changements]);
+
   const trouvees = useMemo(() => {
     const requete = recherche.trim().toLowerCase();
     if (!requete) return [];
@@ -693,6 +708,14 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
                           </div>
                         `
                       )}
+                  <${CarteChangements}
+                    rangs=${rangsAffiches}
+                    onAller=${(index) => {
+                      allerA(index);
+                      const proche = changements.find((position) => position >= index);
+                      if (proche !== undefined) setChangementCourant(proche);
+                    }}
+                  />
                 </div>
                 ${tronque
                   ? html`<div class="diff-pied">
@@ -735,6 +758,63 @@ function texteUnifie(donnees, titreGauche, titreDroite) {
     }
   }
   return sortie.join('\n');
+}
+
+/**
+ * Mini-carte des changements : la silhouette du fichier en une colonne de
+ * quelques pixels. Chaque trait est un bloc de lignes changées, à sa hauteur
+ * relative dans le fichier ; un clic saute à cet endroit. C'est ce qui donne,
+ * d'un coup d'œil, la réponse à « où ça change, et combien ».
+ */
+function CarteChangements({ rangs, onAller }) {
+  const total = rangs.length;
+
+  // Blocs contigus de même type, pour ne pas créer un élément par ligne.
+  const blocs = useMemo(() => {
+    const sortie = [];
+    let courant = null;
+    rangs.forEach((rang, index) => {
+      const type = rang.genre === 'ligne' && rang.ligne.type !== 'identique' ? rang.ligne.type : null;
+      if (type && courant && courant.type === type && courant.fin === index - 1) {
+        courant.fin = index;
+      } else if (type) {
+        courant = { type, debut: index, fin: index };
+        sortie.push(courant);
+      } else {
+        courant = null;
+      }
+    });
+    return sortie;
+  }, [rangs]);
+
+  if (!total) return null;
+
+  return html`
+    <div
+      class="diff-carte"
+      role="presentation"
+      title="La silhouette des changements du fichier. Cliquer saute à l'endroit visé."
+      onClick=${(evenement) => {
+        const cadre = evenement.currentTarget.getBoundingClientRect();
+        const proportion = Math.min(1, Math.max(0, (evenement.clientY - cadre.top) / cadre.height));
+        onAller(Math.min(total - 1, Math.floor(proportion * total)));
+      }}
+    >
+      ${blocs.map(
+        (bloc, index) => html`
+          <span
+            key=${index}
+            class=${'diff-carte-trait carte-' + bloc.type}
+            style=${'top:' +
+            ((bloc.debut / total) * 100).toFixed(3) +
+            '%;height:' +
+            Math.max(0.35, (((bloc.fin - bloc.debut + 1) / total) * 100)).toFixed(3) +
+            '%'}
+          ></span>
+        `
+      )}
+    </div>
+  `;
 }
 
 function Repli({ rang, onOuvrir }) {

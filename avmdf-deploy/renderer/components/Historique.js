@@ -5,6 +5,7 @@ import { VueDiff } from './VueDiff.js';
 import { formaterNombre } from './arborescence.js';
 import { EnTeteModale } from './Modale.js';
 import { IconeCouches, IconeHistorique } from './icones.js';
+import { EncartVerification, Verdict } from './Verification.js';
 
 const html = htm.bind(h);
 
@@ -37,6 +38,8 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
   const [occupe, setOccupe] = useState(false);
   const [filtre, setFiltre] = useState('');
   const [sansSimulations, setSansSimulations] = useState(false);
+  const [verification, setVerification] = useState(null);
+  const [verificationEnCours, setVerificationEnCours] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -73,6 +76,21 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
       return;
     }
     setDiff({ etat: 'pret', donnees: reponse.diff });
+  }
+
+  async function verifierProduction() {
+    setVerificationEnCours(true);
+    const reponse = await window.avmdf.historique.verifierProduction(choisi.chemin);
+    setVerificationEnCours(false);
+    if (!reponse.ok) {
+      onEchec(reponse);
+      return;
+    }
+    setVerification({
+      chemin: choisi.chemin,
+      resultat: reponse.verification,
+      parChemin: new Map(reponse.verification.resultats.map((r) => [r.chemin, r.verdict]))
+    });
   }
 
   async function preparerRetour() {
@@ -179,6 +197,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                         onClick=${() => {
                           setChoisi(manifeste);
                           setRestauration(null);
+                          setVerification(null);
                         }}
                       >
                         <div class="historique-ligne1">
@@ -254,7 +273,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                               </div>`
                             : null}
 
-                          <div style="display:flex;gap:6px;margin:12px 0">
+                          <div style="display:flex;gap:6px;margin:12px 0;align-items:center;flex-wrap:wrap">
                             <button
                               type="button"
                               class="btn btn-danger"
@@ -266,14 +285,35 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                             >
                               Revenir en arrière
                             </button>
+                            <button
+                              type="button"
+                              class="btn"
+                              disabled=${choisi.simulation || verificationEnCours}
+                              title=${choisi.simulation
+                                ? 'Une simulation n\'a rien écrit : il n\'y a rien à vérifier'
+                                : 'Re-hashe chaque fichier de ce passage en production et le confronte au manifeste. Ne lit que, n\'écrit rien.'}
+                              onClick=${verifierProduction}
+                            >
+                              ${verificationEnCours ? 'Vérification…' : 'Vérifier l\'état en production'}
+                            </button>
                             <button type="button" class="btn btn-mini" onClick=${() => window.avmdf.systeme.reveler(choisi.chemin)}>
                               Afficher dans l'explorateur
                             </button>
                           </div>
 
+                          ${verification && verification.chemin === choisi.chemin
+                            ? html`<${EncartVerification} verification=${verification.resultat} />`
+                            : null}
+
                           <table class="tableau tableau-fichiers">
                             <thead>
-                              <tr><th>Fichier</th><th>Action</th><th>Lignes</th><th>Résultat</th><th></th></tr>
+                              <tr>
+                                <th>Fichier</th><th>Action</th><th>Lignes</th><th>Résultat</th>
+                                ${verification && verification.chemin === choisi.chemin
+                                  ? html`<th>En prod</th>`
+                                  : null}
+                                <th></th>
+                              </tr>
                             </thead>
                             <tbody>
                               ${choisi.fichiers.map(
@@ -287,6 +327,13 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                                         : `+${fichier.lignesAjoutees} −${fichier.lignesSupprimees}`}
                                     </td>
                                     <td>${fichier.erreur ? html`<span class="rouge">${fichier.erreur}</span>` : 'ok'}</td>
+                                    ${verification && verification.chemin === choisi.chemin
+                                      ? html`<td>
+                                          ${verification.parChemin.has(fichier.chemin)
+                                            ? html`<${Verdict} verdict=${verification.parChemin.get(fichier.chemin)} />`
+                                            : html`<span class="attenue">-</span>`}
+                                        </td>`
+                                      : null}
                                     <td>
                                       <button
                                         type="button"

@@ -1325,6 +1325,33 @@ function handlersHistorique() {
     return succes({ diff: enveloppe });
   });
 
+  // Confronte la production actuelle à un manifeste : rien n'est écrit, tout
+  // est lu. C'est le contrôle « ma prod est-elle toujours celle que j'ai
+  // livrée ? », depuis l'historique ou juste après un passage.
+  gerer('historique:verifierProduction', async (parametres) => {
+    const actuels = reglages();
+    const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);
+    if (manifeste.erreur) return manifeste.erreur;
+    if (manifeste.contenu.simulation) {
+      return echec(
+        'Ce manifeste vient d\'une simulation : rien n\'a été écrit, il n\'y a rien à vérifier.',
+        'Choisissez un passage réel.'
+      );
+    }
+
+    const verification = await deploy.verifierManifeste(manifeste.contenu, {
+      concurrence: actuels.options.lecturesSimultanees
+    });
+    const r = verification.resume;
+    carnet.ecrire(
+      r.conformes === r.total ? 'INFO' : 'ALERTE',
+      `vérification production (${manifeste.contenu.demande || 'sans demande'} / ${manifeste.contenu.sprint || '-'}) : ` +
+        `${r.conformes}/${r.total} intact(s), ${r.modifies} modifié(s) depuis, ${r.absents} absent(s), ` +
+        `${r.reapparus} réapparu(s), ${r.inverifiables} invérifiable(s)`
+    );
+    return succes({ verification });
+  });
+
   gerer('historique:preparerRestauration', async (parametres) => {
     const actuels = reglages();
     const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);

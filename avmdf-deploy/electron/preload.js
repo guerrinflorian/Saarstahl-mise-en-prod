@@ -111,6 +111,9 @@ contextBridge.exposeInMainWorld('avmdf', {
     lister: () => ipcRenderer.invoke('historique:lister'),
     comparer: (cheminManifeste, chemin) =>
       ipcRenderer.invoke('historique:comparer', { cheminManifeste, chemin }),
+    /** Re-hash la production et la confronte aux empreintes d'un manifeste. Ne lit que, n'écrit rien. */
+    verifierProduction: (cheminManifeste) =>
+      ipcRenderer.invoke('historique:verifierProduction', { cheminManifeste }),
     preparerRestauration: (cheminManifeste) =>
       ipcRenderer.invoke('historique:preparerRestauration', { cheminManifeste }),
     restaurer: (cheminManifeste, simulation) =>

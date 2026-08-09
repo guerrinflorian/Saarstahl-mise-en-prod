@@ -716,6 +716,18 @@ label {
   color: var(--alerte);
 }
 
+/* La bonne nouvelle a aussi son encart : production conforme, contrôle passé. */
+.encart-succes {
+  border-color: var(--accent-sourd);
+  border-left-color: var(--accent);
+  background: var(--accent-fond);
+  color: var(--texte-attenue);
+}
+
+.encart-succes strong {
+  color: var(--accent-texte);
+}
+
 .encart ul {
   margin: 5px 0 0;
   padding-left: 18px;
@@ -2473,11 +2485,43 @@ select.marque {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 11px;
 }
 
 .diff-unifie {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) 11px;
+}
+
+/* Mini-carte des changements : la silhouette du fichier, à droite. */
+.diff-carte {
+  position: relative;
+  background: var(--champ);
+  border-left: 1px solid var(--separateur);
+  cursor: pointer;
+}
+
+.diff-carte:hover {
+  background: var(--survol-discret);
+}
+
+.diff-carte-trait {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.carte-ajout {
+  background: var(--nouveau);
+}
+
+.carte-suppression {
+  background: var(--orphelin);
+}
+
+.carte-modification {
+  background: var(--modifie);
 }
 
 .diff-colonne {
@@ -3544,6 +3588,34 @@ button.bandeau-destination:hover {
 
 .etiquette-danger {
   border-color: var(--danger-bord);
+  color: var(--danger);
+}
+
+/* Verdicts de la vérification de production : intact, modifié depuis, absent. */
+.verdict {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--separateur-clair);
+  border-radius: 2px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.verdict-conforme {
+  border-color: var(--accent-sourd);
+  background: var(--accent-fond);
+  color: var(--accent-texte);
+}
+
+.verdict-modifie {
+  border-color: var(--alerte-bord);
+  background: var(--alerte-fond);
+  color: var(--alerte);
+}
+
+.verdict-absent {
+  border-color: var(--danger-bord);
+  background: var(--danger-fond);
   color: var(--danger);
 }
 

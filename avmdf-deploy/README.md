@@ -339,6 +339,21 @@ d'abord.
 - Clic droit → **Masquer pour cette analyse** (fichier ou branche) : écarte de la vue sans toucher
   aux réglages ; la barre de filtres affiche « N masqués · Rétablir », la prochaine analyse repart
   au complet.
+- `Maj+clic` sur une case coche toute la plage depuis la dernière case cochée (toujours cocher,
+  jamais basculer ; même règle de non-mélange que le reste).
+- Le comparateur porte une **mini-carte des changements** le long du bord droit : la silhouette du
+  fichier, un trait coloré par bloc changé, un clic pour y sauter. À l'ouverture d'un fichier, la
+  vue se place d'elle-même sur le premier changement.
+
+## Vérifier la production après coup
+
+Dans l'historique - et dans le rapport, juste après un passage réel - **« Vérifier l'état en
+production »** re-hashe chaque fichier d'un manifeste sur le serveur et le confronte à l'empreinte
+`hashApres` enregistrée au moment du passage (`deploy.verifierManifeste`). Verdicts par fichier :
+**intact**, **modifié depuis**, **absent de la production**, **réapparu** (un fichier supprimé qui
+est revenu), **invérifiable**. Rien n'est écrit, nulle part : ce contrôle lit. C'est la réponse
+outillée à « ma production est-elle toujours celle que j'ai livrée ? », et le résultat est
+consigné dans le journal (ALERTE dès qu'un fichier n'est plus intact).
 - Le clic droit sur un fichier propose **les deux côtés séparément** : ouvrir la version locale ou
   la version production, et afficher l'une ou l'autre dans l'explorateur Windows. Aucune entrée ne
   se rabat sur l'autre côté quand le fichier n'existe que d'un seul : elle est grisée. Ouvrir « la

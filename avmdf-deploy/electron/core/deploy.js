@@ -911,6 +911,90 @@ async function listerManifestes(racineAvmdf) {
 }
 
 // ---------------------------------------------------------------------------
+// Vérification après coup
+// ---------------------------------------------------------------------------
+
+const VERDICT_CONFORME = 'conforme';
+const VERDICT_MODIFIE = 'modifie';
+const VERDICT_ABSENT = 'absent';
+const VERDICT_REAPPARU = 'reapparu';
+const VERDICT_INVERIFIABLE = 'inverifiable';
+
+/**
+ * Confronte la production actuelle à ce qu'un manifeste dit y avoir écrit.
+ *
+ * C'est la réponse à « est-ce que ma production est toujours celle que j'ai
+ * livrée ? » : chaque fichier du passage est re-hashé et comparé à l'empreinte
+ * `hashApres` du manifeste. Rien n'est écrit, nulle part : ce contrôle lit.
+ *
+ * Verdicts par fichier :
+ *   - conforme      : l'empreinte actuelle est celle du manifeste ;
+ *   - modifie       : le fichier existe mais son contenu a changé depuis ;
+ *   - absent        : le fichier déployé ne se trouve plus en production ;
+ *   - reapparu      : un fichier supprimé par le passage est revenu ;
+ *   - inverifiable  : le fichier ne se laisse pas lire, ou le manifeste n'a
+ *                     pas d'empreinte pour lui.
+ *
+ * @param {object} manifeste
+ * @param {object} [options]
+ * @returns {Promise<{resultats:object[], resume:object}>}
+ */
+async function verifierManifeste(manifeste, options = {}) {
+  const { concurrence = 6, signal = { annule: false }, surProgression = null } = options;
+  const aVerifier = manifeste.fichiers.filter((f) => !f.erreur);
+  const resultats = [];
+  let faits = 0;
+
+  await pool(
+    aVerifier,
+    concurrence,
+    async (fichier) => {
+      const cheminProd = joindreRelatif(manifeste.racineProd, fichier.chemin);
+      const entree = { chemin: fichier.chemin, action: fichier.action, verdict: null, hashActuel: null };
+
+      const present = await existe(cheminProd);
+      if (fichier.action === ACTION_SUPPRESSION) {
+        entree.verdict = present ? VERDICT_REAPPARU : VERDICT_CONFORME;
+      } else if (!present) {
+        entree.verdict = VERDICT_ABSENT;
+      } else if (!fichier.hashApres) {
+        entree.verdict = VERDICT_INVERIFIABLE;
+      } else {
+        try {
+          entree.hashActuel = await hashFichier(cheminProd);
+          entree.verdict = entree.hashActuel === fichier.hashApres ? VERDICT_CONFORME : VERDICT_MODIFIE;
+        } catch (err) {
+          entree.verdict = VERDICT_INVERIFIABLE;
+        }
+      }
+
+      resultats.push(entree);
+      faits += 1;
+      if (surProgression && faits % 5 === 0) {
+        surProgression({ phase: 'verification', faits, total: aVerifier.length });
+      }
+    },
+    signal
+  );
+
+  resultats.sort((a, b) => a.chemin.localeCompare(b.chemin, 'fr'));
+  const compter = (verdict) => resultats.filter((r) => r.verdict === verdict).length;
+  return {
+    resultats,
+    date: new Date().toISOString(),
+    resume: {
+      total: resultats.length,
+      ignores: manifeste.fichiers.length - aVerifier.length,
+      conformes: compter(VERDICT_CONFORME),
+      modifies: compter(VERDICT_MODIFIE),
+      absents: compter(VERDICT_ABSENT),
+      reapparus: compter(VERDICT_REAPPARU),
+      inverifiables: compter(VERDICT_INVERIFIABLE)
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Retour arrière
 // ---------------------------------------------------------------------------
 
@@ -1236,6 +1320,7 @@ module.exports = {
   resumer,
   redigerRecapitulatif,
   listerManifestes,
+  verifierManifeste,
   preparerRestauration,
   restaurer,
   restaurerVersion,

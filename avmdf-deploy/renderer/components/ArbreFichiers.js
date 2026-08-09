@@ -63,6 +63,8 @@ export function ArbreFichiers({
   const [curseur, setCurseur] = useState(0);
   const [menu, setMenu] = useState(null);
   const [ignoresOuverts, setIgnoresOuverts] = useState(false);
+  /** Index de la dernière case cochée à la main, point de départ d'un Maj+clic. */
+  const dernierIndexCoche = useRef(null);
 
   const lignes = useMemo(() => aplatir(arbre, ouverts), [arbre, ouverts]);
 
@@ -135,6 +137,43 @@ export function ArbreFichiers({
     onSelection(suivante);
   }
 
+  /**
+   * Clic sur une case, Maj enfoncée ou non. Maj+clic coche toute la plage
+   * entre la dernière case cochée et celle-ci - toujours cocher, jamais
+   * basculer : une plage se constitue, elle ne se devine pas. La règle de
+   * non-mélange des opérations reste la même que pour une branche.
+   */
+  function cliqueCase(noeud, index, majuscule) {
+    if (noeud.type === 'dossier') {
+      basculerBranche(noeud);
+      dernierIndexCoche.current = null;
+      return;
+    }
+    if (majuscule && dernierIndexCoche.current !== null && dernierIndexCoche.current !== index) {
+      const debut = Math.min(dernierIndexCoche.current, index);
+      const fin = Math.max(dernierIndexCoche.current, index);
+      const plage = lignes
+        .slice(debut, fin + 1)
+        .map((ligne) => ligne.noeud)
+        .filter((candidat) => candidat.type !== 'dossier');
+      const deployables = plage.filter(estDeployable);
+      const orphelins = plage.filter((candidat) => candidat.statut === 'orphelin');
+      let candidats;
+      if (natureSelection === 'suppression') candidats = orphelins;
+      else if (natureSelection === 'deploiement') candidats = deployables;
+      else candidats = deployables.length ? deployables : orphelins;
+      if (candidats.length) {
+        const suivante = new Set(selection);
+        for (const candidat of candidats) suivante.add(candidat.cle);
+        onSelection(suivante);
+      }
+      dernierIndexCoche.current = index;
+      return;
+    }
+    basculerFichier(noeud);
+    dernierIndexCoche.current = index;
+  }
+
   function surTouche(evenement) {
     if (!lignes.length) return;
     const ligne = lignes[curseur];
@@ -169,7 +208,10 @@ export function ArbreFichiers({
         evenement.preventDefault();
         if (!ligne) break;
         if (ligne.noeud.type === 'dossier') basculerBranche(ligne.noeud);
-        else basculerFichier(ligne.noeud);
+        else {
+          basculerFichier(ligne.noeud);
+          dernierIndexCoche.current = curseur;
+        }
         break;
       case 'Enter':
         evenement.preventDefault();
@@ -306,8 +348,7 @@ export function ArbreFichiers({
                       curseur=${debut + position === curseur}
                       selection=${selection}
                       onBasculerDossier=${basculerDossier}
-                      onBasculerFichier=${basculerFichier}
-                      onBasculerBranche=${basculerBranche}
+                      onCase=${(majuscule) => cliqueCase(ligne.noeud, debut + position, majuscule)}
                       onChoisir=${onChoisir}
                       onCurseur=${() => setCurseur(debut + position)}
                       onMenu=${(evenement, noeud) => {
@@ -437,8 +478,7 @@ function Ligne({
   curseur,
   selection,
   onBasculerDossier,
-  onBasculerFichier,
-  onBasculerBranche,
+  onCase,
   onChoisir,
   onCurseur,
   onMenu
@@ -477,11 +517,18 @@ function Ligne({
         checked=${coche}
         disabled=${!cochable}
         aria-label=${'Sélectionner ' + noeud.chemin}
+        title=${estDossier ? '' : 'Maj+clic coche toute la plage depuis la dernière case cochée'}
         ref=${(element) => {
           if (element) element.indeterminate = etat === 'partiel';
         }}
-        onClick=${(evenement) => evenement.stopPropagation()}
-        onChange=${() => (estDossier ? onBasculerBranche(noeud) : onBasculerFichier(noeud))}
+        onClick=${(evenement) => {
+          // La case est entièrement pilotée par l'état : le clic ne bascule
+          // pas le DOM lui-même, il passe par la sélection - c'est ce qui
+          // permet au Maj+clic de cocher une plage d'un geste.
+          evenement.preventDefault();
+          evenement.stopPropagation();
+          onCase(evenement.shiftKey);
+        }}
       />
 
       <span class=${'chevron' + (estDossier ? '' : ' chevron-vide')}>
