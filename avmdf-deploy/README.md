@@ -177,7 +177,8 @@ Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<hor
 }
 ```
 
-Champs propres à l'outil : `operation` vaut `deploiement`, `suppression` ou `restauration` ;
+Champs propres à l'outil : `commentaire` porte la phrase saisie à la confirmation (« pourquoi ce
+passage part »), ou `null` ; `operation` vaut `deploiement`, `suppression` ou `restauration` ;
 `archivage` à `false` marque un passage fait sans archivage AVMDF, donc non réversible - les
 versions ≤ 0.6 pouvaient écrire un manifeste dans ce cas, ce n'est plus possible depuis (sans
 archivage, rien n'est écrit du tout), mais ces manifestes-là restent lus et marqués comme tels ;
@@ -269,6 +270,42 @@ montrent quand même qui ouvre quoi et jusqu'où. Bouton « Guides » pour les c
 mémorisée. Les fermetures orphelines sont ignorées, les balises vides (`<br/>`, `<img>`…) ne
 créent pas de trait.
 
+## Éditeur intégré
+
+Le bouton « ✎ Modifier » du comparateur - ou « Modifier la version locale » au clic droit - ouvre
+la version **locale** d'un fichier dans un éditeur plein écran : numéros de ligne, coloration
+syntaxique (les mêmes teintes que le comparateur), `Ctrl+S` pour enregistrer. C'est fait pour la
+retouche de dernière minute, pas pour remplacer Visual Studio. La production et les archives ne
+s'éditent jamais.
+
+Ce qui rend l'éditeur sûr dans un projet .NET français aux encodages mélangés :
+
+- **le fichier ressort dans son enveloppe d'origine** : encodage, BOM et fins de ligne sont
+  redétectés sur l'état réel du disque au moment d'écrire (`textdiff.encoder`, la réciproque de
+  `decoder`), et conservés à l'identique ;
+- en Windows-1252, un caractère hors du jeu (flèche, émoji…) **bloque l'enregistrement** et les
+  caractères fautifs sont nommés : l'outil n'écrit jamais de « ? » à leur place et ne change
+  jamais l'encodage d'un fichier en douce ;
+- une modification concurrente (empreinte du disque différente de celle relevée à l'ouverture)
+  bloque l'enregistrement au lieu de l'écraser ;
+- l'écriture est atomique (fichier temporaire puis renommage), et l'analyse en mémoire est mise à
+  jour dans la foulée : statut recalculé, comparaison rechargée, cache d'empreintes invalidé.
+
+Seule normalisation, annoncée à l'avance dans l'éditeur : un fichier aux fins de ligne mixtes
+ressort uniformisé en CRLF.
+
+Techniquement, l'éditeur superpose un `textarea` au texte transparent sur un `pre` colorié aux
+mêmes métriques ; la tokenisation est synchrone (Prism) pour que le calque ne soit jamais en
+retard d'une frappe, et se coupe au-delà de 150 Ko pour préserver la fluidité.
+
+## Palette « Aller au fichier »
+
+`Ctrl+P` après une analyse : un champ, la liste des fichiers, et une recherche insensible à la
+casse et aux accents qui tolère les trous (`rchaspx` trouve `Principal\Recherche.aspx`). Les
+correspondances exactes passent devant les correspondances à trous, le nom du fichier pèse plus
+lourd que le chemin, et `Entrée` ouvre la comparaison. Palette vide, les écarts s'affichent
+d'abord.
+
 ## Interface
 
 - Les deux panneaux de l'analyse se redimensionnent à la souris (double-clic sur la poignée pour
@@ -282,7 +319,13 @@ créent pas de trait.
   de l'analyse : celles de l'historique et des versions archivées n'opposent pas du local à de la
   production et gardent leur ordre propre (`inversable={false}`).
 - La navigation se fait par onglets : Analyse, Tableau de bord, Aide. Historique et Journal
-  restent accessibles en permanence.
+  restent accessibles en permanence. L'historique se filtre (demande, fichier, commentaire, et une
+  case « Masquer les simulations »), le journal se filtre par niveau (Tout / Alertes / Erreurs).
+- « Copier le diff » copie la comparaison affichée au format patch, prête à coller dans un
+  message ; `A−` / `A+` règlent le corps de texte du comparateur, préférence mémorisée.
+- À la confirmation d'une mise en production, un champ **Commentaire** facultatif permet de dire
+  en une phrase pourquoi le passage part ; la phrase suit le manifeste partout (récapitulatif,
+  historique, rapport, tableau de bord).
 - Le clic droit sur un fichier propose **les deux côtés séparément** : ouvrir la version locale ou
   la version production, et afficher l'une ou l'autre dans l'explorateur Windows. Aucune entrée ne
   se rabat sur l'autre côté quand le fichier n'existe que d'un seul : elle est grisée. Ouvrir « la
