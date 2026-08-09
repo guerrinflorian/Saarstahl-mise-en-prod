@@ -45,7 +45,9 @@ const SOMMAIRE = [
       ['icones', 'Les icônes de fichier'],
       ['filtres', 'Chercher et filtrer'],
       ['arbre', "L'arborescence et la sélection"],
+      ['palette', 'Aller au fichier (Ctrl+P)'],
       ['comparateur', 'Le comparateur'],
+      ['editeur', "L'éditeur intégré"],
       ['bandeau', 'Le bandeau du bas']
     ]
   },
@@ -910,6 +912,35 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           </p>
         <//>
 
+        <!-- ================================================= Palette -->
+        <${Section}
+          id="palette"
+          titre="Aller au fichier (Ctrl+P)"
+          chapeau="Trois lettres, Entrée, et la comparaison s'ouvre. Le détour par les dossiers repliés de l'arborescence devient facultatif."
+        >
+          <p>
+            <${T}>Ctrl<//> + <${T}>P<//> ouvre une palette au-dessus de l'analyse. Tapez un morceau
+            du nom ou du chemin : la recherche est insensible à la casse et aux accents, et tolère
+            les trous - <span class="mono">rchaspx</span> trouve${' '}
+            <span class="mono">Principal\\Recherche.aspx</span>. Les lettres retenues sont
+            surlignées dans chaque résultat.
+          </p>
+          <ul class="aide-liste">
+            <li>
+              Les correspondances exactes passent toujours devant les correspondances à trous, et le
+              nom du fichier pèse plus lourd que son chemin.
+            </li>
+            <li>
+              Palette vide, les fichiers s'ordonnent par statut : les écarts d'abord, les identiques
+              en dernier.
+            </li>
+            <li>
+              <${T}>↑<//> <${T}>↓<//> pour choisir, <${T}>Entrée<//> pour ouvrir la comparaison,${' '}
+              <${T}>Échap<//> pour refermer.
+            </li>
+          </ul>
+        <//>
+
         <!-- ============================================== Comparateur -->
         <${Section}
           id="comparateur"
@@ -966,6 +997,14 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             entetes=${['Bouton', 'Effet']}
             lignes=${[
               [
+                html`<button type="button" class="btn btn-mini btn-marque">✎ Modifier</button>`,
+                'Ouvre la version locale dans l\'éditeur intégré, pour la retouche de dernière minute. Voir la section suivante.'
+              ],
+              [
+                html`<button type="button" class="btn btn-mini">Copier le diff</button>`,
+                'Copie la comparaison affichée au format patch : une ligne par ligne, préfixée de son signe. Prêt à coller dans un message ou une demande de travaux.'
+              ],
+              [
                 html`<button type="button" class="btn btn-mini">Versions archivées</button>`,
                 'Ouvre toutes les versions « avant modification » de ce fichier, et permet d\'en remettre une en production.'
               ],
@@ -996,6 +1035,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [
                 html`<button type="button" class="btn btn-mini">Unifié</button>`,
                 'Bascule entre les deux colonnes et une colonne unique où suppressions et ajouts se suivent.'
+              ],
+              [
+                html`<span><button type="button" class="btn btn-mini">A−</button> <button type="button" class="btn btn-mini">A+</button></span>`,
+                'Réduit ou agrandit le corps de texte de la comparaison. Le choix est mémorisé d\'une session à l\'autre.'
               ]
             ]}
           />
@@ -1049,6 +1092,55 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <p class="attenue">
             <${T}>Ctrl<//> + <${T}>F<//> ouvre une recherche dans la comparaison affichée, avec le
             compte des occurrences et deux flèches pour les parcourir. <${T}>Échap<//> la referme.
+          </p>
+        <//>
+
+        <!-- ================================================== Éditeur -->
+        <${Section}
+          id="editeur"
+          titre="L'éditeur intégré"
+          chapeau="Le libellé oublié, le commentaire à retirer, la constante à corriger : la retouche de dernière minute se fait sans quitter l'outil, et sans risquer l'enveloppe du fichier."
+        >
+          <p>
+            Le bouton <button type="button" class="btn btn-mini btn-marque">✎ Modifier</button> du
+            comparateur - ou « Modifier la version locale » dans le clic droit de l'arborescence -
+            ouvre la version <strong>locale</strong> du fichier en plein écran : numéros de ligne,
+            coloration syntaxique, <${T}>Ctrl<//> + <${T}>S<//> pour enregistrer. La production et
+            les archives, elles, ne s'éditent jamais.
+          </p>
+
+          <div class="encart">
+            <strong>Le fichier ressort dans son enveloppe d'origine.</strong> Encodage, BOM et fins
+            de ligne sont redétectés au moment d'écrire et conservés à l'identique : un fichier
+            Windows-1252 reste en Windows-1252, un BOM reste un BOM. Le résultat est indiscernable
+            d'une retouche faite dans Visual Studio.
+          </div>
+
+          <h3>Ce que l'éditeur refuse de faire</h3>
+          <ul class="aide-liste">
+            <li>
+              <strong>Écrire un « ? » à la place d'un caractère.</strong> Si le fichier est en
+              Windows-1252 et qu'un caractère saisi n'y existe pas (une flèche <span class="mono">→</span>,
+              un émoji), l'enregistrement est refusé et les caractères fautifs sont nommés. À vous
+              de les remplacer - l'outil ne change jamais l'encodage d'un fichier en douce.
+            </li>
+            <li>
+              <strong>Écraser une modification faite ailleurs.</strong> Si le fichier a changé sur le
+              disque depuis l'ouverture de l'éditeur - Visual Studio resté ouvert, par exemple -
+              l'enregistrement est bloqué au lieu de faire disparaître ce travail.
+            </li>
+            <li>
+              <strong>Éditer ce qui n'est pas du texte.</strong> Binaires et extensions hors de la
+              liste « texte » des réglages restent l'affaire de leurs programmes.
+            </li>
+          </ul>
+
+          <p>
+            Après un enregistrement, l'analyse suit toute seule : le statut du fichier est recalculé
+            sur ce qui vient d'être écrit - une retouche peut le faire passer à « identique », et il
+            sort alors de la liste des écarts - et la comparaison affichée se recharge. Seule
+            retouche jamais faite d'office : un fichier aux fins de ligne <em>mixtes</em> ressort
+            uniformisé en CRLF, et l'éditeur l'annonce avant.
           </p>
         <//>
 
@@ -1274,6 +1366,12 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             <strong>saisir le numéro de la demande</strong>. C'est volontaire : un bouton unique
             s'appuie sans réfléchir, un numéro se recopie en regardant.
           </p>
+          <p>
+            Un champ <strong>Commentaire</strong>, facultatif, permet d'y dire en une phrase pourquoi
+            ce passage part - « correctif recherche article », « écran stock ». Cette phrase suit
+            ensuite le passage partout : dans le manifeste, dans le récapitulatif de traçabilité,
+            dans l'historique et sur le tableau de bord.
+          </p>
           <p class="attenue">
             Quand il n'y a pas de demande, parce que le passage se fait sans archivage, c'est le${' '}
             <strong>nombre de fichiers</strong> qu'on recopie. Le geste reste le même, et il oblige à
@@ -1303,7 +1401,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <p>
             Puis le détail, fichier par fichier : l'action réalisée (remplacé, créé, supprimé,
             restauré), le compte de lignes, le nom de la sauvegarde et le résultat. Trois filtres en
-            haut du tableau permettent de n'afficher que les réussites ou que les échecs.
+            haut du tableau permettent de n'afficher que les réussites ou que les échecs. Le
+            commentaire saisi à la confirmation est repris en tête du rapport.
           </p>
 
           <h3>Les traces écrites</h3>
@@ -1351,7 +1450,16 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             <span class="etiquette">suppression</span>,${' '}
             <span class="etiquette">simulation</span> et${' '}
             <span class="etiquette etiquette-danger">sans AVMDF</span> distinguent la nature de
-            chaque passage. À droite, le détail complet.
+            chaque passage, et le commentaire du passage s'affiche sous chaque entrée qui en porte
+            un. À droite, le détail complet.
+          </p>
+
+          <p>
+            En tête de liste, un champ de recherche filtre sur tout ce qu'on peut avoir en tête en
+            rouvrant l'historique : numéro de demande, sprint, projet, auteur, commentaire, et
+            jusqu'aux chemins des fichiers déployés - « qui a touché à
+            <span class="mono"> Recherche.aspx</span> ? » se répond en tapant son nom. La case
+            « Masquer les simulations » ne garde que les passages qui ont réellement écrit.
           </p>
 
           <h3>Voir ce qui a changé</h3>
@@ -1535,6 +1643,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             entetes=${['Touche', 'Effet', 'Où']}
             lignes=${[
               [html`<${T}>F5<//>`, 'Lancer l\'analyse', 'Onglet Analyse'],
+              [html`<${T}>Ctrl<//> + <${T}>P<//>`, 'Aller au fichier : la palette de recherche rapide', 'Onglet Analyse, après une analyse'],
               [html`<${T}>Ctrl<//> + <${T}>Entrée<//>`, 'Lancer la mise en production', 'Onglet Analyse, sélection valide'],
               [html`<${T}>↑<//> <${T}>↓<//>`, 'Déplacer le curseur', 'Arborescence'],
               [html`<${T}>→<//> <${T}>←<//>`, 'Déplier / replier un dossier', 'Arborescence'],
@@ -1543,6 +1652,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [html`<${T}>F8<//>`, 'Changement suivant', 'Comparateur'],
               [html`<${T}>Maj<//> + <${T}>F8<//>`, 'Changement précédent', 'Comparateur'],
               [html`<${T}>Ctrl<//> + <${T}>F<//>`, 'Chercher dans la comparaison affichée', 'Comparateur'],
+              [html`<${T}>Ctrl<//> + <${T}>S<//>`, 'Enregistrer le fichier', 'Éditeur intégré'],
+              [html`<${T}>Tab<//>`, 'Insérer une tabulation', 'Éditeur intégré'],
               [html`<${T}>Échap<//>`, 'Fermer la recherche, une confirmation, ou l\'écran ouvert', 'Partout'],
               ['Double-clic sur la poignée', 'Rétablir la largeur d\'origine du panneau de gauche', 'Onglet Analyse']
             ]}
