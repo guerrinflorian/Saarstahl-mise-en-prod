@@ -143,7 +143,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
                         </span>
                       `
                     )}
-                  <span class="attenue"> - ${formaterOctets(resume.octets)}</span>
+                  <span class="attenue"> · ${formaterOctets(resume.octets)}</span>
                 </td>
               </tr>
             </tbody>

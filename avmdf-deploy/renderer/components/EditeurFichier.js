@@ -10,7 +10,7 @@ import { IconeCrayon } from './icones.js';
 const html = htm.bind(h);
 
 /** Au-delà, la coloration est coupée : la frappe doit rester instantanée. */
-const LIMITE_COLORATION_EDITEUR = 400000;
+const LIMITE_COLORATION_EDITEUR = 150000;
 
 /**
  * Éditeur intégré : la version locale d'un fichier, modifiable sans quitter
@@ -34,7 +34,6 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
   const [occupe, setOccupe] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
   const [curseur, setCurseur] = useState({ ligne: 1, colonne: 1 });
-  const [colorie, setColorie] = useState('');
 
   const zoneTexte = useRef(null);
   const calque = useRef(null);
@@ -70,26 +69,22 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
     };
   }, [fichier.cle]);
 
-  // -- Coloration, légèrement différée pour ne jamais freiner la frappe -----
-  useEffect(() => {
-    if (etat !== 'pret') return undefined;
-    if (!langue || texte.length > LIMITE_COLORATION_EDITEUR) {
-      setColorie('');
-      return undefined;
+  // -- Coloration, calculée dans le même rendu que la frappe ----------------
+  //
+  // Synchrone à dessein : un calque colorié en retard d'une frappe ferait
+  // apparaître, l'espace d'un instant, un texte qui n'est plus le bon sous le
+  // curseur. Sous la limite de taille, la tokenisation tient largement dans le
+  // budget d'une frappe ; au-delà, on renonce à la couleur, jamais à la
+  // fluidité.
+  const colorie = useMemo(() => {
+    if (etat !== 'pret' || !langue || texte.length > LIMITE_COLORATION_EDITEUR) return '';
+    const grammaire = Prism.languages[langue.id];
+    if (!grammaire) return '';
+    try {
+      return enHtml(Prism.tokenize(texte, grammaire));
+    } catch (err) {
+      return '';
     }
-    const minuteur = setTimeout(() => {
-      const grammaire = Prism.languages[langue.id];
-      if (!grammaire) {
-        setColorie('');
-        return;
-      }
-      try {
-        setColorie(enHtml(Prism.tokenize(texte, grammaire)));
-      } catch (err) {
-        setColorie('');
-      }
-    }, 90);
-    return () => clearTimeout(minuteur);
   }, [texte, langue, etat]);
 
   // -- Défilement : le textarea mène, le calque et la gouttière suivent -----
@@ -208,8 +203,8 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
                 </div>
                 <div class="editeur-piste">
                   <pre class="editeur-calque" aria-hidden="true" ref=${calque}><code
-                    dangerouslySetInnerHTML=${colorie ? { __html: colorie + '\n' } : null}
-                  >${colorie ? null : texte + '\n'}</code></pre>
+                    dangerouslySetInnerHTML=${{ __html: (colorie || echapper(texte)) + '\n' }}
+                  ></code></pre>
                   <textarea
                     class="editeur-saisie"
                     ref=${zoneTexte}
