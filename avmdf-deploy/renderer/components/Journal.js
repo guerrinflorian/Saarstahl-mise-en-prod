@@ -2,6 +2,8 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useState } from '../vendor/hooks.module.js';
 import { formaterNombre } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeJournal } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -55,15 +57,12 @@ export function Journal({ onFermer, onEchec }) {
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Journal">
       <div class="modale modale-large">
-        <div class="modale-entete">
-          <h1>Journal</h1>
+        <${EnTeteModale} icone=${IconeJournal} surtitre="Application" titre="Journal des événements" onFermer=${onFermer}>
           <span class="attenue mono">${dossier}</span>
-          <div style="flex:1"></div>
           <button type="button" class="btn btn-mini" onClick=${() => window.avmdf.journal.ouvrirDossier()}>
             Ouvrir le dossier
           </button>
-          <button type="button" class="btn btn-plat" onClick=${onFermer}>Fermer ✕</button>
-        </div>
+        <//>
 
         <div class="modale-corps">
           <div class="filtres-ligne" style="margin-bottom:8px">

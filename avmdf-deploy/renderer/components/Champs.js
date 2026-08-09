@@ -61,3 +61,19 @@ export function Case({ libelle, coche, onChange, titre, desactive }) {
     </label>
   `;
 }
+
+/**
+ * Interrupteur : une case à cocher qui a l'allure d'un levier. Pour les
+ * décisions du bandeau - archiver, simuler - qui pèsent plus lourd qu'une
+ * option de formulaire. `attention` colore la position décochée en rouge :
+ * c'est elle qui coûte cher.
+ */
+export function Interrupteur({ libelle, coche, onChange, titre, attention }) {
+  return html`
+    <label class=${'interrupteur' + (attention ? ' attention' : '')} title=${titre || ''}>
+      <input type="checkbox" checked=${coche} onChange=${(evenement) => onChange(evenement.target.checked)} />
+      <span class="interrupteur-piste" aria-hidden="true"></span>
+      <span>${libelle}</span>
+    </label>
+  `;
+}

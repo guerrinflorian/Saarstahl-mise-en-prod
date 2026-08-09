@@ -2,6 +2,8 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useState } from '../vendor/hooks.module.js';
 import { formaterNombre } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeExpedier, IconeHistorique } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -34,12 +36,15 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label=${titre}>
       <div class="modale modale-large">
-        <div class="modale-entete">
-          <h1>${titre}</h1>
+        <${EnTeteModale}
+          icone=${manifeste.operation === 'restauration' ? IconeHistorique : IconeExpedier}
+          danger=${Boolean(rapport.echecs)}
+          surtitre=${manifeste.operation === 'restauration' ? 'Retour arrière' : 'Mise en production'}
+          titre=${titre}
+          onFermer=${onFermer}
+        >
           ${simulation ? html`<span class="bandeau-etat simulation">Simulation</span>` : null}
-          <div style="flex:1"></div>
-          <button type="button" class="btn btn-plat" onClick=${onFermer}>Fermer ✕</button>
-        </div>
+        <//>
 
         <div class="modale-corps">
           ${rapport.echecs

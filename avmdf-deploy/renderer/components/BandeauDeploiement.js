@@ -1,6 +1,6 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
-import { Case } from './Champs.js';
+import { Interrupteur } from './Champs.js';
 import { LIBELLES, MARQUEURS, formaterNombre } from './arborescence.js';
 
 const html = htm.bind(h);
@@ -49,16 +49,26 @@ export function BandeauDeploiement({
 
   const libelleAction = suppression ? 'Supprimer en production' : 'Mettre en production';
 
+  const sousLibelle =
+    selection.deployables && selection.orphelins
+      ? formaterNombre(selection.deployables) + ' à déployer · ' + formaterNombre(selection.orphelins) + ' orphelins'
+      : suppression
+        ? 'suppression d\'orphelins'
+        : Object.entries(selection.parStatut || {})
+            .filter(([, nombre]) => nombre > 0)
+            .map(([statut, nombre]) => MARQUEURS[statut] + ' ' + formaterNombre(nombre))
+            .join(' · ');
+
   return html`
     <footer class=${'bandeau' + (reel ? ' reel' : '')}>
       <div class="bandeau-resume">
         <span class="bandeau-nombre">${formaterNombre(total)}</span>
-        <span>${total > 1 ? 'fichiers sélectionnés' : 'fichier sélectionné'}</span>
-        ${selection.deployables && selection.orphelins
-          ? html`<span class="attenue mono">
-              (${formaterNombre(selection.deployables)} à déployer, ${formaterNombre(selection.orphelins)} orphelins)
-            </span>`
-          : null}
+        <div class="bandeau-libelles">
+          <span class="bandeau-libelle">${total > 1 ? 'fichiers sélectionnés' : 'fichier sélectionné'}</span>
+          ${total > 0 && sousLibelle
+            ? html`<span class="bandeau-sous">${sousLibelle}</span>`
+            : html`<span class="bandeau-sous">rien à faire partir</span>`}
+        </div>
         <span class="fleche">→</span>
         ${!avecArchivage
           ? html`<span
@@ -99,13 +109,14 @@ export function BandeauDeploiement({
         </span>
         ${suppression
           ? null
-          : html`<${Case}
+          : html`<${Interrupteur}
               libelle="Archiver"
               coche=${archiver}
+              attention
               titre="Copier la version de production dans le dossier de sprint avant de l'écraser. Décoché, rien n'est conservé et le retour arrière devient impossible."
               onChange=${onArchiver}
             />`}
-        <${Case}
+        <${Interrupteur}
           libelle="Simulation"
           coche=${simulation}
           titre="En simulation, le rapport complet est produit mais aucun octet n'est écrit"

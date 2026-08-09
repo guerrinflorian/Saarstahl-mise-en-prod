@@ -2,6 +2,8 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useState } from '../vendor/hooks.module.js';
 import { formaterNombre } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeArchiveBoite } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -118,11 +120,12 @@ export function PanneauDestination({ destination, onValider, onFermer, onEchec }
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Destination de l'archivage">
       <div class="modale modale-moyenne">
-        <div class="modale-entete">
-          <h1>Destination de l'archivage</h1>
-          <div style="flex:1"></div>
-          <button type="button" class="btn btn-plat" onClick=${onFermer}>Fermer ✕</button>
-        </div>
+        <${EnTeteModale}
+          icone=${IconeArchiveBoite}
+          surtitre="Archivage AVMDF"
+          titre="Destination de l'archivage"
+          onFermer=${onFermer}
+        />
 
         <div class="modale-corps">
           <p class="section-aide">

@@ -116,13 +116,21 @@
   --ombre-flottante: 0 6px 18px rgba(0, 0, 0, 0.45);
   --ombre-popover: 0 8px 24px rgba(0, 0, 0, 0.5);
   --ombre-menu: 0 10px 30px rgba(0, 0, 0, 0.55);
-  --ombre-modale: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --ombre-modale: 0 24px 60px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(171, 208, 131, 0.05);
+
+  /* Relief des surfaces qui se pressent : un fil de lumière en haut, une
+     ombre courte en dessous. C'est ce qui fait qu'un bouton a l'air usiné
+     plutôt que peint. */
+  --relief-bouton: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --ombre-bouton: 0 1px 1px rgba(0, 0, 0, 0.18);
+  --relief-accent: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 
   /* Typographie : aucune police web, tout est local au poste */
   --police-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Tahoma, system-ui, sans-serif;
   --police-mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
 
-  --rayon: 3px;
+  --rayon: 4px;
+  --rayon-grand: 8px;
   --hauteur-controle: 26px;
 }
 
@@ -227,7 +235,11 @@
   --ombre-flottante: 0 6px 18px rgba(24, 38, 50, 0.16);
   --ombre-popover: 0 8px 24px rgba(24, 38, 50, 0.18);
   --ombre-menu: 0 10px 30px rgba(24, 38, 50, 0.2);
-  --ombre-modale: 0 18px 50px rgba(24, 38, 50, 0.24);
+  --ombre-modale: 0 24px 60px rgba(24, 38, 50, 0.26), 0 0 0 1px rgba(111, 156, 63, 0.06);
+
+  --relief-bouton: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --ombre-bouton: 0 1px 1px rgba(27, 34, 39, 0.07);
+  --relief-accent: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 * {
@@ -272,15 +284,21 @@ body {
   height: 11px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--fond);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--barre-defilement);
-  border: 2px solid var(--fond);
+  border: 3px solid transparent;
+  background-clip: padding-box;
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--barre-defilement-survol);
+  border-width: 2px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* --------------------------------------------------------------------------
@@ -342,6 +360,7 @@ textarea {
   background: var(--btn-fond);
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
+  box-shadow: var(--relief-bouton), var(--ombre-bouton);
   color: var(--texte);
   cursor: pointer;
   white-space: nowrap;
@@ -355,27 +374,31 @@ textarea {
 
 .btn:active:not(:disabled) {
   background: var(--btn-fond-actif);
+  box-shadow: inset 0 1px 2px var(--enfoncement);
 }
 
 .btn:disabled {
   opacity: 0.45;
   cursor: default;
+  box-shadow: none;
 }
 
 .btn-accent {
-  background: var(--accent);
-  border-color: var(--accent-vif);
+  background: linear-gradient(to bottom, var(--accent-vif), var(--accent));
+  border-color: var(--accent-actif);
+  box-shadow: var(--relief-accent), var(--ombre-bouton);
   color: var(--sur-accent);
   font-weight: 600;
 }
 
 .btn-accent:hover:not(:disabled) {
-  background: var(--accent-vif);
-  border-color: var(--accent-bord-vif);
+  background: linear-gradient(to bottom, var(--accent-bord-vif), var(--accent-vif));
+  border-color: var(--accent-actif);
 }
 
 .btn-accent:active:not(:disabled) {
   background: var(--accent-actif);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .btn-danger {
@@ -391,11 +414,35 @@ textarea {
 .btn-plat {
   background: transparent;
   border-color: transparent;
+  box-shadow: none;
 }
 
 .btn-plat:hover:not(:disabled) {
   background: var(--btn-fond);
   border-color: var(--separateur-clair);
+}
+
+/* Fermeture d'une modale : discret, mais toujours au même endroit. */
+.btn-fermer {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--rayon);
+  box-shadow: none;
+  color: var(--texte-attenue);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.btn-fermer:hover {
+  background: var(--btn-fond);
+  border-color: var(--separateur-clair);
+  color: var(--texte);
 }
 
 .btn-icone {
@@ -488,12 +535,63 @@ textarea.invalide {
   background: var(--danger-fond);
 }
 
+/* Cases à cocher dessinées à la main : coche pleine sur fond accent,
+   état indéterminé en tiret - la case standard de Chromium détonnait au
+   milieu du reste. */
 input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
+  appearance: none;
+  width: 15px;
+  height: 15px;
   margin: 0;
-  accent-color: var(--accent);
+  background: var(--champ);
+  border: 1px solid var(--separateur-clair);
+  border-radius: 3px;
   cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--btn-bord-survol);
+}
+
+input[type="checkbox"]::before {
+  content: '';
+  width: 8px;
+  height: 4px;
+  margin-top: -2px;
+  border-left: 2px solid var(--sur-accent);
+  border-bottom: 2px solid var(--sur-accent);
+  transform: rotate(-45deg) scale(0);
+}
+
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent-actif);
+}
+
+input[type="checkbox"]:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+input[type="checkbox"]:indeterminate {
+  background: var(--accent-fond);
+  border-color: var(--accent-sourd);
+}
+
+input[type="checkbox"]:indeterminate::before {
+  width: 7px;
+  height: 0;
+  margin-top: 0;
+  border-left: none;
+  border-bottom: 2px solid var(--accent-texte);
+  transform: none;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .case {
@@ -506,6 +604,72 @@ input[type="checkbox"] {
 
 .case input[type="checkbox"] {
   flex: none;
+}
+
+/* Interrupteurs : pour les deux décisions du bandeau - archiver, simuler -
+   qui méritent mieux qu'une case perdue dans un coin. La vraie case reste
+   dans le document, invisible : le clavier et le lecteur d'écran la voient. */
+.interrupteur {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.interrupteur > input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.interrupteur-piste {
+  flex: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--btn-fond);
+  border: 1px solid var(--separateur-clair);
+  position: relative;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.interrupteur-piste::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--texte-attenue);
+  transition: left 0.15s ease, background-color 0.15s ease;
+}
+
+.interrupteur > input:checked + .interrupteur-piste {
+  background: var(--accent);
+  border-color: var(--accent-actif);
+}
+
+.interrupteur > input:checked + .interrupteur-piste::after {
+  left: 16px;
+  background: var(--sur-accent);
+}
+
+.interrupteur > input:focus-visible + .interrupteur-piste {
+  outline: 2px solid var(--accent-vif);
+  outline-offset: 1px;
+}
+
+/* Décoché, l'interrupteur « attention » prévient : ce réglage-là coûte cher. */
+.interrupteur.attention > input:not(:checked) + .interrupteur-piste {
+  background: var(--danger-fond);
+  border-color: var(--danger-bord);
+}
+
+.interrupteur.attention > input:not(:checked) + .interrupteur-piste::after {
+  background: var(--danger);
 }
 
 label {
@@ -583,16 +747,29 @@ label {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 42px;
+  height: 44px;
   padding: 0 10px;
   background: var(--panneau);
   border-bottom: 1px solid var(--separateur);
+  position: relative;
+}
+
+.entete::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(to right, var(--accent) 0, transparent 42%);
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .entete-titre {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   padding-right: 12px;
   border-right: 1px solid var(--separateur);
   height: 100%;
@@ -603,9 +780,19 @@ label {
 }
 
 .entete-marque {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
   color: var(--accent-texte);
   font-weight: 700;
   letter-spacing: 0.12em;
+}
+
+.entete-marque small {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: var(--texte-faible);
 }
 
 .entete-logo {
@@ -797,16 +984,32 @@ label {
   color: var(--danger-texte-doux);
 }
 
-/* Bandeau de mise en production ------------------------------------------ */
+/* Bandeau de mise en production ------------------------------------------
+   L'élément signature : un plan de vol. Il dit en permanence ce qui part,
+   où, et sous quel régime - et il change de peau quand l'écriture devient
+   réelle. Le liseret vert du haut répond à celui des bandeaux-titres. */
 
 .bandeau {
   display: flex;
   align-items: center;
-  gap: 14px;
-  height: 46px;
+  gap: 12px;
+  height: 50px;
   padding: 0 12px;
   background: var(--panneau-releve);
-  border-top: 2px solid var(--separateur);
+  border-top: 1px solid var(--separateur);
+  position: relative;
+}
+
+.bandeau::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(to right, var(--accent) 0, transparent 42%);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 /* Simulation désactivée : le bandeau s'allume au vert de marque. */
@@ -816,19 +1019,47 @@ label {
   box-shadow: inset 0 1px 0 var(--bandeau-reel-liseret);
 }
 
+.bandeau.reel::before {
+  opacity: 1;
+}
+
 .bandeau-resume {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
   flex: 1;
 }
 
 .bandeau-nombre {
   font-family: var(--police-mono);
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 700;
+  line-height: 1;
   color: var(--texte);
+  font-variant-numeric: tabular-nums;
+}
+
+.bandeau-libelles {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: none;
+}
+
+.bandeau-libelle {
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.bandeau-sous {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--texte-faible);
+  font-family: var(--police-mono);
+  white-space: nowrap;
 }
 
 .bandeau-destination {
@@ -845,6 +1076,9 @@ label {
 }
 
 .bandeau-etat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 2px 8px;
   border-radius: var(--rayon);
   font-size: 11px;
@@ -864,9 +1098,29 @@ label {
   font-weight: 700;
 }
 
+/* Le point qui bat : l'écriture réelle ne doit jamais passer inaperçue. */
+.bandeau-etat.reel::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sur-accent);
+  animation: battre 1.6s ease-in-out infinite;
+}
+
+@keyframes battre {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
 /* L'archivage écarté est une exception : elle se voit, sans crier. */
 .bandeau-etat.sans-archive {
-  border: 1px solid var(--danger-bord);
+  border: 1px dashed var(--danger-bord);
   background: var(--danger-fond);
   color: var(--danger);
   font-weight: 600;
@@ -893,23 +1147,6 @@ label {
   background: var(--panneau);
   border-left: 1px solid var(--separateur);
   border-right: 1px solid var(--separateur);
-}
-
-.reglages-entete {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 42px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--separateur);
-}
-
-.reglages-entete h1 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .reglages-corps {
@@ -1162,15 +1399,35 @@ label {
 }
 
 .notification {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 11px;
+  padding: 10px 11px;
   background: var(--panneau-releve);
   border: 1px solid var(--separateur-clair);
   border-left-width: 3px;
-  border-radius: var(--rayon);
+  border-radius: 6px;
   box-shadow: var(--ombre-flottante);
+  overflow: hidden;
+}
+
+.notification-icone {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: grid;
+  place-content: center;
+  border-radius: 6px;
+  background: var(--marqueur-fond);
+  color: var(--texte-attenue);
+}
+
+.notification-icone .icone {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.5;
 }
 
 .notification-corps {
@@ -1186,8 +1443,40 @@ label {
   color: var(--texte-attenue);
 }
 
+/* La jauge du bas s'épuise avec le message : on voit venir sa disparition.
+   Purement décorative - c'est le minuteur qui décide, pas elle. */
+.notification-jauge {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: currentColor;
+  opacity: 0.5;
+  transform-origin: left;
+  animation: epuiser linear forwards;
+}
+
+@keyframes epuiser {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 .notification.succes {
   border-left-color: var(--nouveau);
+}
+
+.notification.succes .notification-icone,
+.notification.succes .notification-jauge {
+  color: var(--accent-texte);
+}
+
+.notification.succes .notification-icone {
+  background: var(--accent-fond);
 }
 
 .notification.erreur {
@@ -1198,8 +1487,18 @@ label {
   color: var(--danger);
 }
 
+.notification.erreur .notification-icone {
+  background: var(--danger-fond);
+  color: var(--danger);
+}
+
 .notification.info {
   border-left-color: var(--modifie);
+}
+
+.notification.info .notification-icone,
+.notification.info .notification-jauge {
+  color: var(--modifie);
 }
 
 .notification.alerte {
@@ -1208,6 +1507,15 @@ label {
 
 .notification.alerte .notification-titre {
   color: var(--alerte);
+}
+
+.notification.alerte .notification-icone,
+.notification.alerte .notification-jauge {
+  color: var(--alerte);
+}
+
+.notification.alerte .notification-icone {
+  background: var(--alerte-fond);
 }
 
 /* --------------------------------------------------------------------------
@@ -1986,9 +2294,10 @@ select.marque {
 .diff-entete {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 32px;
-  padding: 0 10px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-height: 32px;
+  padding: 3px 10px;
   border-bottom: 1px solid var(--separateur);
   background: var(--panneau);
 }
@@ -2211,7 +2520,7 @@ select.marque {
   max-height: 100%;
   background: var(--panneau);
   border: 1px solid var(--separateur-clair);
-  border-radius: var(--rayon);
+  border-radius: var(--rayon-grand);
   box-shadow: var(--ombre-modale);
   overflow: hidden;
 }
@@ -2232,22 +2541,79 @@ select.marque {
   border: none;
 }
 
+/* Bandeau-titre : une tuile d'icône, un surtitre qui dit le domaine, un titre
+   qui dit l'action. Le liseret vert qui part du bord gauche est la signature
+   de la maison - le même trait que le bandeau de mise en production. */
 .modale-entete {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  height: 42px;
+  gap: 12px;
+  padding: 9px 12px 9px 16px;
+  min-height: 52px;
   flex: none;
+  position: relative;
   border-bottom: 1px solid var(--separateur);
+}
+
+.modale-entete::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(to right, var(--accent) 0, transparent 42%);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .modale-entete h1 {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modale-icone {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-content: center;
+  background: var(--accent-fond);
+  border: 1px solid var(--accent-sourd);
+  border-radius: 7px;
+  color: var(--accent-texte);
+}
+
+.modale-icone .icone {
+  width: 16px;
+  height: 16px;
+}
+
+.modale-icone.danger {
+  background: var(--danger-fond);
+  border-color: var(--danger-bord);
+  color: var(--danger);
+}
+
+.modale-titres {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.surtitre {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--texte-faible);
+  white-space: nowrap;
 }
 
 .modale-corps {
@@ -2262,7 +2628,7 @@ select.marque {
   align-items: center;
   gap: 10px;
   flex: none;
-  padding: 8px 14px;
+  padding: 9px 14px;
   border-top: 1px solid var(--separateur);
   background: var(--panneau-releve);
 }
@@ -2580,6 +2946,15 @@ button.bandeau-destination:hover {
   font-weight: 700;
 }
 
+/* Le profil du rail, en deux traits : la signature Saarstahl sous le titre. */
+.rail {
+  width: 130px;
+  height: 7px;
+  border-top: 2px solid var(--accent);
+  border-bottom: 1px solid var(--accent-sourd);
+  opacity: 0.75;
+}
+
 .signature {
   display: flex;
   align-items: center;
@@ -2704,12 +3079,13 @@ button.bandeau-destination:hover {
   padding: 12px 14px;
   background: var(--panneau);
   border: 1px solid var(--separateur);
-  border-radius: 5px;
+  border-radius: 6px;
+  box-shadow: var(--relief-bouton);
   transition: border-color 0.12s ease;
 }
 
 .tuile:hover {
-  border-color: var(--separateur-clair);
+  border-color: var(--accent-sourd);
 }
 
 .tuile-valeur {

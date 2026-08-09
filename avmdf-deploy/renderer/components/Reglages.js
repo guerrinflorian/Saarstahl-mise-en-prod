@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from '../vendor/hooks.module.js';
 import { Case, Champ, ChampDossier } from './Champs.js';
 import { ListeMotifs } from './ListeMotifs.js';
 import { TableauProjets } from './TableauProjets.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeEngrenage } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -127,14 +129,11 @@ export function Reglages({
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Réglages">
       <div class="reglages">
-        <div class="reglages-entete">
-          <h1>Réglages</h1>
+        <${EnTeteModale} icone=${IconeEngrenage} surtitre="Application" titre="Réglages" onFermer=${demanderFermeture}>
           <span class="attenue">
             ${modifie ? 'Modifications non enregistrées' : 'À jour'}
           </span>
-          <div style="flex:1"></div>
-          <button type="button" class="btn btn-plat" onClick=${demanderFermeture}>Fermer ✕</button>
-        </div>
+        <//>
 
         <div class="reglages-corps">
           ${controle.erreurs.length

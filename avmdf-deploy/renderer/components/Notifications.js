@@ -1,8 +1,11 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useCallback, useEffect, useRef, useState } from '../vendor/hooks.module.js';
+import { IconeAlerte, IconeCoche, IconeEchec, IconeInfo } from './icones.js';
 
 const html = htm.bind(h);
+
+const ICONES = { succes: IconeCoche, erreur: IconeEchec, alerte: IconeAlerte, info: IconeInfo };
 
 /**
  * Messages passagers affichés en bas à droite.
@@ -63,9 +66,11 @@ export function Notifications({ liste, onFermer }) {
   if (!liste.length) return null;
   return html`
     <div class="notifications" role="status" aria-live="polite">
-      ${liste.map(
-        (notification) => html`
+      ${liste.map((notification) => {
+        const Icone = ICONES[notification.type] || IconeInfo;
+        return html`
           <div class="notification ${notification.type}" key=${notification.id}>
+            <span class="notification-icone" aria-hidden="true"><${Icone} /></span>
             <div class="notification-corps">
               <div class="notification-titre">${notification.titre}</div>
               ${notification.texte
@@ -81,9 +86,15 @@ export function Notifications({ liste, onFermer }) {
             >
               ✕
             </button>
+            ${notification.type !== 'erreur'
+              ? html`<span
+                  class="notification-jauge"
+                  style=${'animation-duration:' + (notification.duree || 5000) + 'ms'}
+                ></span>`
+              : null}
           </div>
-        `
-      )}
+        `;
+      })}
     </div>
   `;
 }

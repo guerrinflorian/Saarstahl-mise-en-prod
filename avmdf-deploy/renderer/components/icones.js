@@ -310,3 +310,114 @@ export function IconeSoleil({ classe }) {
 export function IconeLune({ classe }) {
   return svg(classe, html`<path d="M13.1 9.7A5.8 5.8 0 0 1 6.3 2.9 5.75 5.75 0 1 0 13.1 9.7z" />`);
 }
+
+/** Croix de fermeture. */
+export function IconeCroix({ classe }) {
+  return svg(classe, html`<path d="M4.2 4.2 11.8 11.8M11.8 4.2 4.2 11.8" />`);
+}
+
+/** Coche simple. */
+export function IconeCoche({ classe }) {
+  return svg(classe, html`<path d="M3.2 8.6 6.4 11.8 12.8 4.6" />`);
+}
+
+/** Rond d'information. */
+export function IconeInfo({ classe }) {
+  return svg(classe, html`<circle cx="8" cy="8" r="5.6" /><path d="M8 7.4v3.4M8 5.1v.2" />`);
+}
+
+/** Triangle d'avertissement. */
+export function IconeAlerte({ classe }) {
+  return svg(
+    classe,
+    html`<path d="M8 2.8 14 12.6a.5.5 0 0 1-.43.75H2.43A.5.5 0 0 1 2 12.6z" /><path d="M8 6.6v3M8 11.4v.2" />`
+  );
+}
+
+/** Rond barré : l'échec. */
+export function IconeEchec({ classe }) {
+  return svg(classe, html`<circle cx="8" cy="8" r="5.6" /><path d="M5.9 5.9 10.1 10.1M10.1 5.9 5.9 10.1" />`);
+}
+
+/** Horloge qui revient : l'historique. */
+export function IconeHistorique({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M2.9 8a5.1 5.1 0 1 0 1.5-3.6" />
+      <path d="M2.9 2.6v2.2h2.2" />
+      <path d="M8 5.4V8l2 1.5" />
+    `
+  );
+}
+
+/** Lignes horodatées : le journal. */
+export function IconeJournal({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M3.2 2.9h9.6v10.2H3.2z" />
+      <path d="M5.3 5.6h5.4M5.3 8h5.4M5.3 10.4h3.2" />
+    `
+  );
+}
+
+/** Engrenage : les réglages. */
+export function IconeEngrenage({ classe }) {
+  return svg(
+    classe,
+    html`
+      <circle cx="8" cy="8" r="2" />
+      <path
+        d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4"
+      />
+    `
+  );
+}
+
+/** Flèche qui part vers le serveur : la mise en production. */
+export function IconeExpedier({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M8 11V3.4" />
+      <path d="M4.8 6.4 8 3.2l3.2 3.2" />
+      <path d="M3 11.2v1.6a.6.6 0 0 0 .6.6h8.8a.6.6 0 0 0 .6-.6v-1.6" />
+    `
+  );
+}
+
+/** Boîte d'archives : l'AVMDF. */
+export function IconeArchiveBoite({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M2.6 3.2h10.8v2.6H2.6z" />
+      <path d="M3.4 5.8v6.4a.6.6 0 0 0 .6.6h8a.6.6 0 0 0 .6-.6V5.8" />
+      <path d="M6.4 8.2h3.2" />
+    `
+  );
+}
+
+/** Feuillets empilés : les versions successives d'un fichier. */
+export function IconeCouches({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M8 2.6 14 5.6 8 8.6 2 5.6z" />
+      <path d="M2.6 8.6 8 11.3l5.4-2.7" />
+      <path d="M2.6 11.2 8 13.9l5.4-2.7" />
+    `
+  );
+}
+
+/** Crayon : l'éditeur intégré. */
+export function IconeCrayon({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M10.6 2.8 13.2 5.4 6 12.6l-3.4.8.8-3.4z" />
+      <path d="M9.4 4 12 6.6" />
+    `
+  );
+}

@@ -1,7 +1,7 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { joindreChemin } from './chemins.js';
-import { IconeLune, IconeSoleil } from './icones.js';
+import { IconeEngrenage, IconeHistorique, IconeJournal, IconeLune, IconeSoleil } from './icones.js';
 import { themeOppose } from './theme.js';
 
 const html = htm.bind(h);
@@ -45,7 +45,7 @@ export function EnTete({
     <header class="entete">
       <div class="entete-titre">
         <img class="entete-logo" src="assets/marque.png" alt="Saarstahl Rail" />
-        <span class="entete-marque">AVMDF</span>
+        <span class="entete-marque">AVMDF<small>Mise en production</small></span>
       </div>
 
       <nav class="onglets" aria-label="Vues principales">
@@ -124,10 +124,10 @@ export function EnTete({
               </button>`
           : null}
         <button type="button" class="btn btn-plat" title="Déploiements passés et retour arrière" onClick=${onOuvrirHistorique}>
-          Historique
+          <${IconeHistorique} /> Historique
         </button>
         <button type="button" class="btn btn-plat" title="Journal des événements" onClick=${onOuvrirJournal}>
-          Journal
+          <${IconeJournal} /> Journal
         </button>
         <button
           type="button"
@@ -138,7 +138,9 @@ export function EnTete({
         >
           ${theme === 'clair' ? html`<${IconeLune} />` : html`<${IconeSoleil} />`}
         </button>
-        <button type="button" class="btn" title="Réglages" onClick=${onOuvrirReglages}>⚙ Réglages</button>
+        <button type="button" class="btn" title="Réglages" onClick=${onOuvrirReglages}>
+          <${IconeEngrenage} /> Réglages
+        </button>
       </div>
     </header>
   `;

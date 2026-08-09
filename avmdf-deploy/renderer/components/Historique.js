@@ -3,6 +3,8 @@ import htm from '../vendor/htm.module.js';
 import { useEffect, useState } from '../vendor/hooks.module.js';
 import { VueDiff } from './VueDiff.js';
 import { formaterNombre } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeCouches, IconeHistorique } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -101,12 +103,14 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Historique des déploiements">
       <div class="modale modale-plein">
-        <div class="modale-entete">
-          <h1>Historique</h1>
+        <${EnTeteModale}
+          icone=${IconeHistorique}
+          surtitre="Archives"
+          titre="Historique des mises en production"
+          onFermer=${onFermer}
+        >
           <span class="attenue">${formaterNombre(manifestes.length)} déploiement(s) retrouvé(s)</span>
-          <div style="flex:1"></div>
-          <button type="button" class="btn btn-plat" onClick=${onFermer}>Fermer ✕</button>
-        </div>
+        <//>
 
         ${etat === 'chargement'
           ? html`<div class="modale-corps"><div class="attenue">Lecture des manifestes…</div></div>`
@@ -258,7 +262,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
         ? html`
             <div class="voile" role="dialog" aria-modal="true" aria-label="Confirmation du retour arrière">
               <div class="modale modale-moyenne">
-                <div class="modale-entete"><h1>Revenir en arrière</h1></div>
+                <${EnTeteModale} icone=${IconeHistorique} danger surtitre="Retour arrière" titre="Revenir en arrière" />
                 <div class="modale-corps">
                   ${restauration.bloquants.map(
                     (probleme) => html`
@@ -346,11 +350,12 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
         ? html`
             <div class="voile" role="dialog" aria-modal="true" aria-label="Comparaison avec la production actuelle">
               <div class="modale modale-plein">
-                <div class="modale-entete">
-                  <h1>Sauvegarde ↔ production actuelle</h1>
-                  <div style="flex:1"></div>
-                  <button type="button" class="btn btn-plat" onClick=${() => setDiff(null)}>Fermer ✕</button>
-                </div>
+                <${EnTeteModale}
+                  icone=${IconeCouches}
+                  surtitre="Archives"
+                  titre="Sauvegarde ↔ production actuelle"
+                  onFermer=${() => setDiff(null)}
+                />
                 <div class="historique-diff">
                   <${VueDiff} diff=${diff} onOuvrirExterne=${() => {}} onNotifier=${onNotifier} inversable=${false} />
                 </div>

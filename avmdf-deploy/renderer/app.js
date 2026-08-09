@@ -602,6 +602,7 @@ function App() {
       <div class="demarrage">
         <img class="demarrage-logo" src="assets/logo.png" alt="Saarstahl Rail" />
         <h1><span class="demarrage-marque">AVMDF</span> Mise en production</h1>
+        <div class="rail" aria-hidden="true"></div>
         <p class="attenue">Chargement des réglages…</p>
       </div>
     `;
@@ -612,6 +613,7 @@ function App() {
       <div class="demarrage">
         <img class="demarrage-logo" src="assets/logo.png" alt="Saarstahl Rail" />
         <h1><span class="demarrage-marque">AVMDF</span> Mise en production</h1>
+        <div class="rail" aria-hidden="true"></div>
         <div class="encart encart-danger" style="max-width:640px;text-align:left">
           <strong>${panne.message}</strong>
           ${panne.conseil ? html`<div style="margin-top:6px">${panne.conseil}</div>` : null}

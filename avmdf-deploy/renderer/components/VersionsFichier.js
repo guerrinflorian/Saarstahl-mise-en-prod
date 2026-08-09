@@ -3,6 +3,8 @@ import htm from '../vendor/htm.module.js';
 import { useEffect, useState } from '../vendor/hooks.module.js';
 import { VueDiff } from './VueDiff.js';
 import { formaterDate, formaterNombre, formaterOctets } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeCouches, IconeExpedier } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -93,12 +95,9 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Versions archivées du fichier">
       <div class="modale modale-plein">
-        <div class="modale-entete">
-          <h1>Versions archivées</h1>
+        <${EnTeteModale} icone=${IconeCouches} surtitre="Archives" titre="Versions archivées" onFermer=${onFermer}>
           <span class="mono attenue">${fichier.chemin}</span>
-          <div style="flex:1"></div>
-          <button type="button" class="btn btn-plat" onClick=${onFermer}>Fermer ✕</button>
-        </div>
+        <//>
 
         ${etat === 'chargement'
           ? html`<div class="modale-corps"><div class="attenue">Lecture du dossier d'archives…</div></div>`
@@ -182,12 +181,15 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
         ? html`
             <div class="voile" role="dialog" aria-modal="true" aria-label="Confirmer la remise en production">
               <div class="modale modale-moyenne">
-                <div class="modale-entete">
-                  <h1>Remettre cette version en production</h1>
+                <${EnTeteModale}
+                  icone=${IconeExpedier}
+                  surtitre="Remise en production"
+                  titre="Remettre cette version en production"
+                >
                   <span class=${'bandeau-etat ' + (simulation ? 'simulation' : 'reel')}>
                     ${simulation ? 'Simulation' : 'Écriture réelle'}
                   </span>
-                </div>
+                <//>
                 <div class="modale-corps">
                   <table class="tableau tableau-resume">
                     <tbody>

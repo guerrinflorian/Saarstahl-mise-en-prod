@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js'
 import Prism from '../vendor/prism.js';
 import { langueDe } from './coloration.js';
 import { formaterNombre, formaterOctets } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeCrayon } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -158,18 +160,20 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Éditeur de la version locale">
       <div class="modale modale-plein editeur">
-        <div class="modale-entete">
-          <h1>Modifier la version locale</h1>
+        <${EnTeteModale}
+          icone=${IconeCrayon}
+          surtitre="Sources locales"
+          titre="Modifier la version locale"
+          onFermer=${demanderFermeture}
+        >
           <span class="mono attenue editeur-chemin" title=${fichier.chemin}>${fichier.chemin}</span>
           ${modifie
             ? html`<span class="editeur-etat modifie" title="Des modifications ne sont pas enregistrées">Modifié</span>`
             : html`<span class="editeur-etat" title="Le fichier sur le disque est à jour">Enregistré</span>`}
-          <div style="flex:1"></div>
           ${langue && texte.length > LIMITE_COLORATION_EDITEUR
             ? html`<span class="attenue">Fichier volumineux : coloration coupée.</span>`
             : null}
-          <button type="button" class="btn btn-plat" onClick=${demanderFermeture}>Fermer ✕</button>
-        </div>
+        <//>
 
         ${enveloppe && enveloppe.finDeLigne === 'mixte'
           ? html`<div class="diff-alerte">

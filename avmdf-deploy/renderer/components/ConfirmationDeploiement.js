@@ -2,6 +2,8 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useState } from '../vendor/hooks.module.js';
 import { LIBELLES, MARQUEURS, PLURIELS, formaterNombre, formaterOctets } from './arborescence.js';
+import { EnTeteModale } from './Modale.js';
+import { IconeExpedier } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -19,7 +21,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
     return html`
       <div class="voile" role="dialog" aria-modal="true" aria-label="Contrôles préalables">
         <div class="modale modale-moyenne">
-          <div class="modale-entete"><h1>Contrôles préalables</h1></div>
+          <${EnTeteModale} icone=${IconeExpedier} surtitre="Mise en production" titre="Contrôles préalables" />
           <div class="modale-corps">
             <div class="attenue">Vérification des racines, des verrous et des empreintes…</div>
             ${progression && progression.total
@@ -50,14 +52,17 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Confirmation de mise en production">
       <div class="modale modale-large">
-        <div class="modale-entete">
-          <h1>${suppression ? 'Supprimer en production' : 'Mettre en production'}</h1>
+        <${EnTeteModale}
+          icone=${IconeExpedier}
+          danger=${suppression}
+          surtitre=${suppression ? 'Suppression en production' : 'Mise en production'}
+          titre=${suppression ? 'Supprimer en production' : 'Mettre en production'}
+          onFermer=${onFermer}
+        >
           <span class=${'bandeau-etat ' + (resume.simulation ? 'simulation' : 'reel')}>
             ${resume.simulation ? 'Simulation' : 'Écriture réelle'}
           </span>
-          <div style="flex:1"></div>
-          <button type="button" class="btn btn-plat" onClick=${onFermer}>Fermer ✕</button>
-        </div>
+        <//>
 
         <div class="modale-corps">
           ${controle.bloquants.length
