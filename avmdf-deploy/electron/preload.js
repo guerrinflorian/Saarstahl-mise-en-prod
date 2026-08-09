@@ -72,7 +72,8 @@ contextBridge.exposeInMainWorld('avmdf', {
 
   fichier: {
     /** Comparaison ligne à ligne d'un fichier de la dernière analyse. */
-    diff: (cle) => ipcRenderer.invoke('fichier:diff', { cle }),
+    diff: (cle, options = {}) =>
+      ipcRenderer.invoke('fichier:diff', { cle, ignorerEspaces: options.ignorerEspaces }),
     /** Contenu décodé de la version locale, pour l'éditeur intégré. */
     lireLocal: (cle) => ipcRenderer.invoke('fichier:lireLocal', { cle }),
     /** Réécrit la version locale dans son enveloppe d'origine (encodage, BOM, fins de ligne). */

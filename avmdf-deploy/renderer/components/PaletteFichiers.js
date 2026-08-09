@@ -21,7 +21,7 @@ const ORDRE_STATUT = { modifie: 0, nouveau: 1, orphelin: 2, identique: 3 };
  * « rchaspx » trouve Recherche.aspx. Les correspondances exactes passent
  * toujours devant les correspondances à trous.
  */
-export function PaletteFichiers({ fichiers, onChoisir, onFermer }) {
+export function PaletteFichiers({ fichiers, recents, onChoisir, onFermer }) {
   const [requete, setRequete] = useState('');
   const [position, setPosition] = useState(0);
   const champ = useRef(null);
@@ -32,7 +32,7 @@ export function PaletteFichiers({ fichiers, onChoisir, onFermer }) {
     return () => clearTimeout(minuteur);
   }, []);
 
-  const resultats = useMemo(() => chercher(fichiers, requete), [fichiers, requete]);
+  const resultats = useMemo(() => chercher(fichiers, requete, recents || []), [fichiers, requete, recents]);
 
   useEffect(() => {
     setPosition(0);
@@ -103,6 +103,7 @@ export function PaletteFichiers({ fichiers, onChoisir, onFermer }) {
                 </span>
                 <${IconeFichier} extension=${resultat.fichier.extension || resultat.fichier.nom} />
                 <span class="palette-chemin mono">${surligner(resultat.fichier.chemin, resultat.indices)}</span>
+                ${resultat.recent ? html`<span class="etiquette">récent</span>` : null}
               </button>
             `
           )}
@@ -126,19 +127,26 @@ export function PaletteFichiers({ fichiers, onChoisir, onFermer }) {
  * @returns {Array<{fichier:object, indices:number[]|null}>} au plus
  *   MAXIMUM_AFFICHES entrées, les meilleures d'abord.
  */
-function chercher(fichiers, requete) {
+function chercher(fichiers, requete, recents) {
   const aiguille = normaliser(requete.trim());
 
   if (!aiguille) {
+    // Sans requête : les derniers fichiers comparés d'abord - c'est presque
+    // toujours eux qu'on rouvre - puis les écarts, par statut.
+    const rangRecent = new Map(recents.map((cle, index) => [cle, index]));
     return fichiers
       .slice()
-      .sort(
-        (a, b) =>
+      .sort((a, b) => {
+        const recentA = rangRecent.has(a.cle) ? rangRecent.get(a.cle) : Infinity;
+        const recentB = rangRecent.has(b.cle) ? rangRecent.get(b.cle) : Infinity;
+        return (
+          recentA - recentB ||
           (ORDRE_STATUT[a.statut] ?? 9) - (ORDRE_STATUT[b.statut] ?? 9) ||
           a.chemin.localeCompare(b.chemin, 'fr')
-      )
+        );
+      })
       .slice(0, MAXIMUM_AFFICHES)
-      .map((fichier) => ({ fichier, indices: null }));
+      .map((fichier) => ({ fichier, indices: null, recent: rangRecent.has(fichier.cle) }));
   }
 
   const retenus = [];

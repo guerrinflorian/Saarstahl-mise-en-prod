@@ -65,6 +65,8 @@ function App() {
   // Fichiers écartés de la vue pour cette analyse seulement : un choix de
   // lecture, pas un réglage. La liste repart vide à chaque nouvelle analyse.
   const [masques, setMasques] = useState(() => new Set());
+  // Les derniers fichiers comparés : la palette les remonte en tête.
+  const [recents, setRecents] = useState([]);
   const [occurrences, setOccurrences] = useState(null);
   const [rechercheContenu, setRechercheContenu] = useState({ enCours: false, faits: 0, total: 0, trouves: null });
 
@@ -281,6 +283,7 @@ function App() {
     setAnalyse({ etat: 'encours', progression: null, resultat: null, acces: null });
     setSelection(new Set());
     setMasques(new Set());
+    setRecents([]);
     setFichierActif(null);
     setDiff({ etat: 'vide' });
     setOccurrences(null);
@@ -336,6 +339,7 @@ function App() {
   const choisirFichier = useCallback(
     async (fichier) => {
       setFichierActif(fichier.cle);
+      setRecents((precedents) => [fichier.cle, ...precedents.filter((cle) => cle !== fichier.cle)].slice(0, 8));
       setDiff({ etat: 'chargement' });
       const reponse = await window.avmdf.fichier.diff(fichier.cle);
       if (!reponse.ok) {
@@ -345,6 +349,21 @@ function App() {
       setDiff({ etat: 'pret', donnees: reponse.diff });
     },
     []
+  );
+
+  /** Recharge la comparaison affichée avec des options ponctuelles (blancs neutralisés…). */
+  const rechargerDiff = useCallback(
+    async (options) => {
+      if (!fichierActif) return;
+      setDiff({ etat: 'chargement' });
+      const reponse = await window.avmdf.fichier.diff(fichierActif, options || {});
+      if (!reponse.ok) {
+        setDiff({ etat: 'erreur', erreur: reponse.erreur });
+        return;
+      }
+      setDiff({ etat: 'pret', donnees: reponse.diff });
+    },
+    [fichierActif]
   );
 
   /**
@@ -849,6 +868,7 @@ function App() {
               ? () => setEditeurDe({ cle: diff.donnees.cle, chemin: diff.donnees.chemin })
               : null
           }
+          onRecomparer=${rechargerDiff}
         />
       </div>
       `}
@@ -874,6 +894,7 @@ function App() {
                 return suivante;
               })}
             onDecocherTout=${() => setSelection(new Set())}
+            onChoisir=${choisirFichier}
             onNotifier=${notifier}
           />`
         : null}
@@ -912,6 +933,7 @@ function App() {
       ${paletteOuverte && analyse.resultat
         ? html`<${PaletteFichiers}
             fichiers=${analyse.resultat.fichiers}
+            recents=${recents}
             onChoisir=${choisirFichier}
             onFermer=${() => setPaletteOuverte(false)}
           />`

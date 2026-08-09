@@ -1218,6 +1218,7 @@ label {
   gap: 8px;
   padding: 2px 4px 2px 8px;
   border-radius: 3px;
+  cursor: pointer;
 }
 
 .bandeau-plan-ligne:hover {
@@ -2522,6 +2523,16 @@ select.marque {
 
 .carte-modification {
   background: var(--modifie);
+}
+
+/* Repères de la recherche Ctrl+F : de petits crans côté gauche de la carte. */
+.diff-carte-repere {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 2px;
+  background: var(--accent-vif);
+  pointer-events: none;
 }
 
 .diff-colonne {
@@ -3922,6 +3933,42 @@ textarea.editeur-saisie {
   padding: 7px 14px;
   border-top: 1px solid var(--separateur);
   background: var(--panneau-releve);
+}
+
+/* Recherche et remplacement dans l'éditeur ------------------------------- */
+
+.editeur-recherche {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--separateur);
+  background: var(--panneau);
+}
+
+.editeur-recherche input[type="search"] {
+  width: min(320px, 30vw);
+}
+
+.editeur-recherche input[type="text"] {
+  width: min(240px, 24vw);
+}
+
+/* Le calque des trouvailles vit sous la coloration : texte transparent,
+   seules les surbrillances se voient. */
+.editeur-marques {
+  color: transparent;
+}
+
+.editeur-marque {
+  background: var(--fragment-fond);
+  color: transparent;
+  border-radius: 2px;
+}
+
+.editeur-marque.courante {
+  outline: 1px solid var(--accent);
 }
 
 /* ==========================================================================

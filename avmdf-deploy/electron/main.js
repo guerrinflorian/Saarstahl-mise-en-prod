@@ -586,8 +586,14 @@ function pourLeRenderer(scan) {
  * Partagée entre l'affichage du diff et le rafraîchissement après une édition
  * dans l'éditeur intégré.
  */
-async function construireDiff(fichier, actuels) {
+async function construireDiff(fichier, actuels, surcharges = {}) {
   const extensionTexte = actuels.extensionsTexte.includes(fichier.extension);
+  // Le renderer peut demander, pour un fichier, de neutraliser les blancs sans
+  // toucher au réglage global : un choix de lecture, pas de configuration.
+  const ignorerEspaces =
+    typeof surcharges.ignorerEspaces === 'boolean'
+      ? surcharges.ignorerEspaces
+      : actuels.options.ignorerEspaces;
 
   const lire = async (cote) => {
     if (!cote) return null;
@@ -601,7 +607,7 @@ async function construireDiff(fichier, actuels) {
   const [tamponProd, tamponLocal] = await Promise.all([lire(fichier.prod), lire(fichier.local)]);
 
   const resultat = textdiff.comparerTampons(tamponProd, tamponLocal, {
-    ignorerEspaces: actuels.options.ignorerEspaces,
+    ignorerEspaces,
     extensionTexte
   });
 
@@ -609,6 +615,7 @@ async function construireDiff(fichier, actuels) {
     cle: fichier.cle,
     chemin: fichier.chemin,
     statut: fichier.statut,
+    ignorerEspaces,
     local: fichier.local && { ...fichier.local, hash: fichier.local.hash || null },
     prod: fichier.prod && { ...fichier.prod, hash: fichier.prod.hash || null },
     ...resultat
@@ -635,7 +642,9 @@ function handlersDiff() {
     }
 
     try {
-      return succes({ diff: await construireDiff(fichier, reglages()) });
+      const surcharges =
+        typeof parametres.ignorerEspaces === 'boolean' ? { ignorerEspaces: parametres.ignorerEspaces } : {};
+      return succes({ diff: await construireDiff(fichier, reglages(), surcharges) });
     } catch (err) {
       return echec(
         `Fichier illisible (${err.message}) : ${err.chemin || fichier.chemin}`,

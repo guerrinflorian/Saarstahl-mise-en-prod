@@ -154,7 +154,7 @@ function contenu(cote, espacesVisibles, jetons) {
  * diffèrent que par les espaces sont signalées, et un mode d'affichage rend
  * chaque espace, tabulation et espace insécable visible.
  */
-export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onModifier, inversable = true }) {
+export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onModifier, onRecomparer, inversable = true }) {
   const prefs = useMemo(lirePrefs, []);
   const [unifie, setUnifie] = useState(() => Boolean(prefs.unifie));
   const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
@@ -496,7 +496,12 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
                 disabled=${!changements.length}
                 onClick=${() => changementSuivant(1)}
               >
-                Changement suivant (F8)
+                Suivant (F8)
+                ${changements.length
+                  ? html`<span class="mono attenue">
+                      ${(changements.indexOf(changementCourant) + 1 || '·') + '/' + changements.length}
+                    </span>`
+                  : null}
               </button>
               ${!unifie && inversable
                 ? html`<button
@@ -541,9 +546,21 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
           : null}
       </div>
 
-      ${texteDiff && (donnees.ecartEncodage || donnees.ecartFinDeLigne || donnees.ecartIndentation || modifsEspaces)
+      ${texteDiff &&
+      (donnees.ecartEncodage || donnees.ecartFinDeLigne || donnees.ecartIndentation || modifsEspaces || donnees.ignorerEspaces)
         ? html`
             <div class="diff-alerte">
+              ${donnees.ignorerEspaces
+                ? html`<span>
+                    <strong>Blancs neutralisés dans cette comparaison</strong> : les lignes qui ne
+                    diffèrent que par les espaces sont tenues pour identiques.
+                    ${onRecomparer
+                      ? html`<button type="button" class="btn btn-mini" onClick=${() => onRecomparer({ ignorerEspaces: false })}>
+                          Comparaison exacte
+                        </button>`
+                      : null}
+                  </span>`
+                : null}
               ${donnees.ecartEncodage
                 ? html`<span>Encodages différents : ${donnees.gauche.encodage} en production, ${donnees.droite.encodage} en local.</span>`
                 : null}
@@ -567,6 +584,16 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
                     ${!espacesVisibles
                       ? html`<button type="button" class="btn btn-mini" onClick=${() => setEspacesVisibles(true)}>
                           Afficher les espaces
+                        </button>`
+                      : null}
+                    ${onRecomparer && !donnees.ignorerEspaces
+                      ? html`<button
+                          type="button"
+                          class="btn btn-mini"
+                          title="Recompare ce fichier en tenant pour identiques les lignes qui ne diffèrent que par les blancs. Ne change ni le réglage global, ni ce qui serait copié."
+                          onClick=${() => onRecomparer({ ignorerEspaces: true })}
+                        >
+                          Recomparer sans les blancs
                         </button>`
                       : null}
                   </span>`
@@ -710,6 +737,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
                       )}
                   <${CarteChangements}
                     rangs=${rangsAffiches}
+                    reperes=${trouvees}
                     onAller=${(index) => {
                       allerA(index);
                       const proche = changements.find((position) => position >= index);
@@ -766,7 +794,7 @@ function texteUnifie(donnees, titreGauche, titreDroite) {
  * relative dans le fichier ; un clic saute à cet endroit. C'est ce qui donne,
  * d'un coup d'œil, la réponse à « où ça change, et combien ».
  */
-function CarteChangements({ rangs, onAller }) {
+function CarteChangements({ rangs, reperes, onAller }) {
   const total = rangs.length;
 
   // Blocs contigus de même type, pour ne pas créer un élément par ligne.
@@ -810,6 +838,15 @@ function CarteChangements({ rangs, onAller }) {
             '%;height:' +
             Math.max(0.35, (((bloc.fin - bloc.debut + 1) / total) * 100)).toFixed(3) +
             '%'}
+          ></span>
+        `
+      )}
+      ${(reperes || []).map(
+        (index) => html`
+          <span
+            key=${'r' + index}
+            class="diff-carte-repere"
+            style=${'top:' + ((index / total) * 100).toFixed(3) + '%'}
           ></span>
         `
       )}

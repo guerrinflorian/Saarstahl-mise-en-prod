@@ -965,8 +965,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               nom du fichier pèse plus lourd que son chemin.
             </li>
             <li>
-              Palette vide, les fichiers s'ordonnent par statut : les écarts d'abord, les identiques
-              en dernier.
+              Palette vide, les derniers fichiers comparés remontent en tête, marqués${' '}
+              <span class="etiquette">récent</span> ; puis les écarts par statut, les identiques en
+              dernier.
             </li>
             <li>
               <${T}>↑<//> <${T}>↓<//> pour choisir, <${T}>Entrée<//> pour ouvrir la comparaison,${' '}
@@ -1087,7 +1088,15 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <p class="attenue">
             À l'ouverture d'un fichier, la vue se place d'elle-même sur le premier changement -
             c'est lui qu'on est venu voir - et <span class="aide-touche">F8</span> enchaîne sur le
-            suivant.
+            suivant ; le bouton affiche la position courante (« 3/14 »). Les occurrences de la
+            recherche <span class="aide-touche">Ctrl</span> + <span class="aide-touche">F</span>${' '}
+            apparaissent aussi dans la carte, en petits crans verts sur le bord gauche.
+          </p>
+          <p class="attenue">
+            Quand des lignes ne diffèrent que par les blancs, le bandeau d'alerte propose de${' '}
+            <strong>recomparer sans les blancs</strong> : la comparaison de ce fichier est refaite
+            en tenant ces lignes pour identiques, sans toucher au réglage global ni à ce qui serait
+            copié, et un clic ramène la comparaison exacte.
           </p>
 
           <h3>Ce que l'en-tête vous dit d'autre</h3>
@@ -1182,6 +1191,16 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             </li>
           </ul>
 
+          <h3>Chercher et remplacer</h3>
+          <p>
+            <${T}>Ctrl<//> + <${T}>F<//> cherche dans le fichier, <${T}>Ctrl<//> + <${T}>H<//>${' '}
+            ouvre aussi le remplacement. Toutes les occurrences sont surlignées, la courante est
+            encadrée ; <${T}>Entrée<//> passe à la suivante. <strong>Remplacer</strong> traite
+            l'occurrence courante - chaque remplacement reste une étape d'annulation -${' '}
+            <strong>Tout</strong> remplace d'un coup, et un seul <${T}>Ctrl<//> + <${T}>Z<//>${' '}
+            ramène tout. À l'Entrée, la nouvelle ligne hérite du retrait de la précédente.
+          </p>
+
           <p>
             Après un enregistrement, l'analyse suit toute seule : le statut du fichier est recalculé
             sur ce qui vient d'être écrit - une retouche peut le faire passer à « identique », et il
@@ -1251,7 +1270,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <p>
             Le compteur du bandeau est un bouton. Il déplie la <strong>liste exacte de ce qui
             part</strong> - marqueur de statut, chemin, taille - avec, pour chaque fichier, une
-            croix pour le retirer de la sélection sans aller le rechercher dans l'arborescence.
+            croix pour le retirer de la sélection sans aller le rechercher dans l'arborescence -
+            et un clic sur la ligne ouvre directement sa comparaison.
             En tête, le volume total, <strong>Copier la liste</strong> (un chemin par ligne, prêt à
             coller dans un message d'annonce) et <strong>Tout décocher</strong>. C'est la dernière
             relecture avant d'appuyer sur le bouton.

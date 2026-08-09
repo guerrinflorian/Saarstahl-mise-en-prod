@@ -29,6 +29,7 @@ export function BandeauDeploiement({
   onDeployer,
   onRetirer,
   onDecocherTout,
+  onChoisir,
   onNotifier
 }) {
   const [planOuvert, setPlanOuvert] = useState(false);
@@ -213,12 +214,22 @@ export function BandeauDeploiement({
               <div class="bandeau-plan-liste">
                 ${fichiers.map(
                   (fichier) => html`
-                    <div class="bandeau-plan-ligne" key=${fichier.cle}>
+                    <div
+                      class="bandeau-plan-ligne"
+                      key=${fichier.cle}
+                      title=${'Ouvrir la comparaison de ' + fichier.chemin}
+                      onClick=${() => {
+                        if (onChoisir) {
+                          onChoisir(fichier);
+                          setPlanOuvert(false);
+                        }
+                      }}
+                    >
                       <span class=${'marqueur marqueur-' + fichier.statut} title=${'Fichier ' + LIBELLES[fichier.statut]}>
                         ${MARQUEURS[fichier.statut]}
                       </span>
                       <${IconeFichier} extension=${fichier.extension || fichier.nom} />
-                      <span class="mono bandeau-plan-chemin" title=${fichier.chemin}>${fichier.chemin}</span>
+                      <span class="mono bandeau-plan-chemin">${fichier.chemin}</span>
                       <span class="attenue bandeau-plan-taille">
                         ${formaterOctets(fichier.local ? fichier.local.taille : fichier.prod ? fichier.prod.taille : 0)}
                       </span>
@@ -227,7 +238,10 @@ export function BandeauDeploiement({
                         class="btn btn-mini btn-plat btn-carre"
                         title="Retirer ce fichier de la sélection"
                         aria-label=${'Retirer ' + fichier.chemin}
-                        onClick=${() => onRetirer(fichier.cle)}
+                        onClick=${(evenement) => {
+                          evenement.stopPropagation();
+                          onRetirer(fichier.cle);
+                        }}
                       >
                         ✕
                       </button>

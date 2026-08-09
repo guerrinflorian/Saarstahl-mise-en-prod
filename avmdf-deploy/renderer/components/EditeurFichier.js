@@ -34,10 +34,16 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
   const [occupe, setOccupe] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
   const [curseur, setCurseur] = useState({ ligne: 1, colonne: 1 });
+  const [recherche, setRecherche] = useState(null);
+  const [aiguille, setAiguille] = useState('');
+  const [remplacement, setRemplacement] = useState('');
+  const [positionOccurrence, setPositionOccurrence] = useState(0);
 
   const zoneTexte = useRef(null);
   const calque = useRef(null);
+  const calqueMarques = useRef(null);
   const gouttiere = useRef(null);
+  const champRecherche = useRef(null);
   const empreinte = useRef(null);
 
   const modifie = texte !== initial;
@@ -87,12 +93,109 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
     }
   }, [texte, langue, etat]);
 
-  // -- Défilement : le textarea mène, le calque et la gouttière suivent -----
+  // -- Défilement : le textarea mène, les calques et la gouttière suivent ---
   function surDefilement(evenement) {
     const { scrollTop, scrollLeft } = evenement.target;
     if (calque.current) calque.current.style.transform = `translate(${-scrollLeft}px, ${-scrollTop}px)`;
+    if (calqueMarques.current) calqueMarques.current.style.transform = `translate(${-scrollLeft}px, ${-scrollTop}px)`;
     if (gouttiere.current) gouttiere.current.style.transform = `translateY(${-scrollTop}px)`;
   }
+
+  // -- Recherche et remplacement --------------------------------------------
+  //
+  // Les occurrences vivent dans un calque de plus, sous la coloration : le
+  // textarea garde le curseur, le calque montre où sont les trouvailles.
+
+  const occurrences = useMemo(() => {
+    if (!recherche || !aiguille) return [];
+    const sortie = [];
+    const meule = texte.toLowerCase();
+    const motif = aiguille.toLowerCase();
+    let depuis = 0;
+    while (sortie.length < 5000) {
+      const trouve = meule.indexOf(motif, depuis);
+      if (trouve === -1) break;
+      sortie.push(trouve);
+      depuis = trouve + Math.max(1, motif.length);
+    }
+    return sortie;
+  }, [texte, aiguille, recherche]);
+
+  useEffect(() => {
+    setPositionOccurrence((precedente) => Math.max(0, Math.min(precedente, occurrences.length - 1)));
+  }, [occurrences.length]);
+
+  const marquesHtml = useMemo(() => {
+    if (!occurrences.length) return '';
+    let sortie = '';
+    let position = 0;
+    occurrences.forEach((debut, index) => {
+      sortie += echapper(texte.slice(position, debut));
+      sortie +=
+        '<mark class="editeur-marque' +
+        (index === positionOccurrence ? ' courante' : '') +
+        '">' +
+        echapper(texte.slice(debut, debut + aiguille.length)) +
+        '</mark>';
+      position = debut + aiguille.length;
+    });
+    sortie += echapper(texte.slice(position));
+    return sortie;
+  }, [occurrences, positionOccurrence, texte, aiguille]);
+
+  // Un calque qui apparaît après coup doit rattraper le défilement en cours.
+  useEffect(() => {
+    if (zoneTexte.current) surDefilement({ target: zoneTexte.current });
+  }, [marquesHtml]);
+
+  function allerOccurrence(index) {
+    if (!occurrences.length) return;
+    const borne = (index + occurrences.length) % occurrences.length;
+    setPositionOccurrence(borne);
+    const debut = occurrences[borne];
+    const zone = zoneTexte.current;
+    if (!zone) return;
+    const ligne = (texte.slice(0, debut).match(/\n/g) || []).length;
+    zone.scrollTop = Math.max(0, ligne * 18 - zone.clientHeight / 2);
+    zone.setSelectionRange(debut, debut + aiguille.length);
+    surDefilement({ target: zone });
+  }
+
+  function remplacerOccurrence() {
+    if (!occurrences.length) return;
+    const debut = occurrences[positionOccurrence];
+    const zone = zoneTexte.current;
+    if (!zone) return;
+    // `execCommand` plutôt qu'une réécriture de la valeur : chaque
+    // remplacement reste une étape d'annulation (Ctrl+Z) à part entière.
+    zone.focus();
+    zone.setSelectionRange(debut, debut + aiguille.length);
+    document.execCommand('insertText', false, remplacement);
+  }
+
+  function remplacerTout() {
+    if (!occurrences.length) return;
+    const zone = zoneTexte.current;
+    if (!zone) return;
+    const motif = new RegExp(aiguille.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const nouveau = texte.replace(motif, remplacement.replace(/\$/g, '$$$$'));
+    zone.focus();
+    zone.setSelectionRange(0, texte.length);
+    document.execCommand('insertText', false, nouveau);
+  }
+
+  useEffect(() => {
+    function surRaccourci(evenement) {
+      if ((evenement.ctrlKey || evenement.metaKey) && (evenement.key === 'f' || evenement.key === 'h')) {
+        evenement.preventDefault();
+        evenement.stopPropagation();
+        setRecherche({ remplacer: evenement.key === 'h' });
+        setTimeout(() => champRecherche.current && champRecherche.current.focus(), 0);
+      }
+    }
+    window.addEventListener('keydown', surRaccourci, true);
+    return () => window.removeEventListener('keydown', surRaccourci, true);
+  }, []);
 
   function surPosition(evenement) {
     const position = evenement.target.selectionStart || 0;
@@ -110,6 +213,16 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
       // (Ctrl+Z) du textarea reste intacte.
       evenement.preventDefault();
       document.execCommand('insertText', false, '\t');
+    } else if (evenement.key === 'Enter') {
+      // La nouvelle ligne hérite du retrait de la précédente : dans un .aspx
+      // indenté à quatre niveaux, revenir à la marge à chaque Entrée userait
+      // n'importe qui.
+      evenement.preventDefault();
+      const zone = evenement.target;
+      const avant = zone.value.slice(0, zone.selectionStart);
+      const debutLigne = avant.lastIndexOf('\n') + 1;
+      const retrait = (avant.slice(debutLigne).match(/^[ \t]*/) || [''])[0];
+      document.execCommand('insertText', false, '\n' + retrait);
     } else if (evenement.key === 's' && (evenement.ctrlKey || evenement.metaKey)) {
       evenement.preventDefault();
       if (modifie && !occupe) enregistrer();
@@ -126,6 +239,7 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
       if (evenement.key !== 'Escape') return;
       evenement.stopPropagation();
       if (confirmation) setConfirmation(false);
+      else if (recherche) setRecherche(null);
       else demanderFermeture();
     }
     window.addEventListener('keydown', surEchap, true);
@@ -193,6 +307,81 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
             </div>`
           : null}
 
+        ${etat === 'pret' && recherche
+          ? html`
+              <div class="editeur-recherche">
+                <input
+                  type="search"
+                  ref=${champRecherche}
+                  class="mono"
+                  placeholder="Rechercher… (Entrée : suivante, Maj+Entrée : précédente)"
+                  value=${aiguille}
+                  onInput=${(e) => {
+                    setAiguille(e.target.value);
+                    setPositionOccurrence(0);
+                  }}
+                  onKeyDown=${(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      allerOccurrence(positionOccurrence + (e.shiftKey ? -1 : 1));
+                    }
+                  }}
+                />
+                <span class="attenue mono">
+                  ${occurrences.length ? positionOccurrence + 1 + ' / ' + occurrences.length : 'aucune'}
+                </span>
+                <button type="button" class="btn btn-mini" disabled=${!occurrences.length} onClick=${() => allerOccurrence(positionOccurrence - 1)}>↑</button>
+                <button type="button" class="btn btn-mini" disabled=${!occurrences.length} onClick=${() => allerOccurrence(positionOccurrence + 1)}>↓</button>
+                ${recherche.remplacer
+                  ? html`
+                      <input
+                        type="text"
+                        class="mono"
+                        placeholder="Remplacer par…"
+                        value=${remplacement}
+                        onInput=${(e) => setRemplacement(e.target.value)}
+                        onKeyDown=${(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            remplacerOccurrence();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-mini"
+                        disabled=${!occurrences.length}
+                        title="Remplace l'occurrence en surbrillance. Chaque remplacement est une étape d'annulation."
+                        onClick=${remplacerOccurrence}
+                      >
+                        Remplacer
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-mini"
+                        disabled=${!occurrences.length}
+                        title="Remplace toutes les occurrences d'un coup. Un seul Ctrl+Z ramène tout."
+                        onClick=${remplacerTout}
+                      >
+                        Tout (${formaterNombre(occurrences.length)})
+                      </button>
+                    `
+                  : html`<button type="button" class="btn btn-mini btn-plat" onClick=${() => setRecherche({ remplacer: true })}>
+                      Remplacer…
+                    </button>`}
+                <div style="flex:1"></div>
+                <button
+                  type="button"
+                  class="btn btn-mini btn-plat"
+                  title="Fermer la recherche (Échap)"
+                  onClick=${() => setRecherche(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            `
+          : null}
+
         ${etat === 'pret'
           ? html`
               <div class="editeur-zone">
@@ -202,6 +391,14 @@ export function EditeurFichier({ fichier, onFermer, onEnregistre, onEchec }) {
                   </div>
                 </div>
                 <div class="editeur-piste">
+                  ${marquesHtml
+                    ? html`<pre
+                        class="editeur-calque editeur-marques"
+                        aria-hidden="true"
+                        ref=${calqueMarques}
+                        dangerouslySetInnerHTML=${{ __html: marquesHtml + '\n' }}
+                      ></pre>`
+                    : null}
                   <pre class="editeur-calque" aria-hidden="true" ref=${calque}><code
                     dangerouslySetInnerHTML=${{ __html: (colorie || echapper(texte)) + '\n' }}
                   ></code></pre>

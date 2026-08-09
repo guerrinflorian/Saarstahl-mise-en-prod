@@ -298,6 +298,11 @@ Techniquement, l'éditeur superpose un `textarea` au texte transparent sur un `p
 mêmes métriques ; la tokenisation est synchrone (Prism) pour que le calque ne soit jamais en
 retard d'une frappe, et se coupe au-delà de 150 Ko pour préserver la fluidité.
 
+`Ctrl+F` cherche dans le fichier (occurrences surlignées dans un calque dédié, la courante
+encadrée), `Ctrl+H` ouvre le remplacement : « Remplacer » traite l'occurrence courante en une
+étape d'annulation, « Tout » remplace en un seul `Ctrl+Z`. À l'Entrée, la nouvelle ligne hérite
+du retrait de la précédente.
+
 ## Palette « Aller au fichier »
 
 `Ctrl+P` après une analyse : un champ, la liste des fichiers, et une recherche insensible à la
@@ -322,7 +327,10 @@ d'abord.
   restent accessibles en permanence. L'historique se filtre (demande, fichier, commentaire, et une
   case « Masquer les simulations »), le journal se filtre par niveau (Tout / Alertes / Erreurs).
 - « Copier le diff » copie la comparaison affichée au format patch, prête à coller dans un
-  message ; `A−` / `A+` règlent le corps de texte du comparateur, préférence mémorisée.
+  message ; `A−` / `A+` règlent le corps de texte du comparateur, préférence mémorisée. Le bouton
+  « Suivant (F8) » affiche la position courante (« 3/14 »), la mini-carte porte aussi les
+  occurrences de la recherche `Ctrl+F`, et le bandeau d'alerte propose de **recomparer sans les
+  blancs** pour un fichier (aller-retour libre, sans toucher au réglage global).
 - À la confirmation d'une mise en production, un champ **Commentaire** facultatif permet de dire
   en une phrase pourquoi le passage part ; la phrase suit le manifeste partout (récapitulatif,
   historique, rapport, tableau de bord). Un point bloquant corrigé (pool recyclé, fichier
