@@ -22,7 +22,15 @@ import { Notifications, useNotifications } from './components/Notifications.js';
 import { appliquerTheme, lireTheme } from './components/theme.js';
 import { joindreChemin } from './components/chemins.js';
 import { criteresParDefaut, filtrer, listerDossiers } from './components/filtres.js';
-import { dossiersDePremierNiveau, filtrerArbre, tousLesDossiers } from './components/arborescence.js';
+import {
+  LIBELLES,
+  dossiersDePremierNiveau,
+  estDeployable,
+  fichiersDe,
+  filtrerArbre,
+  formaterNombre,
+  tousLesDossiers
+} from './components/arborescence.js';
 
 const html = htm.bind(h);
 
@@ -54,6 +62,9 @@ function App() {
 
   const [analyse, setAnalyse] = useState(ANALYSE_INACTIVE);
   const [criteres, setCriteres] = useState(criteresParDefaut);
+  // Fichiers écartés de la vue pour cette analyse seulement : un choix de
+  // lecture, pas un réglage. La liste repart vide à chaque nouvelle analyse.
+  const [masques, setMasques] = useState(() => new Set());
   const [occurrences, setOccurrences] = useState(null);
   const [rechercheContenu, setRechercheContenu] = useState({ enCours: false, faits: 0, total: 0, trouves: null });
 
@@ -178,8 +189,11 @@ function App() {
   // -- Filtrage -------------------------------------------------------------
   const fichiersFiltres = useMemo(() => {
     if (!analyse.resultat) return [];
-    return filtrer(analyse.resultat.fichiers, criteres, occurrences);
-  }, [analyse.resultat, criteres, occurrences]);
+    const visibles = masques.size
+      ? analyse.resultat.fichiers.filter((fichier) => !masques.has(fichier.cle))
+      : analyse.resultat.fichiers;
+    return filtrer(visibles, criteres, occurrences);
+  }, [analyse.resultat, criteres, occurrences, masques]);
 
   const arbreFiltre = useMemo(() => {
     if (!analyse.resultat) return null;
@@ -197,6 +211,13 @@ function App() {
     [analyse.resultat, selection]
   );
   const operation = operationDe(resumeSelection);
+
+  // La liste réelle de ce qui part, pour le plan de vol du bandeau.
+  const fichiersSelectionnes = useMemo(
+    () =>
+      analyse.resultat ? analyse.resultat.fichiers.filter((fichier) => selection.has(fichier.cle)) : [],
+    [analyse.resultat, selection]
+  );
 
   // « Archiver » ne s'applique qu'aux mises en production. Supprimer un
   // orphelin sans en garder de copie serait sans retour : le bandeau ne
@@ -259,6 +280,7 @@ function App() {
     jeton.current += 1;
     setAnalyse({ etat: 'encours', progression: null, resultat: null, acces: null });
     setSelection(new Set());
+    setMasques(new Set());
     setFichierActif(null);
     setDiff({ etat: 'vide' });
     setOccurrences(null);
@@ -325,11 +347,99 @@ function App() {
     []
   );
 
+  /**
+   * Coche d'un coup tout ce que les filtres laissent voir. C'est ce qui fait
+   * des filtres un outil de sélection : « modifiés depuis 7 jours » plus un
+   * clic, et le passage est prêt. La règle de non-mélange reste la même que
+   * pour une branche : jamais déploiement et suppression ensemble.
+   */
+  const cocherAffiches = useCallback(() => {
+    const deployables = fichiersFiltres.filter(estDeployable);
+    const orphelins = fichiersFiltres.filter((fichier) => fichier.statut === 'orphelin');
+    let candidats;
+    if (operation === 'suppression' && resumeSelection.orphelins) candidats = orphelins;
+    else if (resumeSelection.deployables) candidats = deployables;
+    else candidats = deployables.length ? deployables : orphelins;
+    if (!candidats.length) {
+      notifier({ type: 'info', titre: 'Rien à cocher parmi les fichiers affichés.' });
+      return;
+    }
+    setSelection((precedente) => {
+      const suivante = new Set(precedente);
+      for (const fichier of candidats) suivante.add(fichier.cle);
+      return suivante;
+    });
+    notifier({
+      type: 'succes',
+      titre: formaterNombre(candidats.length) + ' fichier(s) cochés.',
+      texte: 'Le bandeau du bas récapitule ce qui part : cliquez sur le compteur pour le détail.',
+      duree: 4000
+    });
+  }, [fichiersFiltres, operation, resumeSelection, notifier]);
+
   /** Menu contextuel de l'arborescence : les fichiers comme les dossiers. */
   const actionSurNoeud = useCallback(
     async (action, noeud) => {
       const estDossier = noeud.type === 'dossier';
 
+      if (action === 'rafraichir') {
+        const reponse = await window.avmdf.analyse.rafraichirFichier(noeud.cle);
+        if (!reponse.ok) {
+          notifierEchec(reponse, 'Réanalyse impossible.');
+          return;
+        }
+        setAnalyse({ etat: 'termine', progression: null, resultat: reponse.analyse, acces: null });
+        if (reponse.supprime || reponse.statut === 'identique') {
+          setSelection((precedente) => {
+            if (!precedente.has(noeud.cle)) return precedente;
+            const suivante = new Set(precedente);
+            suivante.delete(noeud.cle);
+            return suivante;
+          });
+        }
+        if (reponse.supprime) {
+          if (fichierActif === noeud.cle) {
+            setFichierActif(null);
+            setDiff({ etat: 'vide' });
+          }
+          notifier({
+            type: 'alerte',
+            titre: 'Ce fichier n\'existe plus d\'aucun côté.',
+            texte: noeud.chemin + ' - il est sorti de l\'analyse.'
+          });
+          return;
+        }
+        if (fichierActif === noeud.cle && reponse.diff) {
+          setDiff({ etat: 'pret', donnees: reponse.diff });
+        }
+        notifier({
+          type: 'succes',
+          titre: 'Fichier réanalysé : ' + (LIBELLES[reponse.statut] || reponse.statut) + '.',
+          texte: noeud.chemin,
+          duree: 4000
+        });
+        return;
+      }
+      if (action === 'masquer') {
+        const cles = estDossier ? fichiersDe(noeud).map((fichier) => fichier.cle) : [noeud.cle];
+        setMasques((precedents) => new Set([...precedents, ...cles]));
+        setSelection((precedente) => {
+          const suivante = new Set(precedente);
+          for (const cle of cles) suivante.delete(cle);
+          return suivante;
+        });
+        if (cles.includes(fichierActif)) {
+          setFichierActif(null);
+          setDiff({ etat: 'vide' });
+        }
+        notifier({
+          type: 'info',
+          titre: (cles.length > 1 ? formaterNombre(cles.length) + ' fichiers masqués' : '1 fichier masqué') + ' pour cette analyse.',
+          texte: 'Les réglages ne changent pas. « Rétablir » dans la barre de filtres les fait revenir, et la prochaine analyse repart au complet.',
+          duree: 6000
+        });
+        return;
+      }
       if (action === 'copier') {
         await window.avmdf.systeme.copier(noeud.chemin);
         notifier({ type: 'succes', titre: 'Chemin copié.', texte: noeud.chemin, duree: 2500 });
@@ -397,7 +507,7 @@ function App() {
         notifierEchec(reponse, dansExplorateur ? 'Affichage impossible.' : 'Ouverture impossible.');
       }
     },
-    [notifier, notifierEchec]
+    [notifier, notifierEchec, fichierActif]
   );
 
   const ouvrirExterne = useCallback(
@@ -696,6 +806,11 @@ function App() {
           dossiers=${dossiers}
           nombreAffiches=${fichiersFiltres.length}
           nombreTotal=${analyse.resultat ? analyse.resultat.fichiers.length : 0}
+          nombreSelection=${selection.size}
+          onCocherAffiches=${cocherAffiches}
+          onDecocherTout=${() => setSelection(new Set())}
+          nombreMasques=${masques.size}
+          onRetablirMasques=${() => setMasques(new Set())}
           rechercheContenu=${{ ...rechercheContenu, onAnnuler: () => window.avmdf.recherche.annuler() }}
           ouverts=${ouverts}
           onOuverts=${(valeur) => setOuverts(valeur === 'tout' ? tousLesDossiers(arbreFiltre) : valeur)}
@@ -745,12 +860,21 @@ function App() {
             archiver=${archiver}
             onArchiver=${setArchiver}
             selection=${resumeSelection}
+            fichiers=${fichiersSelectionnes}
             destination=${destination}
             modeLibre=${modeLibre}
             operation=${operation}
             occupe=${Boolean(deploiement)}
             onChoisirDestination=${() => setEcran('destination')}
             onDeployer=${lancerPreflight}
+            onRetirer=${(cle) =>
+              setSelection((precedente) => {
+                const suivante = new Set(precedente);
+                suivante.delete(cle);
+                return suivante;
+              })}
+            onDecocherTout=${() => setSelection(new Set())}
+            onNotifier=${notifier}
           />`
         : null}
 
@@ -879,6 +1003,7 @@ function App() {
             occupe=${deploiement.occupe}
             progression=${deploiement.progression}
             onConfirmer=${confirmerDeploiement}
+            onRejouer=${lancerPreflight}
             onFermer=${() => {
               window.avmdf.deploiement.annuler();
               setDeploiement(null);

@@ -39,6 +39,11 @@ export function ArbreFichiers({
   dossiers,
   nombreAffiches,
   nombreTotal,
+  nombreSelection,
+  onCocherAffiches,
+  onDecocherTout,
+  nombreMasques,
+  onRetablirMasques,
   rechercheContenu,
   ouverts,
   onOuverts,
@@ -220,6 +225,11 @@ export function ArbreFichiers({
               dossiers=${dossiers}
               nombreAffiches=${nombreAffiches}
               nombreTotal=${nombreTotal}
+              nombreSelection=${nombreSelection}
+              onCocherAffiches=${onCocherAffiches}
+              onDecocherTout=${onDecocherTout}
+              nombreMasques=${nombreMasques}
+              onRetablirMasques=${onRetablirMasques}
               rechercheContenu=${rechercheContenu}
               onToutDeplier=${() => onOuverts('tout')}
               onToutReplier=${() => onOuverts(new Set())}
@@ -531,8 +541,24 @@ function entreesFichier(fichier) {
       actif: Boolean(fichier.prod)
     },
     { separateur: true },
+    {
+      action: 'rafraichir',
+      libelle: 'Réanalyser ce fichier',
+      titre:
+        'Relit la taille et l\'empreinte de ce seul fichier, des deux côtés, sans relancer toute l\'analyse. ' +
+        'Utile après avoir corrigé un verrou ou modifié le fichier hors de l\'outil.',
+      actif: true
+    },
     { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
     { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
+    { separateur: true },
+    {
+      action: 'masquer',
+      libelle: 'Masquer pour cette analyse',
+      titre:
+        'Écarte ce fichier de la vue sans toucher aux réglages. « Rétablir » dans la barre de filtres le fait revenir ; la prochaine analyse repart au complet.',
+      actif: true
+    },
     {
       action: 'exclure',
       libelle: 'Exclure ce fichier',
@@ -596,6 +622,13 @@ function entreesDossier(dossier) {
     { separateur: true },
     { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
     { separateur: true },
+    {
+      action: 'masquer',
+      libelle: 'Masquer cette branche pour cette analyse',
+      titre:
+        'Écarte tous les fichiers de ce dossier de la vue, sans toucher aux réglages. « Rétablir » dans la barre de filtres les fait revenir.',
+      actif: true
+    },
     ...exclusions
   ];
 }

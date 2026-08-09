@@ -13,7 +13,7 @@ const html = htm.bind(h);
  * Un bloquant empêche le déploiement, point. Et pour valider, il faut saisir le
  * numéro de la demande : pas de simple bouton « OK », c'est une mise en production.
  */
-export function ConfirmationDeploiement({ etape, controle, resume, occupe, progression, onConfirmer, onFermer }) {
+export function ConfirmationDeploiement({ etape, controle, resume, occupe, progression, onConfirmer, onRejouer, onFermer }) {
   const [saisie, setSaisie] = useState('');
   const [commentaire, setCommentaire] = useState('');
   const [listeDepliee, setListeDepliee] = useState(false);
@@ -69,7 +69,22 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
           ${controle.bloquants.length
             ? html`
                 <div class="encart encart-danger" style="margin-bottom:14px">
-                  <strong>${controle.bloquants.length} point(s) bloquant(s) - la mise en production est refusée.</strong>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <strong style="flex:1">
+                      ${controle.bloquants.length} point(s) bloquant(s) - la mise en production est refusée.
+                    </strong>
+                    ${onRejouer
+                      ? html`<button
+                          type="button"
+                          class="btn btn-mini"
+                          title="Refaire toutes les vérifications sans refermer cette fenêtre : après un pool recyclé ou un fichier déverrouillé, c'est le geste qui suit."
+                          disabled=${occupe}
+                          onClick=${onRejouer}
+                        >
+                          Rejouer les contrôles
+                        </button>`
+                      : null}
+                  </div>
                   ${controle.bloquants.map(
                     (probleme) => html`
                       <div class="probleme" key=${probleme.code + probleme.message}>

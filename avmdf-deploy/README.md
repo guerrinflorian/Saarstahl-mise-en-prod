@@ -325,7 +325,20 @@ d'abord.
   message ; `A−` / `A+` règlent le corps de texte du comparateur, préférence mémorisée.
 - À la confirmation d'une mise en production, un champ **Commentaire** facultatif permet de dire
   en une phrase pourquoi le passage part ; la phrase suit le manifeste partout (récapitulatif,
-  historique, rapport, tableau de bord).
+  historique, rapport, tableau de bord). Un point bloquant corrigé (pool recyclé, fichier
+  déverrouillé) se revérifie sur place avec « Rejouer les contrôles », sans refermer la fenêtre.
+- Les filtres composent la sélection : « ☑ Cocher les affichés » coche d'un coup tout ce que les
+  filtres laissent voir (sans jamais mélanger déploiement et suppression), « Tout décocher » vide
+  la sélection.
+- Le compteur du bandeau s'ouvre en **plan de vol** : la liste exacte de ce qui part (statut,
+  chemin, taille, volume total), retrait fichier par fichier, et « Copier la liste » pour
+  l'annonce du passage.
+- Clic droit → **Réanalyser ce fichier** : re-stat et re-hash de ce seul fichier, des deux côtés,
+  sans relire le partage ; le statut se recale immédiatement (même règles que l'analyse : taille,
+  puis empreinte, jamais la date).
+- Clic droit → **Masquer pour cette analyse** (fichier ou branche) : écarte de la vue sans toucher
+  aux réglages ; la barre de filtres affiche « N masqués · Rétablir », la prochaine analyse repart
+  au complet.
 - Le clic droit sur un fichier propose **les deux côtés séparément** : ouvrir la version locale ou
   la version production, et afficher l'une ou l'autre dans l'explorateur Windows. Aucune entrée ne
   se rabat sur l'autre côté quand le fichier n'existe que d'un seul : elle est grisée. Ouvrir « la

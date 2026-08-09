@@ -748,6 +748,22 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             trouvés resteraient cachés dans des dossiers repliés et la recherche donnerait
             l'impression de ne rien trouver.
           </div>
+
+          <h3>Les filtres composent la sélection</h3>
+          <p>
+            Sous le résumé, <button type="button" class="btn btn-mini">☑ Cocher les affichés</button>${' '}
+            coche d'un coup tout ce que les filtres laissent voir. C'est le geste qui prépare un
+            passage en deux temps : « modifiés depuis 7 jours » puis un clic, et la sélection est
+            faite. Déploiement et suppression ne sont jamais mélangés : si l'affichage contient les
+            deux, ce sont les fichiers à déployer qui sont cochés.${' '}
+            <button type="button" class="btn btn-mini btn-plat">Tout décocher</button> vide la
+            sélection, où que soient les fichiers cochés.
+          </p>
+          <p class="attenue">
+            Les fichiers <strong>masqués au clic droit</strong> pour l'analyse en cours sont
+            rappelés ici par une pastille « N masqués · Rétablir » : un clic les fait revenir, et la
+            prochaine analyse repart de toute façon au complet.
+          </p>
         <//>
 
         <!-- =================================================== Arbre -->
@@ -824,14 +840,18 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <${Demo} legende="Chaque côté a ses deux entrées : ouvrir le fichier, ou le montrer dans l'explorateur.">
             <div class="aide-menu">
               <div class="menu-titre mono">GPNET\\Controles\\Entete.ascx</div>
+              <button type="button" class="menu-entree">Modifier la version locale</button>
               <button type="button" class="menu-entree">Ouvrir la version locale</button>
               <button type="button" class="menu-entree">Ouvrir la version production</button>
               <div class="menu-separateur"></div>
               <button type="button" class="menu-entree">Afficher le local dans l'explorateur</button>
               <button type="button" class="menu-entree">Afficher la production dans l'explorateur</button>
               <div class="menu-separateur"></div>
+              <button type="button" class="menu-entree">Réanalyser ce fichier</button>
               <button type="button" class="menu-entree">Copier le chemin relatif</button>
               <button type="button" class="menu-entree">Voir les versions archivées</button>
+              <div class="menu-separateur"></div>
+              <button type="button" class="menu-entree">Masquer pour cette analyse</button>
               <button type="button" class="menu-entree danger">Exclure ce fichier</button>
             </div>
           <//>
@@ -839,6 +859,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <${Repere}
             entetes=${['Entrée', 'Effet']}
             lignes=${[
+              ['Modifier la version locale', 'Ouvre le fichier dans l\'éditeur intégré (voir la section dédiée).'],
               ['Ouvrir la version locale / production', 'Ouvre le fichier avec le programme associé sur votre poste. Grisé si le fichier n\'existe pas de ce côté.'],
               [
                 'Afficher le local / la production dans l\'explorateur',
@@ -847,8 +868,16 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                   qu'on sache toujours quelle arborescence on a sous les yeux. Grisée si le fichier
                   n'existe pas de ce côté.`
               ],
+              [
+                'Réanalyser ce fichier',
+                'Relit la taille et l\'empreinte de ce seul fichier, des deux côtés, sans relancer toute l\'analyse. Le statut se recale immédiatement : après un verrou corrigé ou une retouche faite hors de l\'outil, inutile de relire tout le partage.'
+              ],
               ['Copier le chemin relatif', 'Met le chemin dans le presse-papiers, prêt à coller dans un compte rendu.'],
               ['Voir les versions archivées', 'Toutes les versions « avant modification » de ce fichier retrouvées sous la racine AVMDF.'],
+              [
+                'Masquer pour cette analyse',
+                'Écarte le fichier de la vue sans toucher aux réglages. La barre de filtres affiche « N masqués · Rétablir », et la prochaine analyse repart au complet. Pour faire le tri dans le bruit d\'un jour, sans rien engager.'
+              ],
               [
                 html`<span class="aide-danger-texte">Exclure ce fichier</span>`,
                 'Ajoute son nom aux fichiers exclus des réglages. Effet immédiat sur les analyses suivantes, mais pas sur l\'analyse en cours.'
@@ -871,6 +900,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               <div class="menu-separateur"></div>
               <button type="button" class="menu-entree">Copier le chemin relatif</button>
               <div class="menu-separateur"></div>
+              <button type="button" class="menu-entree">Masquer cette branche pour cette analyse</button>
               <button type="button" class="menu-entree danger">Exclure ce dossier seulement ici</button>
               <button type="button" class="menu-entree danger">Exclure tous les dossiers « Images »</button>
             </div>
@@ -1200,6 +1230,16 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             ]}
           />
 
+          <h3>Le compteur s'ouvre : le plan de vol</h3>
+          <p>
+            Le compteur du bandeau est un bouton. Il déplie la <strong>liste exacte de ce qui
+            part</strong> - marqueur de statut, chemin, taille - avec, pour chaque fichier, une
+            croix pour le retirer de la sélection sans aller le rechercher dans l'arborescence.
+            En tête, le volume total, <strong>Copier la liste</strong> (un chemin par ligne, prêt à
+            coller dans un message d'annonce) et <strong>Tout décocher</strong>. C'est la dernière
+            relecture avant d'appuyer sur le bouton.
+          </p>
+
           <h3>Se passer de l'archivage AVMDF</h3>
           <p>
             Toutes les mises en production ne méritent pas leur dossier d'archives. Une feuille de
@@ -1358,6 +1398,13 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ['Espace disponible non mesurable', 'Le partage n\'a pas répondu à la question. Vérifiez à l\'œil qu\'il reste de la place.']
             ]}
           />
+
+          <p>
+            Un point bloquant corrigé ne force plus à tout refermer :${' '}
+            <button type="button" class="btn btn-mini">Rejouer les contrôles</button>, dans l'encart
+            rouge, refait toutes les vérifications sur place. Recycler le pool, déverrouiller le
+            fichier, rejouer : la fenêtre de confirmation reste ouverte, la saisie du numéro aussi.
+          </p>
 
           <h3>La confirmation</h3>
           <p>

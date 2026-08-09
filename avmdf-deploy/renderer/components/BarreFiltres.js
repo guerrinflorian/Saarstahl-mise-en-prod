@@ -73,6 +73,11 @@ export function BarreFiltres({
   dossiers,
   nombreAffiches,
   nombreTotal,
+  nombreSelection,
+  onCocherAffiches,
+  onDecocherTout,
+  nombreMasques,
+  onRetablirMasques,
   rechercheContenu,
   onReinitialiser,
   onToutDeplier,
@@ -279,6 +284,16 @@ export function BarreFiltres({
         <span>
           <strong>${formaterNombre(nombreAffiches)}</strong> sur ${formaterNombre(nombreTotal)} fichiers
         </span>
+        ${nombreMasques
+          ? html`<button
+              type="button"
+              class="btn btn-mini btn-marque"
+              title="Des fichiers ont été masqués au clic droit, pour cette analyse seulement. Cliquez pour les faire revenir."
+              onClick=${onRetablirMasques}
+            >
+              ${formaterNombre(nombreMasques)} masqué${nombreMasques > 1 ? 's' : ''} · Rétablir
+            </button>`
+          : null}
         <div style="flex:1"></div>
         <button type="button" class="btn btn-mini btn-plat btn-carre" title="Tout déplier" onClick=${onToutDeplier}>
           <${IconeDeplier} />
@@ -298,6 +313,27 @@ export function BarreFiltres({
           }}
         >
           Réinitialiser
+        </button>
+      </div>
+
+      <div class="filtres-ligne">
+        <button
+          type="button"
+          class="btn btn-mini"
+          title="Coche tous les fichiers actuellement affichés - c'est ce qui fait des filtres un outil de sélection. Déploiement et suppression ne sont jamais mélangés."
+          disabled=${nombreAffiches === 0}
+          onClick=${onCocherAffiches}
+        >
+          ☑ Cocher les affichés
+        </button>
+        <button
+          type="button"
+          class="btn btn-mini btn-plat"
+          title="Vide entièrement la sélection"
+          disabled=${!nombreSelection}
+          onClick=${onDecocherTout}
+        >
+          Tout décocher${nombreSelection ? ' (' + formaterNombre(nombreSelection) + ')' : ''}
         </button>
       </div>
     </div>

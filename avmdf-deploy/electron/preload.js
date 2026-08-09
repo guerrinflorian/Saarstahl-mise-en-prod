@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('avmdf', {
     /** Compare récursivement les deux arborescences. */
     demarrer: (parametres) => ipcRenderer.invoke('analyse:demarrer', parametres),
     annuler: () => ipcRenderer.invoke('analyse:annuler'),
+    /** Re-stat et re-hash un seul fichier, des deux côtés, sans relire le partage. */
+    rafraichirFichier: (cle) => ipcRenderer.invoke('analyse:rafraichirFichier', { cle }),
     surProgression: (rappel) => abonner('analyse:progression', rappel)
   },
 

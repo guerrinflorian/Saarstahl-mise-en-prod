@@ -355,6 +355,96 @@ function handlersAnalyse() {
     return succes({});
   });
 
+  // Réanalyse d'un seul fichier : re-stat et re-hash des deux côtés, sans
+  // relire tout le partage. C'est le geste qui suit un « fichier verrouillé »
+  // corrigé, ou un doute sur un seul écart, quand les milliers d'autres
+  // fichiers n'ont pas bougé.
+  gerer('analyse:rafraichirFichier', async (parametres) => {
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+    const fichier = dernierScan.parCle.get(String(parametres.cle || ''));
+    if (!fichier) {
+      return echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.');
+    }
+
+    const actuels = reglages();
+    const cheminLocal = fichier.local
+      ? fichier.local.absolu
+      : fsindex.joindreRelatif(dernierScan.cheminLocal, fichier.chemin);
+    const cheminProd = fichier.prod
+      ? fichier.prod.absolu
+      : fsindex.joindreRelatif(dernierScan.cheminProd, fichier.chemin);
+
+    const relever = async (absolu) => {
+      try {
+        const etat = await fsp.stat(fsindex.cheminLong(absolu));
+        if (!etat.isFile()) return null;
+        return { absolu, chemin: fichier.chemin, taille: etat.size, mtimeMs: etat.mtimeMs, hash: null };
+      } catch (err) {
+        return null;
+      }
+    };
+    const [local, prod] = await Promise.all([relever(cheminLocal), relever(cheminProd)]);
+
+    // Mêmes règles que l'analyse complète : la taille tranche, sinon
+    // l'empreinte. Jamais la date.
+    let statut = null;
+    if (local && prod) {
+      if (local.taille !== prod.taille) {
+        statut = compare.MODIFIE;
+      } else {
+        try {
+          local.hash = await cacheHash.obtenir(local.absolu, local.taille, local.mtimeMs);
+          prod.hash = await cacheHash.obtenir(prod.absolu, prod.taille, prod.mtimeMs);
+        } catch (err) {
+          return echec(
+            `Le contenu n'a pas pu être vérifié (${fsindex.raisonLisible(err)}) : ${fichier.chemin}`,
+            'Un des deux côtés ne se laisse pas lire. Réessayez, ou relancez une analyse complète.',
+            err
+          );
+        }
+        statut = local.hash === prod.hash ? compare.IDENTIQUE : compare.MODIFIE;
+      }
+    } else if (local) {
+      statut = compare.NOUVEAU;
+    } else if (prod) {
+      statut = compare.ORPHELIN;
+    }
+
+    if (statut === null) {
+      // Disparu des deux côtés : il n'a plus rien à faire dans l'analyse.
+      dernierScan.fichiers = dernierScan.fichiers.filter((f) => f.cle !== fichier.cle);
+      dernierScan.parCle.delete(fichier.cle);
+    } else {
+      fichier.local = local;
+      fichier.prod = prod;
+      fichier.statut = statut;
+    }
+    dernierScan.compteurs = compare.compter(dernierScan.fichiers);
+    dernierScan.extensions = compare.inventaireExtensions(dernierScan.fichiers);
+    cacheHash.enregistrer();
+
+    carnet.ecrire(
+      'INFO',
+      `fichier réanalysé : ${fichier.chemin} → ${statut === null ? 'disparu des deux côtés' : statut}`
+    );
+
+    let diff = null;
+    if (statut !== null) {
+      try {
+        diff = await construireDiff(fichier, actuels);
+      } catch (err) {
+        /* la comparaison se rechargera à la demande */
+      }
+    }
+
+    return succes({
+      statut,
+      supprime: statut === null,
+      analyse: pourLeRenderer(dernierScan),
+      diff
+    });
+  });
+
   gerer('recherche:contenu', async (parametres) => {
     if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
     if (rechercheEnCours) rechercheEnCours.annuler();
