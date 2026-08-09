@@ -491,6 +491,51 @@ function pourLeRenderer(scan) {
 // Comparaison ligne à ligne
 // ---------------------------------------------------------------------------
 
+/**
+ * Construit l'enveloppe de comparaison d'un fichier de la dernière analyse.
+ * Partagée entre l'affichage du diff et le rafraîchissement après une édition
+ * dans l'éditeur intégré.
+ */
+async function construireDiff(fichier, actuels) {
+  const extensionTexte = actuels.extensionsTexte.includes(fichier.extension);
+
+  const lire = async (cote) => {
+    if (!cote) return null;
+    try {
+      return await fsp.readFile(fsindex.cheminLong(cote.absolu));
+    } catch (err) {
+      throw Object.assign(new Error(fsindex.raisonLisible(err)), { code: err.code, chemin: cote.absolu });
+    }
+  };
+
+  const [tamponProd, tamponLocal] = await Promise.all([lire(fichier.prod), lire(fichier.local)]);
+
+  const resultat = textdiff.comparerTampons(tamponProd, tamponLocal, {
+    ignorerEspaces: actuels.options.ignorerEspaces,
+    extensionTexte
+  });
+
+  const enveloppe = {
+    cle: fichier.cle,
+    chemin: fichier.chemin,
+    statut: fichier.statut,
+    local: fichier.local && { ...fichier.local, hash: fichier.local.hash || null },
+    prod: fichier.prod && { ...fichier.prod, hash: fichier.prod.hash || null },
+    ...resultat
+  };
+
+  if (resultat.type === 'texte') {
+    enveloppe.groupes = textdiff.grouper(resultat.lignes);
+    delete enveloppe.lignes;
+  }
+  if (resultat.type === 'binaire') {
+    enveloppe.hashLocal = fichier.local ? await empreinteSure(fichier.local.absolu) : null;
+    enveloppe.hashProd = fichier.prod ? await empreinteSure(fichier.prod.absolu) : null;
+  }
+
+  return enveloppe;
+}
+
 function handlersDiff() {
   gerer('fichier:diff', async (parametres) => {
     if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
@@ -499,54 +544,157 @@ function handlersDiff() {
       return echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.');
     }
 
-    const actuels = reglages();
-    const extensionTexte = actuels.extensionsTexte.includes(fichier.extension);
-
-    const lire = async (cote) => {
-      if (!cote) return null;
-      try {
-        return await fsp.readFile(fsindex.cheminLong(cote.absolu));
-      } catch (err) {
-        throw Object.assign(new Error(fsindex.raisonLisible(err)), { code: err.code, chemin: cote.absolu });
-      }
-    };
-
-    let tamponProd = null;
-    let tamponLocal = null;
     try {
-      [tamponProd, tamponLocal] = await Promise.all([lire(fichier.prod), lire(fichier.local)]);
+      return succes({ diff: await construireDiff(fichier, reglages()) });
     } catch (err) {
       return echec(
-        `Fichier illisible (${err.message}) : ${err.chemin}`,
+        `Fichier illisible (${err.message}) : ${err.chemin || fichier.chemin}`,
+        'Le fichier a peut-être été déplacé ou verrouillé depuis l\'analyse. Relancez une analyse.',
+        err
+      );
+    }
+  });
+
+  // -- Éditeur intégré ------------------------------------------------------
+  //
+  // La seule écriture de l'application qui ne soit pas une copie binaire :
+  // elle ne touche qu'au fichier LOCAL désigné par la dernière analyse, jamais
+  // à la production ni aux archives. Le fichier ressort dans son enveloppe
+  // d'origine - encodage, BOM, fins de ligne - comme s'il avait été modifié
+  // dans l'éditeur du poste.
+
+  gerer('fichier:lireLocal', async (parametres) => {
+    const controle = fichierEditable(String(parametres.cle || ''));
+    if (controle.erreur) return controle.erreur;
+    const { fichier } = controle;
+
+    let tampon;
+    try {
+      tampon = await fsp.readFile(fsindex.cheminLong(fichier.local.absolu));
+    } catch (err) {
+      return echec(
+        `Fichier illisible (${fsindex.raisonLisible(err)}) : ${fichier.local.absolu}`,
         'Le fichier a peut-être été déplacé ou verrouillé depuis l\'analyse. Relancez une analyse.',
         err
       );
     }
 
-    const resultat = textdiff.comparerTampons(tamponProd, tamponLocal, {
-      ignorerEspaces: actuels.options.ignorerEspaces,
-      extensionTexte
-    });
+    if (textdiff.estBinaire(tampon)) {
+      return echec(
+        'Ce fichier contient des octets nuls : il ne s\'édite pas comme du texte.',
+        'Ouvrez-le avec le programme qui sait le manipuler.'
+      );
+    }
 
-    const enveloppe = {
-      cle: fichier.cle,
+    const decodage = textdiff.decoder(tampon);
+    const empreinte = await empreinteSure(fichier.local.absolu);
+    return succes({
+      chemin: fichier.chemin,
+      texte: decodage.texte,
+      encodage: decodage.encodage,
+      finDeLigne: decodage.finDeLigne,
+      empreinte,
+      taille: tampon.length
+    });
+  });
+
+  gerer('fichier:enregistrerLocal', async (parametres) => {
+    const controle = fichierEditable(String(parametres.cle || ''));
+    if (controle.erreur) return controle.erreur;
+    const { fichier } = controle;
+    const actuels = reglages();
+    const absolu = fichier.local.absolu;
+
+    // Le fichier est relu au moment d'écrire : son enveloppe (encodage, BOM,
+    // fins de ligne) est redétectée sur l'état réel du disque, et une
+    // modification faite entre-temps par un autre programme bloque
+    // l'enregistrement au lieu d'être écrasée sans un mot.
+    let tamponActuel;
+    try {
+      tamponActuel = await fsp.readFile(fsindex.cheminLong(absolu));
+    } catch (err) {
+      return echec(
+        `Le fichier ne se laisse plus lire (${fsindex.raisonLisible(err)}) : ${absolu}`,
+        'Il a peut-être été déplacé ou supprimé depuis l\'ouverture de l\'éditeur. Relancez une analyse.',
+        err
+      );
+    }
+    const empreinteActuelle = await empreinteSure(absolu);
+    if (parametres.empreinte && empreinteActuelle && parametres.empreinte !== empreinteActuelle) {
+      return echec(
+        'Le fichier a changé sur le disque depuis l\'ouverture de l\'éditeur.',
+        'Un autre programme l\'a modifié entre-temps. Fermez l\'éditeur, relancez une analyse et rouvrez-le : enregistrer maintenant écraserait ces modifications.'
+      );
+    }
+
+    const detection = textdiff.detecterEncodage(tamponActuel);
+    const finDeLigne = textdiff.detecterFinDeLigne(textdiff.decoder(tamponActuel).texte);
+    const { tampon, caracteresPerdus } = textdiff.encoder(String(parametres.texte || ''), {
+      codec: detection.codec,
+      bom: detection.bom,
+      finDeLigne
+    });
+    if (!tampon) {
+      return echec(
+        `Ce fichier est en Windows-1252, et ${caracteresPerdus.length > 1 ? 'ces caractères n\'y existent pas' : 'ce caractère n\'y existe pas'} : ${caracteresPerdus.map((c) => '« ' + c + ' »').join(' ')}`,
+        'Retirez-les ou remplacez-les par leur équivalent ANSI : l\'outil n\'écrit jamais de « ? » à la place, et ne change jamais l\'encodage d\'un fichier.'
+      );
+    }
+
+    // Écriture atomique : le fichier d'origine reste intact tant que la
+    // nouvelle version n'est pas complète sur le disque.
+    const temporaire = absolu + '.avmdf-tmp';
+    try {
+      await fsp.writeFile(fsindex.cheminLong(temporaire), tampon);
+      await fsp.rename(fsindex.cheminLong(temporaire), fsindex.cheminLong(absolu));
+    } catch (err) {
+      await fsp.unlink(fsindex.cheminLong(temporaire)).catch(() => {});
+      return echec(
+        `Enregistrement impossible (${fsindex.raisonLisible(err)}) : ${absolu}`,
+        'Vérifiez que le fichier n\'est pas verrouillé par un autre programme et que le dossier est accessible en écriture.',
+        err
+      );
+    }
+
+    // L'analyse en mémoire suit : taille, date, empreinte et statut du fichier
+    // sont recalculés sur ce qui vient d'être écrit, sans relire tout l'arbre.
+    cacheHash.invalider(absolu);
+    const etat = await fsp.stat(fsindex.cheminLong(absolu));
+    const hashLocal = await empreinteSure(absolu);
+    fichier.local.taille = etat.size;
+    fichier.local.mtimeMs = etat.mtimeMs;
+    fichier.local.hash = hashLocal;
+
+    if (!fichier.prod) {
+      fichier.statut = compare.NOUVEAU;
+    } else if (fichier.prod.taille !== etat.size) {
+      fichier.statut = compare.MODIFIE;
+    } else {
+      const hashProd =
+        fichier.prod.hash ||
+        (await cacheHash.obtenir(fichier.prod.absolu, fichier.prod.taille, fichier.prod.mtimeMs).catch(() => null));
+      fichier.prod.hash = hashProd;
+      fichier.statut = hashProd && hashProd === hashLocal ? compare.IDENTIQUE : compare.MODIFIE;
+    }
+    dernierScan.compteurs = compare.compter(dernierScan.fichiers);
+    cacheHash.enregistrer();
+
+    carnet.ecrire('INFO', `fichier local enregistré depuis l'éditeur : ${fichier.chemin} (${etat.size} octets)`);
+
+    let diff = null;
+    try {
+      diff = await construireDiff(fichier, actuels);
+    } catch (err) {
+      /* le diff se rechargera à la demande ; l'enregistrement, lui, est fait */
+    }
+
+    return succes({
       chemin: fichier.chemin,
       statut: fichier.statut,
-      local: fichier.local && { ...fichier.local, hash: fichier.local.hash || null },
-      prod: fichier.prod && { ...fichier.prod, hash: fichier.prod.hash || null },
-      ...resultat
-    };
-
-    if (resultat.type === 'texte') {
-      enveloppe.groupes = textdiff.grouper(resultat.lignes);
-      delete enveloppe.lignes;
-    }
-    if (resultat.type === 'binaire') {
-      enveloppe.hashLocal = fichier.local ? await empreinteSure(fichier.local.absolu) : null;
-      enveloppe.hashProd = fichier.prod ? await empreinteSure(fichier.prod.absolu) : null;
-    }
-
-    return succes({ diff: enveloppe });
+      empreinte: hashLocal,
+      analyse: pourLeRenderer(dernierScan),
+      diff
+    });
   });
 
   gerer('fichier:versions', async (parametres) => {
@@ -683,6 +831,51 @@ async function empreinteSure(chemin) {
   } catch (err) {
     return null;
   }
+}
+
+/**
+ * Le fichier peut-il passer par l'éditeur intégré ? Il doit venir de la
+ * dernière analyse, exister côté local, être d'une extension texte et rester
+ * sous la taille affichable. La production et les archives ne s'éditent
+ * jamais : l'éditeur ne connaît que le côté local.
+ */
+function fichierEditable(cle) {
+  if (!dernierScan) {
+    return { erreur: echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.') };
+  }
+  const fichier = dernierScan.parCle.get(cle);
+  if (!fichier) {
+    return { erreur: echec('Ce fichier ne fait pas partie de la dernière analyse.', 'Relancez une analyse.') };
+  }
+  if (!fichier.local) {
+    return {
+      erreur: echec(
+        'Ce fichier n\'existe qu\'en production : il n\'y a rien à éditer en local.',
+        'L\'éditeur ne modifie que les sources locales, jamais la production.'
+      )
+    };
+  }
+  if (!avmdf.estSousRacine(fichier.local.absolu, dernierScan.cheminLocal)) {
+    return { erreur: echec('Ce fichier est hors du dossier analysé.', 'Relancez une analyse.') };
+  }
+  const actuels = reglages();
+  if (!actuels.extensionsTexte.includes(fichier.extension)) {
+    return {
+      erreur: echec(
+        'Cette extension n\'est pas dans la liste des extensions texte.',
+        'Ajoutez-la dans les réglages si ce fichier est bien du texte, ou ouvrez-le avec son programme.'
+      )
+    };
+  }
+  if (fichier.local.taille > textdiff.TAILLE_MAX_DIFF) {
+    return {
+      erreur: echec(
+        'Fichier trop volumineux pour l\'éditeur intégré.',
+        'Ouvrez-le dans votre éditeur habituel : clic droit, « Ouvrir la version locale ».'
+      )
+    };
+  }
+  return { fichier };
 }
 
 // ---------------------------------------------------------------------------

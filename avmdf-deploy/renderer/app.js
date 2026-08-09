@@ -16,6 +16,8 @@ import { TableauDeBord } from './components/TableauDeBord.js';
 import { Aide } from './components/Aide.js';
 import { Bienvenue } from './components/Bienvenue.js';
 import { VersionsFichier } from './components/VersionsFichier.js';
+import { EditeurFichier } from './components/EditeurFichier.js';
+import { PaletteFichiers } from './components/PaletteFichiers.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { appliquerTheme, lireTheme } from './components/theme.js';
 import { joindreChemin } from './components/chemins.js';
@@ -65,6 +67,8 @@ function App() {
   // explicite, refait à chaque passage : il ne survit pas à un déploiement.
   const [archiver, setArchiver] = useState(true);
   const [versionsDe, setVersionsDe] = useState(null);
+  const [editeurDe, setEditeurDe] = useState(null);
+  const [paletteOuverte, setPaletteOuverte] = useState(false);
   const [deploiement, setDeploiement] = useState(null);
   const [rapport, setRapport] = useState(null);
 
@@ -335,6 +339,10 @@ function App() {
         setVersionsDe({ cle: noeud.cle, chemin: noeud.chemin });
         return;
       }
+      if (action === 'modifier') {
+        setEditeurDe({ cle: noeud.cle, chemin: noeud.chemin });
+        return;
+      }
       if (action === 'exclure' || action === 'exclureDossierNom' || action === 'exclureDossierChemin') {
         const motif = action === 'exclureDossierChemin' ? noeud.chemin : noeud.nom;
         const reponse = estDossier
@@ -570,11 +578,16 @@ function App() {
       const dansUnChamp = ['INPUT', 'TEXTAREA', 'SELECT'].includes(evenement.target.tagName);
       if (evenement.key === 'F5') {
         evenement.preventDefault();
-        if (vue === 'analyse' && analyse.etat !== 'encours' && !ecran) analyser();
+        if (vue === 'analyse' && analyse.etat !== 'encours' && !ecran && !editeurDe) analyser();
+      } else if (evenement.key.toLowerCase() === 'p' && (evenement.ctrlKey || evenement.metaKey)) {
+        evenement.preventDefault();
+        if (vue === 'analyse' && analyse.resultat && !ecran && !editeurDe && !deploiement) {
+          setPaletteOuverte(true);
+        }
       } else if (evenement.key === 'Enter' && (evenement.ctrlKey || evenement.metaKey)) {
         if (dansUnChamp) return;
         evenement.preventDefault();
-        if (vue === 'analyse' && !ecran && !deploiement && resumeSelection.deployables + resumeSelection.orphelins > 0) {
+        if (vue === 'analyse' && !ecran && !deploiement && !editeurDe && resumeSelection.deployables + resumeSelection.orphelins > 0) {
           lancerPreflight();
         }
       }
@@ -713,6 +726,11 @@ function App() {
               ? () => setVersionsDe({ cle: diff.donnees.cle, chemin: diff.donnees.chemin })
               : null
           }
+          onModifier=${
+            diff.donnees && diff.donnees.local
+              ? () => setEditeurDe({ cle: diff.donnees.cle, chemin: diff.donnees.chemin })
+              : null
+          }
         />
       </div>
       `}
@@ -730,6 +748,45 @@ function App() {
             occupe=${Boolean(deploiement)}
             onChoisirDestination=${() => setEcran('destination')}
             onDeployer=${lancerPreflight}
+          />`
+        : null}
+
+      ${editeurDe
+        ? html`<${EditeurFichier}
+            fichier=${editeurDe}
+            onFermer=${() => setEditeurDe(null)}
+            onEchec=${(reponse) => notifierEchec(reponse, 'Enregistrement impossible.')}
+            onEnregistre=${(reponse) => {
+              // L'analyse suit l'édition : le statut du fichier vient d'être
+              // recalculé sur le contenu réellement écrit, sans relire l'arbre.
+              if (reponse.analyse) {
+                setAnalyse((precedent) =>
+                  precedent.resultat
+                    ? { etat: 'termine', progression: null, resultat: reponse.analyse, acces: null }
+                    : precedent
+                );
+              }
+              if (reponse.diff && fichierActif === editeurDe.cle) {
+                setDiff({ etat: 'pret', donnees: reponse.diff });
+              }
+              notifier({
+                type: 'succes',
+                titre: 'Fichier enregistré.',
+                texte:
+                  reponse.statut === 'identique'
+                    ? editeurDe.chemin + ' - le local et la production sont maintenant identiques.'
+                    : editeurDe.chemin,
+                duree: 4000
+              });
+            }}
+          />`
+        : null}
+
+      ${paletteOuverte && analyse.resultat
+        ? html`<${PaletteFichiers}
+            fichiers=${analyse.resultat.fichiers}
+            onChoisir=${choisirFichier}
+            onFermer=${() => setPaletteOuverte(false)}
           />`
         : null}
 

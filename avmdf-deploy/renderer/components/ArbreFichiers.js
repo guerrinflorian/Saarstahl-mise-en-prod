@@ -511,6 +511,12 @@ function Ligne({
  */
 function entreesFichier(fichier) {
   return [
+    {
+      action: 'modifier',
+      libelle: 'Modifier la version locale',
+      titre: 'Ouvre l\'éditeur intégré. L\'encodage et les fins de ligne du fichier sont conservés.',
+      actif: Boolean(fichier.local)
+    },
     { action: 'ouvrirLocal', libelle: 'Ouvrir la version locale', actif: Boolean(fichier.local) },
     { action: 'ouvrirProd', libelle: 'Ouvrir la version production', actif: Boolean(fichier.prod) },
     { separateur: true },

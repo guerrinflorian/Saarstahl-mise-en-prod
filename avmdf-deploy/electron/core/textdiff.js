@@ -116,6 +116,50 @@ function decoder(tampon) {
   };
 }
 
+const FINS_DE_LIGNE = { CRLF: '\r\n', LF: '\n', CR: '\r' };
+
+/**
+ * Ré-encode un texte modifié dans l'enveloppe d'origine du fichier : même
+ * encodage, même BOM, mêmes fins de ligne. C'est la contrepartie de `decoder`
+ * pour l'éditeur intégré - la seule écriture de l'application qui ne soit pas
+ * une copie binaire, et elle doit être indiscernable d'une édition faite dans
+ * Visual Studio sur le poste.
+ *
+ * Un fichier aux fins de ligne mixtes ressort uniformisé en CRLF : l'éditeur
+ * l'annonce avant l'enregistrement plutôt que de le faire en silence.
+ *
+ * En Windows-1252, tout caractère n'existe pas. Plutôt que d'écrire des « ? »
+ * à sa place, l'encodage est vérifié caractère par caractère et l'échec est
+ * remonté avec les caractères fautifs : c'est à l'utilisateur de les retirer,
+ * pas à l'outil de changer l'encodage du fichier en douce.
+ *
+ * @param {string} texte contenu édité (sauts de ligne quelconques)
+ * @param {{ codec:string, bom:number, finDeLigne:string }} enveloppe
+ * @returns {{ tampon:Buffer|null, caracteresPerdus:string[] }}
+ */
+function encoder(texte, enveloppe) {
+  const eol = FINS_DE_LIGNE[enveloppe.finDeLigne] || '\r\n';
+  const normalise = String(texte).replace(/\r\n|\r|\n/g, eol);
+
+  if (enveloppe.codec === 'win1252') {
+    const perdus = [];
+    for (const caractere of normalise) {
+      if (perdus.includes(caractere)) continue;
+      const aller = iconv.encode(caractere, 'win1252');
+      if (iconv.decode(aller, 'win1252') !== caractere) perdus.push(caractere);
+      if (perdus.length >= 8) break;
+    }
+    if (perdus.length) return { tampon: null, caracteresPerdus: perdus };
+  }
+
+  const corps = iconv.encode(normalise, enveloppe.codec);
+  if (!enveloppe.bom) return { tampon: corps, caracteresPerdus: [] };
+
+  const bom =
+    enveloppe.codec === 'utf16-le' ? BOM_UTF16LE : enveloppe.codec === 'utf16-be' ? BOM_UTF16BE : BOM_UTF8;
+  return { tampon: Buffer.concat([bom, corps]), caracteresPerdus: [] };
+}
+
 function decouperLignes(texte) {
   if (texte === '') return [];
   const lignes = texte.split(/\r\n|\n|\r/);
@@ -393,6 +437,7 @@ module.exports = {
   detecterFinDeLigne,
   detecterIndentation,
   decoder,
+  encoder,
   decouperLignes,
   alignerLignes,
   grouper,

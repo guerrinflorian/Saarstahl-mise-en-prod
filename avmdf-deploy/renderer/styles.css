@@ -3186,6 +3186,225 @@ select {
 }
 
 /* ==========================================================================
+   Éditeur intégré
+
+   Deux couches exactement superposées : un pre colorié dessous, un textarea au
+   texte transparent dessus. Tout ce qui touche aux métriques (police, corps,
+   interligne, retraits, tabulations) doit être identique dans les deux, sinon
+   le curseur se pose à côté des lettres.
+   ========================================================================== */
+
+.editeur-chemin {
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editeur-etat {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--separateur-clair);
+  border-radius: var(--rayon);
+  color: var(--texte-attenue);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.editeur-etat.modifie {
+  border-color: var(--accent-sourd);
+  background: var(--accent-fond);
+  color: var(--accent-texte);
+  font-weight: 600;
+}
+
+.editeur-zone {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--champ);
+}
+
+.editeur-gouttiere-cadre {
+  flex: none;
+  width: 56px;
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--separateur);
+  background: var(--diff-numero-fond);
+}
+
+.editeur-gouttiere {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  padding-right: 10px;
+  color: var(--texte-faible);
+  font-family: var(--police-mono);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+  user-select: none;
+  will-change: transform;
+}
+
+.editeur-piste {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.editeur-calque,
+.editeur-saisie {
+  font-family: var(--police-mono);
+  font-size: 12px;
+  line-height: 18px;
+  tab-size: 4;
+  white-space: pre;
+  padding: 8px 12px;
+}
+
+.editeur-calque {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  pointer-events: none;
+  will-change: transform;
+  color: var(--texte);
+}
+
+.editeur-calque code {
+  font: inherit;
+}
+
+.editeur-saisie,
+textarea.editeur-saisie {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  overflow: auto;
+  color: transparent;
+  caret-color: var(--texte);
+}
+
+.editeur-saisie::selection {
+  background: var(--fragment-fond);
+  color: transparent;
+}
+
+.editeur-pied {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--separateur);
+  background: var(--panneau-releve);
+}
+
+/* ==========================================================================
+   Palette « Aller au fichier » (Ctrl+P)
+   ========================================================================== */
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  margin: 9vh auto auto;
+  width: min(680px, 92vw);
+  max-height: min(540px, 74vh);
+  background: var(--panneau);
+  border: 1px solid var(--separateur-clair);
+  border-radius: 6px;
+  box-shadow: var(--ombre-modale);
+  overflow: hidden;
+  animation: apparaitre 0.14s ease-out;
+}
+
+.palette-champ {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--separateur);
+}
+
+.palette-champ input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+
+.palette-nombre {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.palette-liste {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+}
+
+.palette-entree {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--texte);
+  cursor: pointer;
+  text-align: left;
+}
+
+.palette-entree.choisi {
+  background: var(--accent-voile);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.palette-chemin {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-chemin mark {
+  background: var(--fragment-fond);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.palette-vide {
+  padding: 20px;
+  text-align: center;
+}
+
+.palette-pied {
+  display: flex;
+  gap: 16px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--separateur);
+  background: var(--panneau-releve);
+  font-size: 11px;
+}
+
+/* ==========================================================================
    Aide
 
    L'aide reproduit des morceaux d'interface avec leurs vraies classes, donc

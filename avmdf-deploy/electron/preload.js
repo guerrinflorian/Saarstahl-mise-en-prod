@@ -71,6 +71,11 @@ contextBridge.exposeInMainWorld('avmdf', {
   fichier: {
     /** Comparaison ligne à ligne d'un fichier de la dernière analyse. */
     diff: (cle) => ipcRenderer.invoke('fichier:diff', { cle }),
+    /** Contenu décodé de la version locale, pour l'éditeur intégré. */
+    lireLocal: (cle) => ipcRenderer.invoke('fichier:lireLocal', { cle }),
+    /** Réécrit la version locale dans son enveloppe d'origine (encodage, BOM, fins de ligne). */
+    enregistrerLocal: (cle, texte, empreinte) =>
+      ipcRenderer.invoke('fichier:enregistrerLocal', { cle, texte, empreinte }),
     /** Versions « avant modification » archivées sous la racine AVMDF. */
     versions: (cle) => ipcRenderer.invoke('fichier:versions', { cle }),
     /** Compare une version archivée à la production actuelle. */

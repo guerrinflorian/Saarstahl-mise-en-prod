@@ -146,7 +146,7 @@ function contenu(cote, espacesVisibles, jetons) {
  * diffèrent que par les espaces sont signalées, et un mode d'affichage rend
  * chaque espace, tabulation et espace insécable visible.
  */
-export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, inversable = true }) {
+export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onModifier, inversable = true }) {
   const prefs = useMemo(lirePrefs, []);
   const [unifie, setUnifie] = useState(() => Boolean(prefs.unifie));
   const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
@@ -394,6 +394,29 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, inv
             </span>`
           : null}
         <div style="flex:1"></div>
+        ${onModifier && donnees.local && texteDiff
+          ? html`<button
+              type="button"
+              class="btn btn-mini btn-marque"
+              title="Modifier la version locale sans quitter l'outil. L'encodage, le BOM et les fins de ligne du fichier sont conservés."
+              onClick=${onModifier}
+            >
+              ✎ Modifier
+            </button>`
+          : null}
+        ${texteDiff && onNotifier
+          ? html`<button
+              type="button"
+              class="btn btn-mini"
+              title="Copier la comparaison au format patch dans le presse-papiers"
+              onClick=${async () => {
+                await window.avmdf.systeme.copier(texteUnifie(donnees, titreGauche, titreDroite));
+                onNotifier({ type: 'succes', titre: 'Comparaison copiée.', texte: donnees.chemin, duree: 2500 });
+              }}
+            >
+              Copier le diff
+            </button>`
+          : null}
         ${onVoirVersions
           ? html`<button
               type="button"
@@ -657,6 +680,29 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, inv
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * La comparaison affichée, au format patch : une ligne par ligne, préfixée de
+ * son signe. C'est ce qui se colle dans un mail ou une demande de travaux pour
+ * montrer exactement ce qui change.
+ */
+function texteUnifie(donnees, titreGauche, titreDroite) {
+  const sortie = [];
+  sortie.push(`--- ${titreGauche} : ${donnees.chemin}`);
+  sortie.push(`+++ ${titreDroite} : ${donnees.chemin}`);
+  for (const groupe of donnees.groupes) {
+    for (const ligne of groupe.lignes) {
+      if (ligne.type === 'identique') sortie.push(' ' + ligne.gauche.texte);
+      else if (ligne.type === 'suppression') sortie.push('-' + ligne.gauche.texte);
+      else if (ligne.type === 'ajout') sortie.push('+' + ligne.droite.texte);
+      else {
+        sortie.push('-' + ligne.gauche.texte);
+        sortie.push('+' + ligne.droite.texte);
+      }
+    }
+  }
+  return sortie.join('\n');
+}
 
 function Repli({ rang, onOuvrir }) {
   return html`
