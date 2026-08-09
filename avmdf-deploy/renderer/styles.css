@@ -921,6 +921,24 @@ label {
   font-size: 14px;
 }
 
+/* L'icône d'un état vide : grande, au trait fin, dans le gris de marque. */
+.etat-vide-icone {
+  color: var(--texte-faible);
+  opacity: 0.9;
+}
+
+.etat-vide-icone .icone {
+  width: 38px;
+  height: 38px;
+  stroke-width: 0.9;
+}
+
+.etat-vide .rail {
+  width: 90px;
+  margin-top: -2px;
+  opacity: 0.45;
+}
+
 .etat-vide-texte {
   max-width: 420px;
   color: var(--texte-attenue);
@@ -1575,6 +1593,12 @@ label {
 
 .notification-texte {
   color: var(--texte-attenue);
+}
+
+/* Le survol retient le message : on ne retire pas ce qui est en train
+   d'être lu. La jauge s'arrête avec lui, et repart de zéro au départ. */
+.notification:hover .notification-jauge {
+  animation-play-state: paused;
 }
 
 /* La jauge du bas s'épuise avec le message : on voit venir sa disparition.

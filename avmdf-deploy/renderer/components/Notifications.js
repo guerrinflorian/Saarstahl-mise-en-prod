@@ -43,6 +43,33 @@ export function useNotifications() {
     [retirer]
   );
 
+  // Le survol suspend la disparition : on ne retire pas un message que
+  // quelqu'un est en train de lire. Au départ de la souris, le compte repart
+  // de zéro - et la jauge avec lui, remontée via son numéro de relance.
+  const suspendre = useCallback((id) => {
+    const minuteur = minuteurs.current.get(id);
+    if (minuteur) {
+      clearTimeout(minuteur);
+      minuteurs.current.delete(id);
+    }
+  }, []);
+
+  const reprendre = useCallback(
+    (id) => {
+      setListe((precedente) =>
+        precedente.map((notification) => {
+          if (notification.id !== id || notification.type === 'erreur') return notification;
+          minuteurs.current.set(
+            id,
+            setTimeout(() => retirer(id), notification.duree || 5000)
+          );
+          return { ...notification, relance: (notification.relance || 0) + 1 };
+        })
+      );
+    },
+    [retirer]
+  );
+
   /** Raccourci pour une réponse IPC `{ ok:false, erreur:{ message, conseil } }`. */
   const notifierEchec = useCallback(
     (reponse, titreParDefaut) => {
@@ -59,17 +86,22 @@ export function useNotifications() {
   const minuteursActifs = minuteurs.current;
   useEffect(() => () => minuteursActifs.forEach((minuteur) => clearTimeout(minuteur)), [minuteursActifs]);
 
-  return { liste, notifier, notifierEchec, retirer };
+  return { liste, notifier, notifierEchec, retirer, suspendre, reprendre };
 }
 
-export function Notifications({ liste, onFermer }) {
+export function Notifications({ liste, onFermer, onSuspendre, onReprendre }) {
   if (!liste.length) return null;
   return html`
     <div class="notifications" role="status" aria-live="polite">
       ${liste.map((notification) => {
         const Icone = ICONES[notification.type] || IconeInfo;
         return html`
-          <div class="notification ${notification.type}" key=${notification.id}>
+          <div
+            class="notification ${notification.type}"
+            key=${notification.id}
+            onMouseEnter=${onSuspendre ? () => onSuspendre(notification.id) : null}
+            onMouseLeave=${onReprendre ? () => onReprendre(notification.id) : null}
+          >
             <span class="notification-icone" aria-hidden="true"><${Icone} /></span>
             <div class="notification-corps">
               <div class="notification-titre">${notification.titre}</div>
@@ -89,6 +121,7 @@ export function Notifications({ liste, onFermer }) {
             ${notification.type !== 'erreur'
               ? html`<span
                   class="notification-jauge"
+                  key=${'jauge' + (notification.relance || 0)}
                   style=${'animation-duration:' + (notification.duree || 5000) + 'ms'}
                 ></span>`
               : null}

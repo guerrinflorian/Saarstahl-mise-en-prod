@@ -85,7 +85,7 @@ function App() {
   const [deploiement, setDeploiement] = useState(null);
   const [rapport, setRapport] = useState(null);
 
-  const { liste: notifications, notifier, notifierEchec, retirer } = useNotifications();
+  const { liste: notifications, notifier, notifierEchec, retirer, suspendre, reprendre } = useNotifications();
   const jeton = useRef(0);
 
   // -- Chargement initial ---------------------------------------------------
@@ -225,6 +225,15 @@ function App() {
   // orphelin sans en garder de copie serait sans retour : le bandeau ne
   // propose alors pas la case, et l'archivage reste entier.
   const archivageAvmdf = archiver || operation === 'suppression';
+
+  // Le titre de la fenêtre suit le travail : projet et sélection se lisent
+  // depuis la barre des tâches, sans revenir à l'application.
+  useEffect(() => {
+    const morceaux = ['AVMDF - Mise en production'];
+    if (projet && !modeLibre) morceaux.push(projet.nom);
+    if (selection.size) morceaux.push(selection.size + ' sélectionné' + (selection.size > 1 ? 's' : ''));
+    document.title = morceaux.join(' · ');
+  }, [projet, modeLibre, selection.size]);
 
   // Un filtre actif déplie l'arbre : sans cela, les fichiers trouvés restent
   // cachés dans des dossiers repliés et la recherche semble ne rien donner.
@@ -763,7 +772,7 @@ function App() {
         onEnregistrer=${enregistrerReglages}
         onOuvrirReglages=${() => setEcran('reglages')}
       />
-      <${Notifications} liste=${notifications} onFermer=${retirer} />
+      <${Notifications} liste=${notifications} onFermer=${retirer} onSuspendre=${suspendre} onReprendre=${reprendre} />
     `;
   }
 
@@ -1042,7 +1051,7 @@ function App() {
           />`
         : null}
 
-      <${Notifications} liste=${notifications} onFermer=${retirer} />
+      <${Notifications} liste=${notifications} onFermer=${retirer} onSuspendre=${suspendre} onReprendre=${reprendre} />
     </div>
   `;
 }

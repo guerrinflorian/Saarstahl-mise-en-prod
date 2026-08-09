@@ -381,6 +381,16 @@ consigné dans le journal (ALERTE dès qu'un fichier n'est plus intact).
   jamais parcouru, d'aucun côté : son contenu ne peut ni apparaître, ni partir en production, ni
   être supprimé. L'analyse en cours ne bouge pas, `F5` la refait.
 
+## Petites attentions
+
+- Une notification survolée ne disparaît pas : le minuteur s'arrête sous la souris et repart de
+  zéro à son départ, jauge comprise.
+- Les contrôles préalables affichent une vraie jauge de progression.
+- Les états vides (aucune analyse, aucun fichier sélectionné, historique vide) portent leur icône
+  au trait et le motif du rail : un écran vide dit quand même où l'on est.
+- Le titre de la fenêtre suit le travail : `AVMDF - Mise en production · GPNet · 23 sélectionnés`
+  se lit depuis la barre des tâches.
+
 ## Thèmes
 
 Un bouton en haut à droite bascule entre **sombre** (par défaut) et **clair**. L'icône montre le

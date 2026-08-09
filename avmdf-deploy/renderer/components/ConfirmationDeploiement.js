@@ -25,9 +25,17 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
           <${EnTeteModale} icone=${IconeExpedier} surtitre="Mise en production" titre="Contrôles préalables" />
           <div class="modale-corps">
             <div class="attenue">Vérification des racines, des verrous et des empreintes…</div>
+            <div class="jauge" style="margin-top:10px">
+              <div
+                class=${'jauge-remplissage' + (progression && progression.total ? '' : ' indetermine')}
+                style=${progression && progression.total
+                  ? 'width:' + Math.min(100, Math.round((progression.faits / progression.total) * 100)) + '%'
+                  : ''}
+              ></div>
+            </div>
             ${progression && progression.total
-              ? html`<div class="mono" style="margin-top:8px">
-                  ${formaterNombre(progression.faits)} / ${formaterNombre(progression.total)}
+              ? html`<div class="mono attenue" style="margin-top:6px">
+                  ${formaterNombre(progression.faits)} / ${formaterNombre(progression.total)} fichiers contrôlés
                 </div>`
               : null}
           </div>

@@ -2,7 +2,7 @@ import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
 import { BarreFiltres } from './BarreFiltres.js';
-import { IconeDossier, IconeFichier } from './icones.js';
+import { IconeDossier, IconeFichier, IconeLoupe } from './icones.js';
 import {
   MARQUEURS,
   LIBELLES,
@@ -291,6 +291,10 @@ export function ArbreFichiers({
         ${!analyse.resultat && !enCours
           ? html`
               <div class="etat-vide">
+                ${!analyse.acces
+                  ? html`<span class="etat-vide-icone" aria-hidden="true"><${IconeLoupe} /></span>
+                      <div class="rail" aria-hidden="true"></div>`
+                  : null}
                 <div class="etat-vide-titre">
                   ${analyse.acces ? 'Analyse impossible' : 'Aucune analyse effectuée'}
                 </div>

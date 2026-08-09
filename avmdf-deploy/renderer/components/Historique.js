@@ -174,6 +174,8 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                   </div>
                   ${manifestes.length === 0
                     ? html`<div class="etat-vide">
+                        <span class="etat-vide-icone" aria-hidden="true"><${IconeHistorique} /></span>
+                        <div class="rail" aria-hidden="true"></div>
                         <div class="etat-vide-titre">Aucun déploiement enregistré</div>
                         <div class="etat-vide-texte">
                           Les manifestes apparaîtront ici dès la première mise en production réelle.

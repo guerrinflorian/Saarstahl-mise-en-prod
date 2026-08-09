@@ -3,6 +3,7 @@ import htm from '../vendor/htm.module.js';
 import { useEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
 import { formaterDate, formaterNombre, formaterOctets } from './arborescence.js';
 import { calculerColoration, langueDe } from './coloration.js';
+import { IconeCouches } from './icones.js';
 
 const html = htm.bind(h);
 
@@ -346,6 +347,8 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
         <div class="panneau-entete"><span>Comparaison</span></div>
         <div class="panneau-contenu">
           <div class="etat-vide">
+            <span class="etat-vide-icone" aria-hidden="true"><${IconeCouches} /></span>
+            <div class="rail" aria-hidden="true"></div>
             <div class="etat-vide-titre">Aucun fichier sélectionné</div>
             <div class="etat-vide-texte">
               ${inversable && localAGauche
