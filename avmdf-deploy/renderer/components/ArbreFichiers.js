@@ -618,9 +618,18 @@ function Ligne({
           // La case est entièrement pilotée par l'état : le clic ne bascule
           // pas le DOM lui-même, il passe par la sélection - c'est ce qui
           // permet au Maj+clic de cocher une plage d'un geste.
+          //
+          // Le traitement est différé d'une tâche, et ce n'est pas un détail :
+          // quand le clic d'une case est annulé, le navigateur la restaure
+          // APRÈS la fin de la distribution de l'événement, alors que Preact
+          // rend dès la microtâche (le point de contrôle passe entre les
+          // écouteurs d'un vrai clic). En synchrone, la restauration écrasait
+          // donc le rendu sur la case cliquée, et elle seule : cochée dans
+          // l'état mais vide à l'écran jusqu'au rendu suivant.
           evenement.preventDefault();
           evenement.stopPropagation();
-          onCase(evenement.shiftKey);
+          const majuscule = evenement.shiftKey;
+          setTimeout(() => onCase(majuscule), 0);
         }}
       />
 
