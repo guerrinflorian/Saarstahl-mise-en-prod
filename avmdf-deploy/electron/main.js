@@ -20,6 +20,7 @@ const fsindex = require('./core/fsindex');
 const compare = require('./core/compare');
 const search = require('./core/search');
 const textdiff = require('./core/textdiff');
+const binaire = require('./core/binaire');
 const avmdf = require('./core/avmdf');
 const deploy = require('./core/deploy');
 const journal = require('./core/journal');
@@ -707,6 +708,42 @@ function pourLeRenderer(scan) {
 // Comparaison ligne à ligne
 // ---------------------------------------------------------------------------
 
+/** mtime d'un chemin, ou null s'il ne se laisse pas regarder. */
+async function dateModification(chemin) {
+  if (!chemin) return null;
+  try {
+    return (await fsp.stat(fsindex.cheminLong(chemin))).mtimeMs;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Complète une enveloppe de comparaison quand le contenu ne se lit pas ligne à
+ * ligne : verdict octet pour octet, empreintes, premier écart, et aperçu
+ * affichable pour ce que Chromium sait rendre (images, sons, vidéos, polices).
+ *
+ * Un fichier prévisualisable trop volumineux pour le diff texte est reclassé
+ * binaire plutôt que refusé : une photo de 6 Mo se juge à l'œil, pas ligne à
+ * ligne. Et un SVG, texte par nature, reçoit en plus son aperçu : son code se
+ * compare, son rendu se regarde.
+ */
+function completerBinaire(enveloppe, extension, tamponGauche, tamponDroite, dates = {}) {
+  const plusGros = Math.max(tamponGauche ? tamponGauche.length : 0, tamponDroite ? tamponDroite.length : 0);
+  if (enveloppe.type === 'volumineux' && binaire.genreApercu(extension) && plusGros <= binaire.TAILLE_MAX_APERCU) {
+    enveloppe.type = 'binaire';
+    delete enveloppe.limite;
+    delete enveloppe.taille;
+  }
+
+  if (enveloppe.type === 'binaire') {
+    enveloppe.binaire = binaire.decrireBinaire(tamponGauche, tamponDroite, dates);
+    enveloppe.apercu = binaire.construireApercu(extension, tamponGauche, tamponDroite);
+  } else if (enveloppe.type === 'texte' && binaire.genreApercu(extension) === 'image') {
+    enveloppe.apercu = binaire.construireApercu(extension, tamponGauche, tamponDroite);
+  }
+}
+
 /**
  * Construit l'enveloppe de comparaison d'un fichier de la dernière analyse.
  * Partagée entre l'affichage du diff et le rafraîchissement après une édition
@@ -725,7 +762,11 @@ async function construireDiff(fichier, actuels, surcharges = {}) {
   // comparateur est refusé avant d'être lu, pas après deux lectures complètes
   // (un journal de 300 Mo passait deux fois en mémoire pour être refusé).
   const plusGros = Math.max(fichier.local ? fichier.local.taille : 0, fichier.prod ? fichier.prod.taille : 0);
-  if (plusGros > textdiff.TAILLE_MAX_DIFF) {
+  // Une image ou un média au-delà de la limite du diff texte mérite quand même
+  // d'être lu : son aperçu remplace le refus. `completerBinaire` fera le
+  // reclassement ; ici on décide seulement de lire ou non.
+  const previsualisable = Boolean(binaire.genreApercu(fichier.extension)) && plusGros <= binaire.TAILLE_MAX_APERCU;
+  if (plusGros > textdiff.TAILLE_MAX_DIFF && !previsualisable) {
     return {
       cle: fichier.cle,
       chemin: fichier.chemin,
@@ -769,10 +810,10 @@ async function construireDiff(fichier, actuels, surcharges = {}) {
     enveloppe.groupes = textdiff.grouper(resultat.lignes);
     delete enveloppe.lignes;
   }
-  if (resultat.type === 'binaire') {
-    enveloppe.hashLocal = fichier.local ? await empreinteSure(fichier.local.absolu) : null;
-    enveloppe.hashProd = fichier.prod ? await empreinteSure(fichier.prod.absolu) : null;
-  }
+  completerBinaire(enveloppe, fichier.extension, tamponProd, tamponLocal, {
+    gauche: fichier.prod ? fichier.prod.mtimeMs : null,
+    droite: fichier.local ? fichier.local.mtimeMs : null
+  });
 
   return enveloppe;
 }
@@ -1002,6 +1043,12 @@ function handlersDiff() {
       enveloppe.groupes = textdiff.grouper(resultat.lignes);
       delete enveloppe.lignes;
     }
+    let dates = {};
+    if (resultat.type !== 'texte') {
+      const [dateArchive, dateProd] = await Promise.all([dateModification(source), dateModification(cheminProd)]);
+      dates = { gauche: dateArchive, droite: dateProd };
+    }
+    completerBinaire(enveloppe, fichier.extension, archive, actuel, dates);
     return succes({ diff: enveloppe });
   });
 
@@ -1583,6 +1630,15 @@ function handlersHistorique() {
       enveloppe.groupes = textdiff.grouper(resultat.lignes);
       delete enveloppe.lignes;
     }
+    let dates = {};
+    if (resultat.type !== 'texte') {
+      const [dateSauvegarde, dateProd] = await Promise.all([
+        dateModification(cheminSauvegarde),
+        dateModification(cheminProd)
+      ]);
+      dates = { gauche: dateSauvegarde, droite: dateProd };
+    }
+    completerBinaire(enveloppe, extension, sauvegarde, actuel, dates);
     return succes({ diff: enveloppe });
   });
 

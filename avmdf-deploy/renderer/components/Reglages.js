@@ -296,7 +296,8 @@ export function Reglages({
             <h2>Extensions considérées comme du texte</h2>
             <p class="section-aide">
               Détermine ce qui peut être comparé ligne à ligne. Tout le reste est traité comme
-              binaire : taille, date et empreinte, sans diff.
+              binaire : verdict octet pour octet, taille, date et empreinte, avec un aperçu visuel
+              pour les images, sons, vidéos et polices.
             </p>
             <${ListeMotifs}
               etiquette="Extensions texte"

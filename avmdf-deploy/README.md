@@ -364,6 +364,37 @@ dynamiquement par le code (chaîne concaténée, configuration IIS, rewrite) ne 
 zéro mention n'est pas une preuve, c'est une forte présomption. L'index se périme tout seul dès
 qu'un contenu change (analyse, éditeur, mise en production) et se reconstruit d'un clic.
 
+## Aperçu des binaires : icônes, images, sons, polices
+
+Un fichier qui ne se lit pas se regarde. Depuis la 1.9.0, la comparaison d'un binaire commence par
+un **verdict net** : « identiques octet pour octet » ou « les deux versions diffèrent » (même
+taille ou pas, position du premier écart). Le tampon des deux côtés est comparé réellement, pas au
+travers des dates.
+
+Selon le type de fichier, le verdict s'accompagne d'un aperçu :
+
+- **Images et icônes** (`png`, `jpg`, `gif`, `bmp`, `webp`, `avif`, `ico`, `cur`, `svg`) : les deux
+  versions côte à côte sur un damier qui révèle les transparences, avec leurs dimensions en pixels.
+  Trois modes : **côte à côte**, **superposer** (les deux images l'une sur l'autre, un curseur dose
+  la version visible) et **différence** (chaque pixel qui change est peint en rouge vif, le reste
+  en gris estompé, avec le compte exact - « 1 pixel diffère sur 576 (0.2 %) »). Une différence sur
+  une petite icône est grossie d'office, en pixels nets. Fond damier, clair ou sombre ; zoom ×1,
+  ×2, ×4. Cas parlant : deux fichiers au contenu différent mais au rendu identique (métadonnées,
+  ré-enregistrement) affichent « aucun pixel ne diffère » - inutile de les livrer.
+- **SVG** : son code se compare (diff texte normal), son rendu se regarde - le bouton **Aperçu**
+  de l'en-tête bascule entre les deux.
+- **Sons et vidéos** (`mp3`, `wav`, `ogg`, `m4a`, `mp4`, `webm`) : un lecteur par version.
+- **Polices** (`woff`, `woff2`, `ttf`, `otf`) : le même pangramme composé dans chaque version,
+  chiffres et accents compris - une graisse ou un dessin qui change se voit immédiatement.
+- **Tout le reste** (`dll`, `pdf`, archives…) : le tableau taille / date / SHA-256, et le
+  **premier octet qui diffère** montré en hexadécimal, fenêtre d'octets autour et octet fautif
+  surligné de chaque côté. Quand un fichier est exactement le début de l'autre, c'est dit tel quel.
+
+Ces aperçus valent partout où l'on compare : l'analyse, les versions archivées d'un fichier et
+l'historique d'une mise en production. Une image trop volumineuse pour le diff texte n'est plus
+refusée : elle se juge à l'œil. Au-delà de 20 Mo par côté, pas d'aperçu - la fiche et les
+empreintes restent. Rien n'est jamais modifié : ces vues ne font que lire.
+
 ## Interface
 
 - Les deux panneaux de l'analyse se redimensionnent à la souris (double-clic sur la poignée pour

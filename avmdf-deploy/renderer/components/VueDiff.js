@@ -1,9 +1,10 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
-import { formaterDate, formaterNombre, formaterOctets } from './arborescence.js';
+import { formaterNombre, formaterOctets } from './arborescence.js';
 import { calculerColoration, langueDe } from './coloration.js';
 import { IconeCouches } from './icones.js';
+import { ApercuImages, VueBinaire } from './ApercuBinaire.js';
 
 const html = htm.bind(h);
 
@@ -169,6 +170,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
   const [replisOuverts, setReplisOuverts] = useState(() => new Set());
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
+  const [apercuVisible, setApercuVisible] = useState(false);
   const [positionTrouvee, setPositionTrouvee] = useState(0);
   const [changementCourant, setChangementCourant] = useState(-1);
 
@@ -202,6 +204,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
     setReplisOuverts(new Set());
     setChangementCourant(-1);
     setPositionTrouvee(0);
+    setApercuVisible(false);
   }, [donnees && donnees.cle]);
 
   // Coloration syntaxique et structure : langue déduite du chemin, jetons et
@@ -462,6 +465,17 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
               Versions archivées
             </button>`
           : null}
+        ${texteDiff && donnees.apercu
+          ? html`<button
+              type="button"
+              class=${'btn btn-mini' + (apercuVisible ? ' btn-marque' : '')}
+              title="Voir le rendu des deux versions plutôt que leur code"
+              aria-pressed=${apercuVisible}
+              onClick=${() => setApercuVisible(!apercuVisible)}
+            >
+              Aperçu
+            </button>`
+          : null}
         ${texteDiff
           ? html`
               <button
@@ -651,7 +665,12 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
         : null}
 
       ${donnees.type === 'binaire'
-        ? html`<${VueBinaire} donnees=${donnees} onOuvrirExterne=${onOuvrirExterne} />`
+        ? html`<${VueBinaire}
+            donnees=${donnees}
+            titreGauche=${titreGauche}
+            titreDroite=${titreDroite}
+            onOuvrirExterne=${onOuvrirExterne}
+          />`
         : donnees.type === 'volumineux'
           ? html`
               <div class="panneau-contenu">
@@ -676,7 +695,13 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
             ? html`<div class="panneau-contenu">
                 <div class="etat-vide"><div class="attenue">Ce fichier n'existe d'aucun côté.</div></div>
               </div>`
-            : html`
+            : apercuVisible && donnees.apercu
+              ? html`<div class="panneau-contenu">
+                  <div class="binaire">
+                    <${ApercuImages} apercu=${donnees.apercu} titreGauche=${titreGauche} titreDroite=${titreDroite} />
+                  </div>
+                </div>`
+              : html`
                 <div
                   class=${'diff' + (unifie ? ' diff-unifie' : '')}
                   style=${'--diff-police:' + TAILLES[taille].police + 'px;--diff-ligne:' + TAILLES[taille].ligne + 'px'}
@@ -937,44 +962,3 @@ function LignesUnifiees({ ligne, espaces, cartes, cartesGuides, surligne, couran
   />`;
 }
 
-function VueBinaire({ donnees, onOuvrirExterne }) {
-  const ligne = (libelle, gauche, droite) => html`
-    <tr>
-      <th>${libelle}</th>
-      <td class="mono">${gauche}</td>
-      <td class="mono">${droite}</td>
-    </tr>
-  `;
-
-  return html`
-    <div class="panneau-contenu">
-      <div class="binaire">
-        <p class="attenue">
-          Fichier binaire : pas de comparaison ligne à ligne. Voici de quoi trancher.
-        </p>
-        <table class="tableau">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Production</th>
-              <th>Local</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ligne('Taille', donnees.prod ? formaterOctets(donnees.prod.taille) : '-', donnees.local ? formaterOctets(donnees.local.taille) : '-')}
-            ${ligne('Date', donnees.prod ? formaterDate(donnees.prod.mtimeMs) : '-', donnees.local ? formaterDate(donnees.local.mtimeMs) : '-')}
-            ${ligne('SHA-256', donnees.hashProd || '-', donnees.hashLocal || '-')}
-          </tbody>
-        </table>
-        <div style="display:flex;gap:6px;margin-top:12px">
-          <button type="button" class="btn" disabled=${!donnees.prod} onClick=${() => onOuvrirExterne('prod')}>
-            Ouvrir la version production
-          </button>
-          <button type="button" class="btn" disabled=${!donnees.local} onClick=${() => onOuvrirExterne('local')}>
-            Ouvrir la version locale
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-}

@@ -4704,3 +4704,231 @@ textarea.editeur-saisie {
   margin-top: 4px;
   font-size: 12px;
 }
+
+/* ==========================================================================
+   Aperçu des fichiers binaires : images, sons, vidéos, polices
+   La comparaison de ce qui ne se lit pas : deux scènes côte à côte, un damier
+   sous les transparences, et le rouge vif réservé à ce qui diffère vraiment.
+   ========================================================================== */
+
+.binaire-verdict {
+  margin-bottom: 14px;
+}
+
+.apercu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+
+.apercu-outils {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.apercu-groupe {
+  display: flex;
+  gap: 4px;
+}
+
+.apercu-cotes {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.apercu-cote {
+  flex: 1 1 280px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.apercu-cote-titre {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texte-attenue);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.apercu-scene {
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+  overflow: auto;
+  max-height: 380px;
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+}
+
+/* Le damier est volontairement neutre et identique dans les deux thèmes :
+   c'est une référence, pas une surface de l'interface. */
+.apercu-scene.fond-damier {
+  background-color: #f2f2f2;
+  background-image: conic-gradient(#d8d8d8 0 25%, transparent 0 50%, #d8d8d8 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+
+.apercu-scene.fond-clair {
+  background: #ffffff;
+}
+
+.apercu-scene.fond-sombre {
+  background: #1c1f24;
+}
+
+.apercu-image {
+  display: block;
+}
+
+.apercu-image.ajuste {
+  max-width: 100%;
+  max-height: 340px;
+}
+
+/* Au zoom, chaque pixel doit rester un carré net : une icône de 16 pixels
+   agrandie floue ne dit plus rien. */
+.apercu-image.pixelise {
+  image-rendering: pixelated;
+}
+
+.apercu-pile {
+  position: relative;
+  display: inline-block;
+}
+
+.apercu-pile .apercu-image {
+  max-width: none;
+}
+
+.apercu-image-dessus {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.apercu-legende {
+  font-size: 12px;
+  color: var(--texte-attenue);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.apercu-note {
+  font-size: 12px;
+  color: var(--texte-attenue);
+}
+
+.apercu-opacite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--texte-attenue);
+}
+
+.apercu-opacite input[type='range'] {
+  width: 180px;
+}
+
+.apercu-diff-resume {
+  font-size: 12.5px;
+}
+
+.apercu-diff-resume strong.bon {
+  color: var(--accent-texte);
+}
+
+.apercu-diff-resume strong.mauvais {
+  color: var(--danger);
+}
+
+.apercu-media {
+  width: 100%;
+}
+
+video.apercu-media {
+  max-height: 320px;
+  background: #000;
+  border-radius: var(--rayon);
+}
+
+.apercu-police-bloc {
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--panneau-releve);
+}
+
+.apercu-police-grand {
+  font-size: 26px;
+  line-height: 1.3;
+}
+
+.apercu-police-petit {
+  font-size: 13px;
+  color: var(--texte-attenue);
+}
+
+/* --- Premier écart : la fenêtre d'octets autour de la première différence -- */
+
+.ecart-octets {
+  margin-top: 14px;
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+  padding: 12px 14px;
+  background: var(--panneau-releve);
+  overflow-x: auto;
+}
+
+.ecart-octets-titre {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.ecart-ligne {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.ecart-cote {
+  min-width: 120px;
+  color: var(--texte-attenue);
+}
+
+.ecart-offset {
+  color: var(--texte-faible);
+}
+
+.ecart-octet {
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+.ecart-octet.differe {
+  background: var(--danger-fond);
+  color: var(--danger);
+  border: 1px solid var(--danger-bord);
+  font-weight: 700;
+}
+
+.ecart-ascii {
+  color: var(--texte-faible);
+  margin-left: 8px;
+  letter-spacing: 1px;
+}

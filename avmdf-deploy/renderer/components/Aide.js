@@ -1133,7 +1133,15 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             lignes=${[
               [
                 'Fichier binaire',
-                'Pas de comparaison ligne à ligne : un tableau taille / date / empreinte SHA-256 des deux côtés, et deux boutons pour ouvrir chaque version.'
+                'Un verdict net en tête : identiques octet pour octet, ou différents. Puis un tableau taille / date / empreinte SHA-256 des deux côtés, et deux boutons pour ouvrir chaque version. Sans aperçu possible, la position du premier octet qui diffère est montrée en hexadécimal, l\'octet fautif surligné.'
+              ],
+              [
+                'Image ou icône (png, jpg, gif, bmp, webp, ico, svg…)',
+                'Les deux versions s\'affichent côte à côte sur un damier qui révèle les transparences. Trois modes : côte à côte, superposition avec curseur d\'opacité, et différence pixel par pixel où chaque pixel qui change est peint en rouge, avec leur compte exact. Fond clair ou sombre au choix, zoom ×1 à ×4 en pixels nets. Un SVG garde son diff texte : le bouton « Aperçu » bascule vers le rendu.'
+              ],
+              [
+                'Son, vidéo ou police (mp3, wav, mp4, woff, ttf…)',
+                'Deux lecteurs pour écouter ou regarder chaque version ; pour une police, le même texte composé dans chacune, chiffres et accents compris.'
               ],
               [
                 'Fichier trop volumineux',
