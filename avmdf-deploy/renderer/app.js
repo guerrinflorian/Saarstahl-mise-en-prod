@@ -885,6 +885,7 @@ function App() {
           onAction=${actionSurNoeud}
           onAnalyser=${analyser}
           onAnnuler=${() => window.avmdf.analyse.annuler()}
+          onNotifier=${notifier}
         />
 
         <div

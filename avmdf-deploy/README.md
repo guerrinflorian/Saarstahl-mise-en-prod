@@ -375,6 +375,13 @@ d'abord.
   au complet.
 - `Maj+clic` sur une case coche toute la plage depuis la dernière case cochée (toujours cocher,
   jamais basculer ; même règle de non-mélange que le reste).
+- La règle « jamais mélanger mise en production et suppression d'orphelins » se **voit** au lieu
+  de se subir : dès qu'une sélection engage une nature, les cases de l'autre nature sont grisées
+  avec l'explication au survol, l'état de coche d'un dossier se juge sur la nature engagée (un
+  dossier mixte dont tous les orphelins sont cochés pendant une suppression est bien coché, pas
+  « à moitié »), et un clic qui ne peut rien cocher le dit en notification au lieu de ne rien
+  faire. Cocher un fichier seul suit la même règle : plus de sélection « mixte » fabriquée sans
+  s'en rendre compte, que le bandeau refusait ensuite sans explication.
 - Le comparateur porte une **mini-carte des changements** le long du bord droit : la silhouette du
   fichier, un trait coloré par bloc changé, un clic pour y sauter. À l'ouverture d'un fichier, la
   vue se place d'elle-même sur le premier changement.

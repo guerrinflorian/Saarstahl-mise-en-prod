@@ -55,7 +55,8 @@ export function ArbreFichiers({
   ignores,
   onAction,
   onAnalyser,
-  onAnnuler
+  onAnnuler,
+  onNotifier
 }) {
   const conteneur = useRef(null);
   const [defilement, setDefilement] = useState(0);
@@ -70,7 +71,24 @@ export function ArbreFichiers({
 
   // Une seule passe sur l'arbre par changement de sélection : chaque ligne de
   // dossier lit son état de coche dans la Map au lieu de retraverser sa branche.
-  const etatsCoche = useMemo(() => etatsSelection(arbre, selection), [arbre, selection]);
+  const etatsCoche = useMemo(
+    () => etatsSelection(arbre, selection, natureSelection),
+    [arbre, selection, natureSelection]
+  );
+
+  /** Dit pourquoi un clic ne coche rien, au lieu de ne rien faire en silence. */
+  function expliquerRefus(titre) {
+    if (!onNotifier) return;
+    onNotifier({
+      type: 'info',
+      titre,
+      texte:
+        natureSelection === 'suppression'
+          ? 'La sélection en cours est une suppression d\'orphelins, et les deux opérations ne se mélangent jamais. Terminez-la ou cliquez « Tout décocher » pour préparer une mise en production.'
+          : 'La sélection en cours est une mise en production, et les deux opérations ne se mélangent jamais. Terminez-la ou cliquez « Tout décocher » pour préparer une suppression d\'orphelins.',
+      duree: 7000
+    });
+  }
 
   // Le défilement passe par requestAnimationFrame : un rendu par image au
   // plus, pas un par événement de molette.
@@ -123,8 +141,25 @@ export function ArbreFichiers({
   function basculerFichier(fichier) {
     if (!estDeployable(fichier) && fichier.statut !== 'orphelin') return;
     const suivante = new Set(selection);
-    if (suivante.has(fichier.cle)) suivante.delete(fichier.cle);
-    else suivante.add(fichier.cle);
+    if (suivante.has(fichier.cle)) {
+      suivante.delete(fichier.cle);
+      onSelection(suivante);
+      return;
+    }
+    // Même règle au fichier qu'à la branche : jamais de mélange entre mise en
+    // production et suppression d'orphelins. Avant, cocher un orphelin dans une
+    // sélection de déploiement fabriquait une sélection « mixte » que le
+    // bandeau refusait ensuite sans qu'on comprenne d'où elle venait.
+    const nature = fichier.statut === 'orphelin' ? 'suppression' : 'deploiement';
+    if (natureSelection && natureSelection !== nature) {
+      expliquerRefus(
+        nature === 'suppression'
+          ? 'Un orphelin ne se coche pas dans une mise en production.'
+          : 'Un fichier à déployer ne se coche pas dans une suppression.'
+      );
+      return;
+    }
+    suivante.add(fichier.cle);
     onSelection(suivante);
   }
 
@@ -145,7 +180,15 @@ export function ArbreFichiers({
     else if (natureSelection === 'deploiement') candidats = deployables;
     else candidats = deployables.length ? deployables : orphelins;
 
-    if (!candidats.length) return;
+    if (!candidats.length) {
+      // Un clic qui ne fait rien sans un mot ressemble à un bug : le dire.
+      if (natureSelection === 'suppression' && deployables.length) {
+        expliquerRefus('Ce dossier ne contient aucun orphelin à cocher.');
+      } else if (natureSelection === 'deploiement' && orphelins.length) {
+        expliquerRefus('Ce dossier ne contient aucun fichier à déployer.');
+      }
+      return;
+    }
     const tousCoches = candidats.every((fichier) => selection.has(fichier.cle));
     const suivante = new Set(selection);
     for (const fichier of candidats) {
@@ -370,6 +413,7 @@ export function ArbreFichiers({
                       curseur=${debut + position === curseur}
                       selection=${selection}
                       etats=${etatsCoche}
+                      nature=${natureSelection}
                       onBasculerDossier=${basculerDossier}
                       onCase=${(majuscule) => cliqueCase(ligne.noeud, debut + position, majuscule)}
                       onChoisir=${onChoisir}
@@ -501,6 +545,7 @@ function Ligne({
   curseur,
   selection,
   etats,
+  nature,
   onBasculerDossier,
   onCase,
   onChoisir,
@@ -512,11 +557,30 @@ function Ligne({
   const infos = estDossier ? etats.get(noeud.cle) : null;
   const etat = infos ? infos.etat : null;
   const coche = estDossier ? etat === 'complet' : selection.has(noeud.cle);
-  // Un dossier se coche dès qu'il contient de quoi déployer ou de quoi
-  // supprimer ; un fichier « identique », lui, n'a rien à cocher.
+  // La case suit la nature engagée par la sélection : jamais de mélange entre
+  // mise en production et suppression d'orphelins, et une case qui ne peut
+  // rien cocher est grisée avec son explication, au lieu d'avaler le clic.
   const cochable = estDossier
     ? Boolean(infos && infos.cochable)
-    : estDeployable(noeud) || noeud.statut === 'orphelin';
+    : coche ||
+      (nature === 'suppression'
+        ? noeud.statut === 'orphelin'
+        : nature === 'deploiement'
+          ? estDeployable(noeud)
+          : estDeployable(noeud) || noeud.statut === 'orphelin');
+  const titreCase = cochable
+    ? estDossier
+      ? ''
+      : 'Maj+clic coche toute la plage depuis la dernière case cochée'
+    : !estDossier && noeud.statut === 'identique'
+      ? 'Fichier identique : rien à déployer.'
+      : nature === 'suppression'
+        ? (estDossier ? 'Aucun orphelin dans ce dossier. ' : 'Ce fichier n\'est pas un orphelin. ') +
+          'La sélection en cours est une suppression d\'orphelins : les deux opérations ne se mélangent jamais.'
+        : nature === 'deploiement'
+          ? (estDossier ? 'Rien à déployer dans ce dossier. ' : 'Un orphelin ne part pas en mise en production. ') +
+            'La sélection en cours est une mise en production : les deux opérations ne se mélangent jamais.'
+          : 'Rien à cocher ici.';
 
   const classes = ['ligne'];
   if (estDossier) classes.push('ligne-dossier');
@@ -546,7 +610,7 @@ function Ligne({
         checked=${coche}
         disabled=${!cochable}
         aria-label=${'Sélectionner ' + noeud.chemin}
-        title=${estDossier ? '' : 'Maj+clic coche toute la plage depuis la dernière case cochée'}
+        title=${titreCase}
         ref=${(element) => {
           if (element) element.indeterminate = etat === 'partiel';
         }}

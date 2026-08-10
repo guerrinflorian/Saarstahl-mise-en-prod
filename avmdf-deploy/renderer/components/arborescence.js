@@ -160,13 +160,21 @@ export function etatSelection(noeud, selection) {
  * 10 000 nœuds. Ici l'arbre n'est parcouru qu'une fois par changement de
  * sélection ou d'arbre, et chaque ligne lit son état dans la Map.
  *
- * Les orphelins comptent aussi : un dossier qui n'en contient que peut se
- * cocher en bloc (la suppression est une opération à part entière), il n'a pas
- * à être grisé.
+ * L'état se juge selon la `nature` engagée par la sélection, parce qu'un clic
+ * se juge pareil : pendant une suppression d'orphelins, un dossier mixte dont
+ * tous les orphelins sont cochés est bien « complet » (une demi-coche lui
+ * ferait dire « pas vraiment sélectionné » alors que le clic a fait tout ce
+ * qu'il pouvait faire), et un dossier sans orphelin n'est pas cochable du
+ * tout ; symétriquement pendant une mise en production. Sans nature engagée,
+ * un dossier se juge sur ses fichiers à déployer, ou sur ses orphelins s'il
+ * n'a que ça - exactement ce que ferait le clic.
  *
+ * @param {object|null} racine
+ * @param {Set<string>} selection
+ * @param {'deploiement'|'suppression'|null} nature
  * @returns {Map<string, {etat:'complet'|'partiel'|'vide', cochable:boolean}>}
  */
-export function etatsSelection(racine, selection) {
+export function etatsSelection(racine, selection, nature = null) {
   const etats = new Map();
   if (!racine) return etats;
 
@@ -192,12 +200,23 @@ export function etatsSelection(racine, selection) {
     }
 
     const totalCoches = coches + orphelinsCoches;
-    const complet =
-      (deployables > 0 && coches === deployables) ||
-      (deployables === 0 && orphelins > 0 && orphelinsCoches === orphelins);
+    let complet;
+    let cochable;
+    if (nature === 'suppression') {
+      complet = orphelins > 0 && orphelinsCoches === orphelins;
+      cochable = orphelins > 0;
+    } else if (nature === 'deploiement') {
+      complet = deployables > 0 && coches === deployables;
+      cochable = deployables > 0;
+    } else {
+      complet =
+        (deployables > 0 && coches === deployables) ||
+        (deployables === 0 && orphelins > 0 && orphelinsCoches === orphelins);
+      cochable = deployables > 0 || orphelins > 0;
+    }
     etats.set(noeud.cle, {
       etat: totalCoches === 0 ? 'vide' : complet ? 'complet' : 'partiel',
-      cochable: deployables > 0 || orphelins > 0
+      cochable
     });
     return { deployables, coches, orphelins, orphelinsCoches };
   };
