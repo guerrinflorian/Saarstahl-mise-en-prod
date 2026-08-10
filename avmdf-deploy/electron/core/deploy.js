@@ -486,7 +486,19 @@ async function preflight(plan, options = {}) {
   }
 
   // 5. Archivage écarté : ce passage ne sera pas réversible.
-  if (plan.archiver === false && plan.operation !== OPERATION_SUPPRESSION) {
+  if (plan.archiver === false && plan.operation === OPERATION_SUPPRESSION) {
+    // Un orphelin n'existe qu'en production : sans archive, son contenu ne
+    // survivra nulle part. C'est le renoncement le plus lourd de l'outil.
+    problemes.push(
+      probleme(
+        AVERTISSEMENT,
+        'sans-archive',
+        `Archivage AVMDF écarté : ${plan.fichiers.length} fichier(s) seront supprimés définitivement, sans copie de sauvegarde.`,
+        'Ces fichiers n\'existent qu\'en production : leur contenu ne sera conservé nulle part et ne pourra jamais être restauré.',
+        plan.fichiers.map((f) => f.chemin)
+      )
+    );
+  } else if (plan.archiver === false) {
     const remplaces = [];
     for (const fichier of plan.fichiers) {
       try {

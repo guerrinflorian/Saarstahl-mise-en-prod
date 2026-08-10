@@ -64,9 +64,11 @@ export function BandeauDeploiement({
   // La case « Archiver » gouverne tout le versant AVMDF. Décochée, il n'y a
   // plus rien à ranger : la destination n'est ni exigée ni utilisée, et un
   // choix fait auparavant est simplement mis de côté. Personne ne devrait
-  // avoir à ouvrir une demande pour pousser une feuille de style.
-  // Une suppression, elle, archive toujours : elle est sans retour.
-  const avecArchivage = archiver || suppression;
+  // avoir à ouvrir une demande pour pousser une feuille de style, ni pour
+  // supprimer de vieux fichiers morts. Pour une suppression, le renoncement
+  // pèse plus lourd (l'orphelin n'existe qu'en production) : l'avertissement
+  // et la confirmation le disent en rouge.
+  const avecArchivage = archiver;
 
   const raisonBlocage = modeLibre
     ? 'La comparaison libre ne permet pas de mise en production.'
@@ -147,23 +149,28 @@ export function BandeauDeploiement({
 
       <div class="bandeau-actions">
         ${raisonBlocage ? html`<span class="attenue bandeau-raison">${raisonBlocage}</span>` : null}
-        ${!archiver && !suppression
-          ? html`<span class="bandeau-etat sans-archive" title="Aucune copie de sauvegarde : ce passage ne pourra pas être annulé">
+        ${!archiver
+          ? html`<span
+              class="bandeau-etat sans-archive"
+              title=${suppression
+                ? 'Aucune copie de sauvegarde : la suppression sera définitive, le contenu ne survivra nulle part'
+                : 'Aucune copie de sauvegarde : ce passage ne pourra pas être annulé'}
+            >
               Sans AVMDF
             </span>`
           : null}
         <span class=${'bandeau-etat ' + (reel ? 'reel' : 'simulation')}>
           ${reel ? 'Écriture réelle' : 'Simulation'}
         </span>
-        ${suppression
-          ? null
-          : html`<${Interrupteur}
-              libelle="Archiver"
-              coche=${archiver}
-              attention
-              titre="Copier la version de production dans le dossier de sprint avant de l'écraser. Décoché, rien n'est conservé et le retour arrière devient impossible."
-              onChange=${onArchiver}
-            />`}
+        <${Interrupteur}
+          libelle="Archiver"
+          coche=${archiver}
+          attention
+          titre=${suppression
+            ? 'Copier le fichier dans le dossier de sprint avant de le supprimer. Décoché, la suppression est définitive : un orphelin n\'existe qu\'en production, son contenu ne sera conservé nulle part.'
+            : 'Copier la version de production dans le dossier de sprint avant de l\'écraser. Décoché, rien n\'est conservé et le retour arrière devient impossible.'}
+          onChange=${onArchiver}
+        />
         <${Interrupteur}
           libelle="Simulation"
           coche=${simulation}

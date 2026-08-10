@@ -237,10 +237,10 @@ function App() {
     [analyse.resultat, selection]
   );
 
-  // « Archiver » ne s'applique qu'aux mises en production. Supprimer un
-  // orphelin sans en garder de copie serait sans retour : le bandeau ne
-  // propose alors pas la case, et l'archivage reste entier.
-  const archivageAvmdf = archiver || operation === 'suppression';
+  // « Archiver » s'applique aussi aux suppressions d'orphelins : décochée, la
+  // suppression est définitive (un orphelin n'existe qu'en production), et la
+  // confirmation le dit en rouge. Le choix se refait à chaque passage.
+  const archivageAvmdf = archiver;
 
   // Le titre de la fenêtre suit le travail : projet et sélection se lisent
   // depuis la barre des tâches, sans revenir à l'application.

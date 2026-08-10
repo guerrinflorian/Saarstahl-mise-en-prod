@@ -210,14 +210,22 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             </div>
           </div>
 
-          ${resume.archiver === false && !suppression
-            ? html`<div class="encart encart-danger" style="margin-top:14px">
-                <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
-                écrasées sans être conservées, et <strong>ce passage ne pourra pas être annulé</strong>. Aucune
-                demande n'est utilisée et aucun manifeste n'est écrit : le passage n'apparaîtra ni dans
-                l'historique ni dans le tableau de bord, seul le journal en gardera la ligne. Recochez
-                « Archiver » dans le bandeau du bas pour revenir au comportement normal.
-              </div>`
+          ${resume.archiver === false
+            ? suppression
+              ? html`<div class="encart encart-danger" style="margin-top:14px">
+                  <strong>Suppression définitive.</strong> Un orphelin n'existe qu'en production : sans
+                  archivage AVMDF, les fichiers supprimés ne seront <strong>conservés nulle part</strong> et ne
+                  pourront jamais être restaurés. Aucune demande n'est utilisée et aucun manifeste n'est
+                  écrit : seul le journal gardera la ligne. Recochez « Archiver » dans le bandeau du bas
+                  pour garder une copie et rester réversible.
+                </div>`
+              : html`<div class="encart encart-danger" style="margin-top:14px">
+                  <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
+                  écrasées sans être conservées, et <strong>ce passage ne pourra pas être annulé</strong>. Aucune
+                  demande n'est utilisée et aucun manifeste n'est écrit : le passage n'apparaîtra ni dans
+                  l'historique ni dans le tableau de bord, seul le journal en gardera la ligne. Recochez
+                  « Archiver » dans le bandeau du bas pour revenir au comportement normal.
+                </div>`
             : null}
 
           ${resume.simulation

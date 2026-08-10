@@ -548,7 +548,9 @@ difficulté si vous préférez l'inverse.
 production : c'est une opération distincte. On les coche seuls, le bouton du bandeau devient
 « Supprimer en production », la version supprimée est archivée dans le sprint **avant** d'être
 retirée, et l'opération produit son propre manifeste - donc elle est réversible comme les autres.
-Cocher un dossier ne mélange jamais les deux natures.
+Cocher un dossier ne mélange jamais les deux natures. Comme pour une mise en production, la case
+« Archiver » peut être décochée pour un passage : la suppression est alors définitive (voir
+« Mise en production sans archivage »).
 
 **Pools IIS.** L'outil ne pilote pas le serveur. S'il ne peut pas remplacer un fichier, il bloque
 avant la première écriture et dit quoi faire.
@@ -619,9 +621,13 @@ Une destination choisie **avant** de décocher est mise de côté, pas utilisée
 toujours son numéro et parlait encore d'AVMDF alors que la case était décochée. Un passage à moitié
 archivé est plus difficile à expliquer qu'un passage qui ne l'est pas du tout.
 
-La case ne s'applique qu'aux mises en production : une **suppression d'orphelins** archive toujours,
-elle est sans retour. La case n'apparaît d'ailleurs pas dans ce cas, et le processus principal
-n'écoute pas ce que le renderer envoie sur ce point.
+Depuis la 1.7.0, la case s'applique aussi aux **suppressions d'orphelins**, et le renoncement y
+pèse plus lourd : un orphelin n'existe qu'en production, donc sans archive son contenu n'est
+conservé **nulle part** et ne pourra jamais être restauré. Les contrôles préalables listent les
+fichiers concernés, la confirmation l'affiche en rouge (« Suppression définitive ») et se fait en
+recopiant le nombre de fichiers, et le journal garde la ligne en ALERTE. Supprimer de vieux
+fichiers morts ne demande plus d'ouvrir une demande de travaux ; en garder une trace reste le
+comportement par défaut, la case se recochant d'elle-même après chaque passage réel.
 
 Sans archivage, la confirmation se fait en recopiant le **nombre de fichiers** au lieu du numéro de
 demande : le geste reste le même, et il oblige à relire ce qui part. Ce qu'il ne faut surtout pas,

@@ -1285,6 +1285,13 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             jamais besoin.
           </p>
           <p>
+            La case vaut aussi pour une <strong>suppression d'orphelins</strong>, et le renoncement y
+            pèse plus lourd : un orphelin n'existe qu'en production, donc sans archive son contenu ne
+            sera conservé <strong>nulle part</strong> et ne pourra jamais être restauré. La
+            confirmation le rappelle en rouge, et la suppression se confirme alors en recopiant le
+            nombre de fichiers.
+          </p>
+          <p>
             <strong>La case gouverne tout le versant AVMDF.</strong> Décochée, la demande n'est plus
             demandée, plus lue, et plus rien ne s'écrit sous la racine des archives : ni les
             versions remplacées, ni le manifeste qui les recense. On ne vous demande plus d'ouvrir

@@ -1228,12 +1228,11 @@ function construirePlan(parametres) {
   // L'archivage se fait, sauf renoncement explicite : le défaut n'est jamais
   // la perte de l'état antérieur.
   //
-  // La case ne concerne que les mises en production. Supprimer un orphelin
-  // sans en garder de copie serait sans retour, et le bandeau ne propose
-  // d'ailleurs pas la case dans ce cas : on ne se fie pas à ce que le renderer
-  // envoie.
-  const archiver =
-    operation === deploy.OPERATION_SUPPRESSION ? true : parametres.archiver !== false;
+  // Le renoncement vaut aussi pour une suppression d'orphelins, et il y pèse
+  // plus lourd : un orphelin n'existe qu'en production, sans archive son
+  // contenu ne survit nulle part. La confirmation et les contrôles préalables
+  // le disent en toutes lettres.
+  const archiver = parametres.archiver !== false;
 
   // La case gouverne tout le versant AVMDF. Décochée, la demande et le sprint
   // ne sont ni demandés ni lus, et rien n'est écrit sous la racine des

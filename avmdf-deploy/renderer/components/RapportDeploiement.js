@@ -96,8 +96,9 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
           ${manifeste.archivage === false && !simulation
             ? html`<div class="encart encart-alerte" style="margin-bottom:12px">
                 <strong>Passage effectué sans archivage AVMDF.</strong>
-                Les versions remplacées n'ont pas été conservées : le retour arrière est impossible pour
-                ce déploiement.
+                ${manifeste.operation === 'suppression'
+                  ? ' Les fichiers supprimés n\'ont été conservés nulle part : la suppression est définitive.'
+                  : ' Les versions remplacées n\'ont pas été conservées : le retour arrière est impossible pour ce déploiement.'}
                 ${chemins && chemins.manifeste
                   ? ' Le manifeste garde leur empreinte, à défaut de leur contenu.'
                   : ''}
