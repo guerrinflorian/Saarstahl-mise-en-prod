@@ -16,6 +16,7 @@ import { TableauDeBord } from './components/TableauDeBord.js';
 import { Aide } from './components/Aide.js';
 import { Bienvenue } from './components/Bienvenue.js';
 import { VersionsFichier } from './components/VersionsFichier.js';
+import { FriseFichier } from './components/FriseFichier.js';
 import { ReferencesFichier } from './components/ReferencesFichier.js';
 import { EditeurFichier } from './components/EditeurFichier.js';
 import { PaletteFichiers } from './components/PaletteFichiers.js';
@@ -98,6 +99,7 @@ function App() {
   // explicite, refait à chaque passage : il ne survit pas à un déploiement.
   const [archiver, setArchiver] = useState(true);
   const [versionsDe, setVersionsDe] = useState(null);
+  const [friseDe, setFriseDe] = useState(null);
   const [editeurDe, setEditeurDe] = useState(null);
   const [paletteOuverte, setPaletteOuverte] = useState(false);
   const [deploiement, setDeploiement] = useState(null);
@@ -548,6 +550,10 @@ function App() {
         setVersionsDe({ cle: noeud.cle, chemin: noeud.chemin });
         return;
       }
+      if (action === 'frise') {
+        setFriseDe({ cle: noeud.cle, chemin: noeud.chemin });
+        return;
+      }
       if (action === 'references') {
         ouvrirReferences(noeud);
         return;
@@ -904,6 +910,7 @@ function App() {
         ? html`<${TableauDeBord}
             onEchec=${(reponse) => notifierEchec(reponse, 'Statistiques indisponibles.')}
             onOuvrirHistorique=${() => setEcran('historique')}
+            onFrise=${(chemin) => setFriseDe({ cle: null, chemin })}
           />`
         : vue === 'aide'
         ? html`<${Aide}
@@ -966,6 +973,11 @@ function App() {
           onVoirVersions=${
             diff.donnees
               ? () => setVersionsDe({ cle: diff.donnees.cle, chemin: diff.donnees.chemin })
+              : null
+          }
+          onFrise=${
+            diff.donnees
+              ? () => setFriseDe({ cle: diff.donnees.cle, chemin: diff.donnees.chemin })
               : null
           }
           onModifier=${
@@ -1056,6 +1068,20 @@ function App() {
                 choisirFichier(cible);
               }
             }}
+          />`
+        : null}
+
+      ${friseDe
+        ? html`<${FriseFichier}
+            chemin=${friseDe.chemin}
+            onFermer=${() => setFriseDe(null)}
+            onVersions=${friseDe.cle
+              ? () => {
+                  setVersionsDe({ cle: friseDe.cle, chemin: friseDe.chemin });
+                  setFriseDe(null);
+                }
+              : null}
+            onEchec=${(reponse) => notifierEchec(reponse, 'Frise indisponible.')}
           />`
         : null}
 

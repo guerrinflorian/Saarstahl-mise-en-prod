@@ -25,7 +25,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 
 const { cheminLong, hashFichier, joindreRelatif, pool, raisonLisible } = require('./fsindex');
-const { estSousRacine } = require('./avmdf');
+const { estSousRacine, DOSSIER_OUTIL } = require('./avmdf');
 const textdiff = require('./textdiff');
 
 const ACTION_REMPLACEMENT = 'remplacement';
@@ -757,7 +757,30 @@ async function executer(plan, options = {}) {
 }
 
 /**
- * Dépose le manifeste et complète le récapitulatif dans le dossier de sprint.
+ * Ce que lit la personne qui parcourt les archives à la main : posé une fois
+ * dans `_donnees-outil`, il dit ce que ce dossier est, et surtout ce qu'il
+ * n'est pas.
+ */
+const CONTENU_LISEZMOI = [
+  'Ce dossier appartient à l\'outil « AVMDF Mise en production ».',
+  '',
+  'Il ne contient AUCUN fichier de la demande de travaux : uniquement les',
+  'données de l\'outil, c\'est-à-dire les manifestes de chaque passage',
+  '(_deploiement_*.json, _restauration_*.json) et leur récapitulatif lisible',
+  '(recapitulatif.md).',
+  '',
+  'Les versions « avant modification », elles, sont rangées à côté, dans le',
+  'dossier du sprint, chacune à son chemin d\'origine.',
+  '',
+  'Ne rien modifier ni supprimer ici : ces fichiers rendent possibles',
+  'l\'historique, la vérification de la production et le retour arrière.',
+  ''
+].join('\r\n');
+
+/**
+ * Dépose le manifeste et complète le récapitulatif dans le sous-dossier
+ * `_donnees-outil` du sprint : les traces de l'outil ne se mélangent pas aux
+ * versions archivées de la demande, et un LISEZMOI l'explique sur place.
  *
  * Le manifeste est la seule preuve de ce qui vient d'être écrit : il part en
  * deux temps (fichier temporaire puis renommage) et un échec ne se perd jamais
@@ -770,8 +793,26 @@ async function deposerTraces(manifeste, dossier, nomManifeste, options = {}) {
   const chemins = { manifeste: null, recapitulatif: null, manifesteSecours: null, erreurEcriture: null };
   if (simulation || !dossier) return chemins;
 
+  const dossierOutil = path.join(dossier, DOSSIER_OUTIL);
+  let dossierTraces = dossierOutil;
+  try {
+    await fsp.mkdir(cheminLong(dossierOutil), { recursive: true });
+    const lisezmoi = path.join(dossierOutil, 'LISEZMOI.txt');
+    if (!(await existe(lisezmoi))) {
+      try {
+        await ecrireAtomique(lisezmoi, CONTENU_LISEZMOI);
+      } catch (err) {
+        /* sans LISEZMOI le dossier reste explicite par son nom */
+      }
+    }
+  } catch (err) {
+    // Impossible de créer le sous-dossier : le manifeste vaut plus que le
+    // rangement, il part à la racine du sprint comme avant la 2.0.
+    dossierTraces = dossier;
+  }
+
   const contenu = JSON.stringify(manifeste, null, 2) + '\n';
-  const cible = path.join(dossier, nomManifeste);
+  const cible = path.join(dossierTraces, nomManifeste);
   try {
     await ecrireAtomique(cible, contenu);
     chemins.manifeste = cible;
@@ -790,7 +831,10 @@ async function deposerTraces(manifeste, dossier, nomManifeste, options = {}) {
   }
 
   try {
-    const recapitulatif = path.join(dossier, '_recapitulatif.md');
+    const recapitulatif = path.join(
+      dossierTraces,
+      dossierTraces === dossierOutil ? 'recapitulatif.md' : '_recapitulatif.md'
+    );
     await ajouterAuRecapitulatif(recapitulatif, manifeste);
     chemins.recapitulatif = recapitulatif;
   } catch (err) {
@@ -1086,7 +1130,10 @@ async function listerManifestes(racineAvmdf, options = {}) {
     const sousDossiers = [];
     for (const element of contenu) {
       const chemin = path.join(dossier, element.name);
-      if (element.isDirectory() && profondeur < 2) {
+      // Depuis la 2.0, les traces vivent dans `_donnees-outil` sous le
+      // sprint : ce dossier-là se visite à toute profondeur ; les autres
+      // s'arrêtent au niveau des sprints.
+      if (element.isDirectory() && (profondeur < 2 || element.name.toLowerCase() === DOSSIER_OUTIL)) {
         sousDossiers.push(chemin);
       } else if (element.isFile() && /^_(deploiement|restauration)_.*\.json$/i.test(element.name)) {
         aLire.push(chemin);
@@ -1095,11 +1142,11 @@ async function listerManifestes(racineAvmdf, options = {}) {
     return sousDossiers;
   }
 
-  // Niveau par niveau (racine, demandes, sprints), en concurrence bornée : sur
-  // un partage à plusieurs centaines de demandes, la version séquentielle se
-  // comptait en dizaines de secondes.
+  // Niveau par niveau (racine, demandes, sprints, dossier de l'outil), en
+  // concurrence bornée : sur un partage à plusieurs centaines de demandes, la
+  // version séquentielle se comptait en dizaines de secondes.
   let niveau = [racineAvmdf];
-  for (let profondeur = 0; profondeur < 3 && niveau.length; profondeur += 1) {
+  for (let profondeur = 0; profondeur < 4 && niveau.length; profondeur += 1) {
     const suivant = [];
     await pool(niveau, concurrence, async (dossier) => {
       suivant.push(...(await inventorier(dossier, profondeur)));
@@ -1575,6 +1622,7 @@ module.exports = {
   executer,
   resumer,
   redigerRecapitulatif,
+  deposerTraces,
   listerManifestes,
   verifierManifeste,
   preparerRestauration,

@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION_CONFIG = 3;
+const VERSION_CONFIG = 4;
 
 /**
  * Motifs ajoutés aux exclusions par la version 2 : l'application compare du
@@ -108,10 +108,11 @@ function reglagesParDefaut(contexte = {}) {
       prod: '',
       avmdf: RACINE_AVMDF_DEFAUT
     },
-    projets: [
-      creerProjet({ nom: 'GPNet', dossierLocal: 'GPNET', dossierProd: 'GPNet' }),
-      creerProjet({ nom: 'WebService', dossierLocal: 'WebService', dossierProd: 'WebService' })
-    ],
+    // Aucun projet d'office depuis la version 4 : les projets appartiennent à
+    // la personne qui s'installe, pas au poste de celui qui a écrit l'outil.
+    // L'écran de premier démarrage demande le premier ; les réglages font le
+    // reste.
+    projets: [],
     exclusions: {
       dossiers: [
         '.vs',
@@ -248,12 +249,23 @@ function normaliser(brut, contexte = {}) {
   const appOffline = options.appOffline && typeof options.appOffline === 'object' ? options.appOffline : {};
   const libre = source.comparaisonLibre && typeof source.comparaisonLibre === 'object' ? source.comparaisonLibre : {};
 
-  const projets = Array.isArray(source.projets) ? source.projets.map(creerProjet) : defauts.projets;
+  const versionSource = Number.isInteger(source.version) ? source.version : 1;
+
+  let projets = Array.isArray(source.projets) ? source.projets.map(creerProjet) : defauts.projets;
+
+  // v4 : les versions 1 à 3 créaient d'office un projet « WebService ». S'il
+  // est resté exactement tel quel - jamais renommé, jamais visé ailleurs -,
+  // c'est qu'il n'a jamais servi : il est retiré. Un WebService retouché est
+  // un vrai projet, il reste.
+  if (versionSource < 4) {
+    projets = projets.filter(
+      (p) => !(p.nom === 'WebService' && p.dossierLocal === 'WebService' && p.dossierProd === 'WebService')
+    );
+  }
 
   // Migrations : chaque version apporte ses nouveaux motifs d'exclusion à une
   // liste personnalisée sans écraser les choix de l'utilisateur (union, pas
   // remplacement). Une configuration déjà à jour n'est pas retouchée.
-  const versionSource = Number.isInteger(source.version) ? source.version : 1;
   let dossiersExclus = listeDeTextes(exclusions.dossiers, defauts.exclusions.dossiers);
   let fichiersExclus = listeDeTextes(exclusions.fichiers, defauts.exclusions.fichiers);
   for (const [version, ajouts] of [[2, AJOUTS_EXCLUSIONS_V2], [3, AJOUTS_EXCLUSIONS_V3]]) {

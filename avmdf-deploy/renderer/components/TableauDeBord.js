@@ -1,7 +1,7 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { useEffect, useState } from '../vendor/hooks.module.js';
-import { formaterNombre } from './arborescence.js';
+import { formaterNombre, formaterOctets } from './arborescence.js';
 
 const html = htm.bind(h);
 
@@ -46,13 +46,15 @@ function ilYA(iso) {
  * des mises en production. Les simulations sont comptées à part et n'entrent
  * dans aucun total.
  */
-export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
+export function TableauDeBord({ onEchec, onOuvrirHistorique, onFrise }) {
   const [etat, setEtat] = useState('chargement');
   const [stats, setStats] = useState(null);
   const [racine, setRacine] = useState('');
+  const [conformite, setConformite] = useState(null);
 
   async function charger() {
     setEtat('chargement');
+    setConformite(null);
     const reponse = await window.avmdf.statistiques.calculer();
     if (!reponse.ok) {
       setEtat('erreur');
@@ -62,6 +64,18 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
     setStats(reponse.stats);
     setRacine(reponse.racine);
     setEtat('pret');
+  }
+
+  // La question qui vaut la peine d'être posée depuis le tableau de bord :
+  // la production est-elle toujours, octet pour octet, la dernière livraison ?
+  async function verifierDerniere(cheminManifeste) {
+    setConformite({ etat: 'encours' });
+    const reponse = await window.avmdf.historique.verifierProduction(cheminManifeste);
+    if (!reponse.ok) {
+      setConformite({ etat: 'erreur', message: reponse.erreur ? reponse.erreur.message : 'Vérification impossible.' });
+      return;
+    }
+    setConformite({ etat: 'pret', resume: reponse.verification.resume });
   }
 
   useEffect(() => {
@@ -161,6 +175,16 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
           <span class="tuile-libelle">fichiers en échec</span>
           <span class="tuile-detail">${t.echecs ? 'voir l\'historique' : 'aucun incident'}</span>
         </div>
+        <div class="tuile">
+          <span class="tuile-valeur">${formaterOctets(t.octetsDeployes)}</span>
+          <span class="tuile-libelle">volume écrit en production</span>
+          <span class="tuile-detail">
+            ${t.cadenceJours
+              ? 'un passage tous les ' +
+                (t.cadenceJours < 1.5 ? 'jours' : '~' + Math.round(t.cadenceJours) + ' jours')
+              : ''}
+          </span>
+        </div>
         ${stats.dernier
           ? html`
               <div class="tuile tuile-large">
@@ -170,6 +194,43 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
                   ${ilYA(stats.dernier.date)} · ${stats.dernier.projet} · ${stats.dernier.auteur || '-'}
                   · ${formaterNombre(stats.dernier.fichiers)} fichier${stats.dernier.fichiers > 1 ? 's' : ''}
                 </span>
+                ${stats.dernier.chemin
+                  ? html`<div class="tuile-conformite">
+                      ${!conformite
+                        ? html`<button
+                            type="button"
+                            class="btn btn-mini"
+                            title="Relit chaque fichier de ce passage en production et compare son empreinte à celle du manifeste. Rien n'est écrit."
+                            onClick=${() => verifierDerniere(stats.dernier.chemin)}
+                          >
+                            La production est-elle toujours conforme ?
+                          </button>`
+                        : conformite.etat === 'encours'
+                          ? html`<span class="attenue">Vérification en cours…</span>`
+                          : conformite.etat === 'erreur'
+                            ? html`<span class="conformite mauvaise">${conformite.message}</span>`
+                            : conformite.resume.conformes === conformite.resume.total
+                              ? html`<span class="conformite bonne">
+                                  ${conformite.resume.total > 1
+                                    ? '✓ Conforme : les ' +
+                                      formaterNombre(conformite.resume.total) +
+                                      ' fichiers en production sont exactement ceux livrés.'
+                                    : '✓ Conforme : le fichier en production est exactement celui livré.'}
+                                </span>`
+                              : html`<span class="conformite mauvaise">
+                                  ${'✕ Dérive : ' +
+                                  [
+                                    conformite.resume.modifies ? conformite.resume.modifies + ' modifié(s) depuis' : '',
+                                    conformite.resume.absents ? conformite.resume.absents + ' absent(s)' : '',
+                                    conformite.resume.reapparus ? conformite.resume.reapparus + ' réapparu(s)' : '',
+                                    conformite.resume.inverifiables ? conformite.resume.inverifiables + ' invérifiable(s)' : ''
+                                  ]
+                                    .filter(Boolean)
+                                    .join(', ') +
+                                  '. Le détail est dans l\'historique.'}
+                                </span>`}
+                    </div>`
+                  : null}
               </div>
             `
           : null}
@@ -205,6 +266,44 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
         </section>
 
         <section class="carte">
+          <h2>Le rythme de la semaine</h2>
+          <p class="carte-aide">À quels jours partent les mises en production.</p>
+          <${BarresJours} jours=${stats.parJourSemaine} />
+          <h2 style="margin-top:18px">Par type de fichier</h2>
+          ${stats.parExtension.length
+            ? html`<${BarresHorizontales}
+                lignes=${stats.parExtension.map((e) => ({
+                  libelle: e.nom,
+                  valeur: e.fichiers,
+                  detail: ''
+                }))}
+              />`
+            : html`<div class="rien">Rien à afficher.</div>`}
+        </section>
+
+        ${stats.demandesRevisitees.length
+          ? html`<section class="carte">
+              <h2>Demandes revisitées</h2>
+              <p class="carte-aide">
+                Plusieurs passages sous le même numéro : les interventions qui ont demandé plusieurs allers.
+              </p>
+              <div class="revisites">
+                ${stats.demandesRevisitees.map(
+                  (d) => html`
+                    <div class="revisite" key=${d.demande}>
+                      <span class="mono revisite-demande">${d.demande}</span>
+                      <span class="revisite-passages">${formaterNombre(d.passages)} passages</span>
+                      <span class="attenue">
+                        ${d.sprints > 1 ? d.sprints + ' sprints · ' : ''}${ilYA(d.derniereFois)}
+                      </span>
+                    </div>
+                  `
+                )}
+              </div>
+            </section>`
+          : null}
+
+        <section class="carte">
           <h2>Fichiers les plus déployés</h2>
           <p class="carte-aide">
             Les points chauds du projet : ce qui repart le plus souvent en production.
@@ -214,7 +313,12 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique }) {
                 <div class="chauds">
                   ${stats.fichiersChauds.map(
                     (fichier) => html`
-                      <div class="chaud" key=${fichier.chemin} title=${fichier.chemin}>
+                      <div
+                        class=${'chaud' + (onFrise ? ' cliquable' : '')}
+                        key=${fichier.chemin}
+                        title=${onFrise ? 'Voir la frise chronologique de ' + fichier.chemin : fichier.chemin}
+                        onClick=${onFrise ? () => onFrise(fichier.chemin) : null}
+                      >
                         <div class="chaud-ligne">
                           <span class="mono chaud-nom">${fichier.chemin}</span>
                           <span class="chaud-nombre">${formaterNombre(fichier.passages)}×</span>
@@ -334,6 +438,29 @@ function GraphiqueMensuel({ donnees }) {
         `;
       })}
     </svg>
+  `;
+}
+
+/** Sept colonnes, une par jour : le profil hebdomadaire d'un seul regard. */
+function BarresJours({ jours }) {
+  const maximum = Math.max(1, ...jours.map((j) => j.deploiements));
+  return html`
+    <div class="semaine">
+      ${jours.map(
+        (jour) => html`
+          <div class="semaine-jour" key=${jour.nom} title=${jour.nom + ' : ' + jour.deploiements + ' passage(s)'}>
+            <span class="semaine-valeur">${jour.deploiements || ''}</span>
+            <div class="semaine-piste">
+              <div
+                class="semaine-barre"
+                style=${'height:' + (jour.deploiements ? Math.max(6, Math.round((jour.deploiements / maximum) * 100)) : 2) + '%'}
+              ></div>
+            </div>
+            <span class="semaine-nom">${jour.nom}</span>
+          </div>
+        `
+      )}
+    </div>
   `;
 }
 

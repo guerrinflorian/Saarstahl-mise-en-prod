@@ -1238,6 +1238,102 @@ function handlersReferences() {
 // AVMDF
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Frise chronologique d'un fichier
+// ---------------------------------------------------------------------------
+
+/**
+ * L'histoire complète d'un fichier, racontée par ce que l'outil a réellement
+ * écrit : chaque passage en production lu dans les manifestes (demande,
+ * sprint, auteur, action, lignes), et chaque version archivée, y compris
+ * celles de l'ancienne organisation qui n'ont pas de manifeste.
+ *
+ * La frise ne dépend pas de l'analyse en mémoire : un chemin suffit, elle
+ * s'ouvre donc aussi depuis le tableau de bord.
+ */
+function handlersFrise() {
+  gerer('frise:fichier', async (parametres) => {
+    const actuels = reglages();
+    const chemin = String(parametres.chemin || '').trim();
+    if (!chemin) return echec('Aucun chemin fourni.', 'Rouvrez la frise depuis un fichier.');
+
+    const [reponseVersions, cache] = await Promise.all([
+      avmdf.versionsArchivees(actuels.racines.avmdf, chemin, {
+        concurrence: actuels.options.lecturesSimultanees
+      }),
+      listerManifestesEnCache(actuels)
+    ]);
+
+    const cle = chemin.toLowerCase();
+    const evenements = [];
+
+    for (const manifeste of cache.manifestes) {
+      const entree = (manifeste.fichiers || []).find(
+        (f) => String(f.chemin || '').toLowerCase() === cle
+      );
+      if (!entree) continue;
+      evenements.push({
+        type: 'passage',
+        date: manifeste.date || null,
+        operation: manifeste.operation || 'deploiement',
+        demande: manifeste.demande || null,
+        sprint: manifeste.sprint || null,
+        projet: manifeste.projet || null,
+        auteur: manifeste.auteur || null,
+        commentaire: manifeste.commentaire || null,
+        action: entree.action || null,
+        erreur: entree.erreur || null,
+        lignesAjoutees: typeof entree.lignesAjoutees === 'number' ? entree.lignesAjoutees : null,
+        lignesSupprimees: typeof entree.lignesSupprimees === 'number' ? entree.lignesSupprimees : null,
+        tailleApres: typeof entree.tailleApres === 'number' ? entree.tailleApres : null,
+        sansArchive: Boolean(entree.sansArchive),
+        version:
+          entree.sauvegarde && manifeste.dossierSauvegarde
+            ? fsindex.joindreRelatif(manifeste.dossierSauvegarde, entree.sauvegarde)
+            : null,
+        manifeste: manifeste.chemin || null
+      });
+    }
+
+    // Les versions archivées que les manifestes ne racontent pas : ancienne
+    // organisation, ou manifeste perdu. Elles comptent quand même.
+    const versionsRacontees = new Set(
+      evenements.map((e) => String(e.version || '').toLowerCase()).filter(Boolean)
+    );
+    for (const version of reponseVersions.versions || []) {
+      if (versionsRacontees.has(String(version.chemin).toLowerCase())) continue;
+      evenements.push({
+        type: 'archive',
+        date: version.date || (version.mtimeMs ? new Date(version.mtimeMs).toISOString() : null),
+        operation: null,
+        demande: version.demande || null,
+        sprint: version.sprint || null,
+        projet: null,
+        auteur: version.auteur || null,
+        commentaire: null,
+        action: version.action || null,
+        erreur: null,
+        lignesAjoutees: null,
+        lignesSupprimees: null,
+        tailleApres: typeof version.taille === 'number' ? version.taille : null,
+        sansArchive: false,
+        version: version.chemin,
+        manifeste: version.manifeste || null
+      });
+    }
+
+    evenements.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+    return succes({
+      frise: {
+        chemin,
+        evenements,
+        erreurs: [...(cache.erreurs || []), ...(reponseVersions.erreur ? [reponseVersions.erreur] : [])]
+      }
+    });
+  });
+}
+
 function handlersAvmdf() {
   gerer('avmdf:demandes', async () => {
     const actuels = reglages();
@@ -1552,6 +1648,7 @@ function resumePlan(plan) {
     demande: plan.demande,
     sprint: plan.sprint,
     dossierSauvegarde: plan.dossierSauvegarde,
+    racineLocale: plan.racineLocale,
     racineProd: plan.racineProd,
     auteur: plan.auteur,
     operation: plan.operation,
@@ -1944,6 +2041,7 @@ if (!app.requestSingleInstanceLock()) {
     handlersAnalyse();
     handlersDiff();
     handlersReferences();
+    handlersFrise();
     handlersAvmdf();
     handlersDeploiement();
     handlersHistorique();

@@ -275,7 +275,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <div class="aide-flux">
             <div class="aide-flux-boite">
               <div class="aide-flux-titre">Votre poste</div>
-              <div class="mono attenue">E:\\F Guerrin\\Process\\GPNET</div>
+              <div class="mono attenue">E:\\Sources\\GPNET</div>
               <div class="aide-flux-note">Les sources, telles que vous venez de les modifier.</div>
             </div>
             <div class="aide-flux-fleche">
@@ -854,6 +854,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               <button type="button" class="menu-entree">Réanalyser ce fichier</button>
               <button type="button" class="menu-entree">Copier le chemin relatif</button>
               <button type="button" class="menu-entree">Voir les versions archivées</button>
+              <button type="button" class="menu-entree">Frise chronologique</button>
               <button type="button" class="menu-entree">Voir les références</button>
               <div class="menu-separateur"></div>
               <button type="button" class="menu-entree">Masquer pour cette analyse</button>
@@ -879,6 +880,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               ['Copier le chemin relatif', 'Met le chemin dans le presse-papiers, prêt à coller dans un compte rendu.'],
               ['Voir les versions archivées', 'Toutes les versions « avant modification » de ce fichier retrouvées sous la racine AVMDF.'],
+              [
+                'Frise chronologique',
+                'L\'histoire du fichier sur un rail : chaque passage en production (demande, sprint, auteur, lignes changées, commentaire) et chaque version conservée, du plus récent au plus ancien. S\'ouvre aussi depuis les fichiers chauds du tableau de bord.'
+              ],
               [
                 'Voir les références',
                 'Où ce fichier est utilisé (script src, registres ASPX, CodeFile, gabarits de composant, url() de CSS…) et ce qu\'il utilise lui-même, ligne par ligne, des deux côtés. L\'index se construit à la première demande, ou depuis le bouton « Références » en tête du panneau ; le nombre d\'utilisations s\'affiche alors à côté de chaque fichier, et un zéro désigne un candidat au ménage. La recherche porte sur le nom exact (et la forme balise des composants) : un nom construit dynamiquement par le code lui échappe.'
@@ -1518,14 +1523,21 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 'Le manifeste. Chaque fichier avec son empreinte avant et après, sa taille, son archive, son éventuelle erreur. C\'est lui qui rend le retour arrière possible.'
               ],
               [
-                html`<span class="mono">_recapitulatif.md</span>`,
+                html`<span class="mono">recapitulatif.md</span>`,
                 'La version lisible, complétée à chaque passage dans le sprint. C\'est le document à joindre à la demande de travaux.'
+              ],
+              [
+                html`<span class="mono">LISEZMOI.txt</span>`,
+                'Explique sur place que ces fichiers appartiennent à l\'outil, pas à la demande de travaux.'
               ]
             ]}
           />
           <p class="attenue">
-            Les deux sont déposés dans le dossier de sprint, à côté des versions archivées. Trois
-            boutons du rapport permettent de les ouvrir ou de les montrer dans l'explorateur.
+            Tout cela est rangé dans le sous-dossier <span class="mono">_donnees-outil</span> du sprint,
+            jamais mélangé aux versions archivées : quiconque parcourt les archives voit d'un coup d'œil
+            ce qui est la demande et ce qui est l'outil. Les traces écrites avant la 2.0, restées à la
+            racine du sprint, sont toujours lues. Trois boutons du rapport permettent de les ouvrir ou
+            de les montrer dans l'explorateur.
           </p>
 
           <div class="encart encart-danger">
@@ -1941,9 +1953,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ['Orphelin', 'Un fichier présent en production et absent en local.'],
               [
                 'Manifeste',
-                html`Le fichier <span class="mono">_deploiement_&lt;horodatage&gt;.json</span> écrit dans le dossier de sprint. Il recense chaque fichier, son empreinte avant et après, son archive. C'est lui qui rend le retour arrière possible.`
+                html`Le fichier <span class="mono">_deploiement_&lt;horodatage&gt;.json</span> écrit dans le sous-dossier <span class="mono">_donnees-outil</span> du sprint. Il recense chaque fichier, son empreinte avant et après, son archive. C'est lui qui rend le retour arrière possible.`
               ],
-              ['Récapitulatif', html`<span class="mono">_recapitulatif.md</span>, la version lisible du manifeste, complétée à chaque passage dans le sprint.`],
+              ['Récapitulatif', html`<span class="mono">recapitulatif.md</span>, la version lisible du manifeste, complétée à chaque passage dans le sprint.`],
               ['Contrôles préalables', 'Les vérifications passées avant la première écriture : racines, périmètre, droits, verrous, modifications concurrentes, espace disque.'],
               ['Simulation', 'Tout le processus se déroule et le rapport complet est produit, mais aucun octet n\'est écrit.'],
               ['Empreinte SHA-256', 'La signature du contenu d\'un fichier. Deux fichiers de même empreinte sont identiques octet pour octet.'],

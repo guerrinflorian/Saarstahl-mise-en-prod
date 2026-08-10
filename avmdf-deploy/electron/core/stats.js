@@ -121,6 +121,74 @@ function calculer(manifestes, maintenant = new Date()) {
     }
   }
 
+  // Volume réellement écrit, et répartition par type de fichier.
+  let octetsDeployes = 0;
+  const extensions = new Map();
+  for (const manifeste of deploiements) {
+    for (const fichier of manifeste.fichiers || []) {
+      if (fichier.erreur) continue;
+      if (fichier.action !== 'remplacement' && fichier.action !== 'creation') continue;
+      octetsDeployes += fichier.tailleApres || 0;
+      const chemin = String(fichier.chemin || '');
+      const nom = chemin.split(/[\\/]/).pop() || '';
+      const point = nom.lastIndexOf('.');
+      const extension = point > 0 ? nom.slice(point).toLowerCase() : '(sans extension)';
+      const entree = extensions.get(extension) || { nom: extension, fichiers: 0 };
+      entree.fichiers += 1;
+      extensions.set(extension, entree);
+    }
+  }
+
+  // Le rythme de la semaine : à quels jours partent les mises en production.
+  const parJourSemaine = [
+    { nom: 'lun.', deploiements: 0 },
+    { nom: 'mar.', deploiements: 0 },
+    { nom: 'mer.', deploiements: 0 },
+    { nom: 'jeu.', deploiements: 0 },
+    { nom: 'ven.', deploiements: 0 },
+    { nom: 'sam.', deploiements: 0 },
+    { nom: 'dim.', deploiements: 0 }
+  ];
+  for (const manifeste of deploiements) {
+    const date = new Date(manifeste.date);
+    if (Number.isNaN(date.getTime())) continue;
+    parJourSemaine[(date.getDay() + 6) % 7].deploiements += 1;
+  }
+
+  // Les demandes revisitées : plusieurs passages sous le même numéro AVMDF,
+  // c'est l'histoire d'une intervention qui a demandé plusieurs allers.
+  const parDemande = new Map();
+  for (const manifeste of deploiements) {
+    if (!manifeste.demande) continue;
+    const entree = parDemande.get(manifeste.demande) || {
+      demande: manifeste.demande,
+      passages: 0,
+      sprints: new Set(),
+      derniereFois: null
+    };
+    entree.passages += 1;
+    if (manifeste.sprint) entree.sprints.add(manifeste.sprint);
+    if (!entree.derniereFois || String(manifeste.date) > String(entree.derniereFois)) {
+      entree.derniereFois = manifeste.date;
+    }
+    parDemande.set(manifeste.demande, entree);
+  }
+  const demandesRevisitees = [...parDemande.values()]
+    .filter((d) => d.passages > 1)
+    .sort((a, b) => b.passages - a.passages || String(b.derniereFois).localeCompare(String(a.derniereFois)))
+    .slice(0, 6)
+    .map((d) => ({ demande: d.demande, passages: d.passages, sprints: d.sprints.size, derniereFois: d.derniereFois }));
+
+  // La cadence : l'écart moyen entre deux passages réels.
+  let cadenceJours = null;
+  if (deploiements.length > 1) {
+    const premier = Date.parse(deploiements[deploiements.length - 1].date);
+    const dernierTemps = Date.parse(deploiements[0].date);
+    if (!Number.isNaN(premier) && !Number.isNaN(dernierTemps) && dernierTemps > premier) {
+      cadenceJours = (dernierTemps - premier) / 86400000 / (deploiements.length - 1);
+    }
+  }
+
   const demandes = new Set(deploiements.map((m) => m.demande).filter(Boolean));
   const dernier = deploiements[0] || null;
 
@@ -134,7 +202,9 @@ function calculer(manifestes, maintenant = new Date()) {
       lignesAjoutees,
       lignesSupprimees,
       echecs,
-      demandes: demandes.size
+      demandes: demandes.size,
+      octetsDeployes,
+      cadenceJours
     },
     dernier: dernier
       ? {
@@ -143,12 +213,16 @@ function calculer(manifestes, maintenant = new Date()) {
           sprint: dernier.sprint,
           projet: dernier.projet,
           auteur: dernier.auteur,
+          chemin: dernier.chemin || null,
           fichiers:
             ((dernier.resume || {}).remplacements || 0) + ((dernier.resume || {}).creations || 0),
           echecs: (dernier.resume || {}).echecs || 0
         }
       : null,
     parMois,
+    parJourSemaine,
+    parExtension: [...extensions.values()].sort((a, b) => b.fichiers - a.fichiers).slice(0, 8),
+    demandesRevisitees,
     parProjet: [...projets.values()].sort((a, b) => b.deploiements - a.deploiements),
     parAuteur: [...auteurs.values()].sort((a, b) => b.deploiements - a.deploiements).slice(0, 6),
     fichiersChauds: [...fichiers.values()]

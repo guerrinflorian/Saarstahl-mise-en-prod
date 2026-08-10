@@ -79,6 +79,11 @@ contextBridge.exposeInMainWorld('avmdf', {
     surProgression: (rappel) => abonner('references:progression', rappel)
   },
 
+  frise: {
+    /** L'histoire d'un fichier : passages en production et versions archivées. */
+    fichier: (chemin) => ipcRenderer.invoke('frise:fichier', { chemin })
+  },
+
   fichier: {
     /** Comparaison ligne à ligne d'un fichier de la dernière analyse. */
     diff: (cle, options = {}) =>

@@ -8,10 +8,13 @@ import { IconeExpedier } from './icones.js';
 const html = htm.bind(h);
 
 /**
- * Récapitulatif des contrôles préalables, puis confirmation.
+ * L'ordre de mission d'un passage, puis la confirmation.
  *
- * Un bloquant empêche le déploiement, point. Et pour valider, il faut saisir le
- * numéro de la demande : pas de simple bouton « OK », c'est une mise en production.
+ * La fenêtre raconte le trajet avant de demander l'accord : d'où partent les
+ * fichiers, où ils arrivent, sous quelle demande de travaux, et où va la copie
+ * de ce qui sera écrasé. Un bloquant empêche le déploiement, point. Et pour
+ * valider, il faut recopier le numéro de la demande : pas de simple bouton
+ * « OK », c'est une mise en production.
  */
 export function ConfirmationDeploiement({ etape, controle, resume, occupe, progression, onConfirmer, onRejouer, onFermer }) {
   const [saisie, setSaisie] = useState('');
@@ -56,7 +59,24 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
   const libelleSaisie = numeroDemande ? 'le numéro de la demande' : 'le nombre de fichiers';
   const saisieCorrecte = saisie.trim() === aRecopier;
   const suppression = resume.operation === 'suppression';
+  const sansArchive = resume.archiver === false;
   const peutPartir = controle.ok && saisieCorrecte && !occupe;
+
+  const nombre = resume.fichiers.length;
+  const chiffres = `${formaterNombre(nombre)} fichier${nombre > 1 ? 's' : ''} · ${formaterOctets(resume.octets)}`;
+
+  const statuts = Object.entries(resume.parStatut).filter(([, valeur]) => valeur > 0);
+
+  // Le trajet : une mise en production va des sources vers la production ;
+  // une suppression retire de la production, vers les archives ou vers rien.
+  const borneDepart = suppression
+    ? { titre: 'Production', nom: resume.projet, chemin: resume.racineProd }
+    : { titre: 'Vos sources', nom: resume.projet, chemin: resume.racineLocale };
+  const borneArrivee = suppression
+    ? sansArchive
+      ? { titre: 'Nulle part', nom: 'aucune copie conservée', chemin: '', danger: true }
+      : { titre: 'Archives AVMDF', nom: resume.sprint || resume.demande, chemin: resume.dossierSauvegarde }
+    : { titre: 'Production', nom: resume.projet, chemin: resume.racineProd };
 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Confirmation de mise en production">
@@ -134,57 +154,72 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
               `
             : null}
 
-          <table class="tableau tableau-resume">
-            <tbody>
-              <tr><th>Projet</th><td>${resume.projet}</td></tr>
-              <tr><th>Opération</th><td>${suppression ? 'suppression de fichiers orphelins' : 'mise en production'}</td></tr>
-              <tr><th>Auteur</th><td>${resume.auteur || '-'}</td></tr>
-              <tr><th>Destination production</th><td class="mono">${resume.racineProd}</td></tr>
-              <tr>
-                <th>Archivage AVMDF</th>
-                <td>
-                  ${resume.archiver === false
-                    ? html`<span class="rouge">écarté pour ce passage : rien ne sera écrit dans les archives</span>`
-                    : 'les versions remplacées sont conservées'}
-                </td>
-              </tr>
-              ${resume.archiver === false
-                ? null
-                : html`<tr>
-                    <th>Dossier de sauvegarde</th>
-                    <td class="mono">${resume.dossierSauvegarde}</td>
-                  </tr>`}
-              <tr>
-                <th>Fichiers</th>
-                <td>
-                  ${Object.entries(resume.parStatut)
-                    .filter(([, nombre]) => nombre > 0)
-                    .map(
-                      ([statut, nombre]) => html`
-                        <span class=${'compteur compteur-' + statut} key=${statut}>
-                          ${MARQUEURS[statut]} ${formaterNombre(nombre)} ${nombre > 1 ? PLURIELS[statut] : LIBELLES[statut]}
-                        </span>
-                      `
-                    )}
-                  <span class="attenue"> · ${formaterOctets(resume.octets)}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div class=${'mission' + (resume.simulation ? ' simulation' : '')}>
+            <div class="mission-trajet">
+              <div class="mission-borne">
+                <div class="mission-borne-titre">${borneDepart.titre}</div>
+                <div class="mission-borne-nom">${borneDepart.nom}</div>
+                ${borneDepart.chemin
+                  ? html`<div class="mission-borne-chemin mono" title=${borneDepart.chemin}>${borneDepart.chemin}</div>`
+                  : null}
+              </div>
+              <div class=${'mission-fleche' + (suppression ? ' retrait' : '')} aria-hidden="true">
+                <div class="mission-fleche-chiffres mono">${chiffres}</div>
+                <div class="mission-fleche-trait"><span class="mission-fleche-pointe"></span></div>
+                <div class="mission-fleche-verbe">
+                  ${suppression ? (sansArchive ? 'suppression définitive' : 'retrait, copie conservée') : 'copie, octet pour octet'}
+                </div>
+              </div>
+              <div class=${'mission-borne' + (borneArrivee.danger ? ' danger' : '')}>
+                <div class="mission-borne-titre">${borneArrivee.titre}</div>
+                <div class="mission-borne-nom">${borneArrivee.nom}</div>
+                ${borneArrivee.chemin
+                  ? html`<div class="mission-borne-chemin mono" title=${borneArrivee.chemin}>${borneArrivee.chemin}</div>`
+                  : null}
+              </div>
+            </div>
+
+            <div class="mission-papiers">
+              ${resume.demande
+                ? html`<span class="mission-demande mono">${resume.demande}</span>`
+                : html`<span class="mission-demande sans mono">sans demande</span>`}
+              ${resume.sprint && resume.sprint !== resume.demande
+                ? html`<span class="attenue">sprint <span class="mono">${resume.sprint}</span></span>`
+                : null}
+              ${resume.auteur ? html`<span class="attenue">par ${resume.auteur}</span>` : null}
+              <span style="flex:1"></span>
+              ${statuts.map(
+                ([statut, valeur]) => html`
+                  <span class=${'compteur compteur-' + statut} key=${statut}>
+                    ${MARQUEURS[statut]} ${formaterNombre(valeur)} ${valeur > 1 ? PLURIELS[statut] : LIBELLES[statut]}
+                  </span>
+                `
+              )}
+            </div>
+
+            ${!suppression
+              ? html`<div class=${'mission-archives' + (sansArchive ? ' ecarte' : '')}>
+                  ${sansArchive
+                    ? html`<strong>Archivage écarté :</strong> les versions écrasées ne seront conservées nulle part.`
+                    : html`Les versions remplacées partent d'abord vers${' '}
+                        <span class="mono" title=${resume.dossierSauvegarde}>${resume.dossierSauvegarde}</span>`}
+                </div>`
+              : null}
+          </div>
 
           <div class="detail-fichiers">
             <button type="button" class="btn btn-mini btn-plat" onClick=${() => setListeDepliee(!listeDepliee)}>
-              ${listeDepliee ? '▾' : '▸'} Détail des ${formaterNombre(resume.fichiers.length)} fichiers
+              ${listeDepliee ? '▾' : '▸'} Détail des ${formaterNombre(nombre)} fichiers
             </button>
             ${listeDepliee
               ? html`
                   <div class="liste-fichiers mono">
                     ${resume.fichiers.map(
                       (fichier) => html`
-                        <div key=${fichier.chemin}>
+                        <div class="liste-fichiers-ligne" key=${fichier.chemin}>
                           <span class=${'marqueur marqueur-' + fichier.statut}>${MARQUEURS[fichier.statut]}</span>
-                          ${fichier.chemin}
-                          <span class="attenue">${formaterOctets(fichier.taille)}</span>
+                          <span class="liste-fichiers-chemin" title=${fichier.chemin}>${fichier.chemin}</span>
+                          <span class="attenue liste-fichiers-taille">${formaterOctets(fichier.taille)}</span>
                         </div>
                       `
                     )}
@@ -210,7 +245,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             </div>
           </div>
 
-          ${resume.archiver === false
+          ${sansArchive
             ? suppression
               ? html`<div class="encart encart-danger" style="margin-top:14px">
                   <strong>Suppression définitive.</strong> Un orphelin n'existe qu'en production : sans
@@ -238,8 +273,9 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
         </div>
 
         <div class="modale-pied">
-          <label for="confirmation-demande" class=${controle.ok ? '' : 'attenue'}>
-            Saisissez ${libelleSaisie} (<span class="mono">${aRecopier}</span>) pour confirmer :
+          <label for="confirmation-demande" class=${'confirmation-libelle' + (controle.ok ? '' : ' attenue')}>
+            Pour confirmer, recopiez ${libelleSaisie}
+            <span class="confirmation-tampon mono">${aRecopier}</span>
           </label>
           <input
             type="text"

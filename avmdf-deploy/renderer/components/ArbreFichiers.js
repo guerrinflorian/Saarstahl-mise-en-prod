@@ -737,6 +737,14 @@ function entreesFichier(fichier) {
     { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
     { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
     {
+      action: 'frise',
+      libelle: 'Frise chronologique',
+      titre:
+        'L\'histoire de ce fichier : chaque passage en production lu dans les manifestes (demande, ' +
+        'sprint, auteur, lignes changées) et chaque version conservée dans les archives, sur une frise.',
+      actif: true
+    },
+    {
       action: 'references',
       libelle: 'Voir les références',
       titre:

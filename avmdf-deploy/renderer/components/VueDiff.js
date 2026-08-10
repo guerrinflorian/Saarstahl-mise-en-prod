@@ -156,7 +156,7 @@ function contenu(cote, espacesVisibles, jetons) {
  * diffèrent que par les espaces sont signalées, et un mode d'affichage rend
  * chaque espace, tabulation et espace insécable visible.
  */
-export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onModifier, onRecomparer, inversable = true }) {
+export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onFrise, onModifier, onRecomparer, inversable = true }) {
   const prefs = useMemo(lirePrefs, []);
   const [unifie, setUnifie] = useState(() => Boolean(prefs.unifie));
   const [synchronise, setSynchronise] = useState(() => prefs.synchronise !== false);
@@ -463,6 +463,16 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
               onClick=${onVoirVersions}
             >
               Versions archivées
+            </button>`
+          : null}
+        ${onFrise
+          ? html`<button
+              type="button"
+              class="btn btn-mini"
+              title="L'histoire de ce fichier : passages en production et versions conservées, sur une frise"
+              onClick=${onFrise}
+            >
+              Frise
             </button>`
           : null}
         ${texteDiff && donnees.apercu

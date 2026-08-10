@@ -105,13 +105,20 @@ est utilisé : jamais de HTML généré par Prism, jamais de retouche automatiqu
 
 ## Premier démarrage
 
-Les racines locale et de production sont **vides par défaut** : elles dépendent du poste, personne
-ne peut les deviner à la place de celui qui installe, et une valeur inventée serait pire que rien -
-elle donnerait l'illusion d'un outil déjà réglé. Tant qu'elles ne sont pas renseignées,
-l'application affiche un écran d'accueil qui les demande, et rien d'autre.
+Rien n'est prérempli avec les habitudes d'un autre poste : depuis la 2.0, l'application ne crée
+**aucun projet d'office** (les versions précédentes livraient GPNet et WebService à tout le monde ;
+un WebService resté exactement d'origine est retiré à la migration). L'écran de premier démarrage
+demande le minimum pour que l'outil soit celui de la personne qui s'installe :
 
-La racine des archives, elle, arrive préremplie à `Z:\AvMdf` : celle-là est la même pour tout le
-monde.
+1. **son nom d'auteur**, celui qui signera les manifestes ;
+2. **la racine de ses sources locales** ;
+3. **la racine de production** ;
+4. **la racine des archives**, préremplie à `Z:\AvMdf` (celle-là est la même pour tout le monde) ;
+5. **son premier projet** (nom, dossier local, dossier production), avec la possibilité d'en
+   décrire plusieurs d'emblée.
+
+Une valeur inventée serait pire que rien - elle donnerait l'illusion d'un outil déjà réglé. Tant
+que ce minimum n'est pas renseigné, l'application affiche cet écran, et rien d'autre.
 
 Chaque chemin saisi est contrôlé pour de vrai - existence, nature, lecture - et le résultat
 s'affiche sous le champ. Un dossier introuvable n'interdit pas de continuer (un partage réseau peut
@@ -145,17 +152,23 @@ présente.
 
 ## Format du manifeste
 
-Chaque déploiement réel écrit dans le dossier de sprint un `_deploiement_<horodatage>.json`
-(horodatage à la milliseconde, pour que deux passages rapprochés ne se marchent pas dessus) :
+Chaque déploiement réel écrit un `_deploiement_<horodatage>.json` (horodatage à la milliseconde,
+pour que deux passages rapprochés ne se marchent pas dessus) dans le sous-dossier `_donnees-outil`
+du sprint. Depuis la 2.0, tout ce que l'outil dépose pour lui-même - manifestes, restaurations,
+`recapitulatif.md`, un `LISEZMOI.txt` qui l'explique sur place - vit dans ce sous-dossier : les
+versions archivées de la demande restent seules à la racine du sprint, et quiconque parcourt les
+archives distingue d'un coup d'œil la demande de l'outillage. Les traces écrites avant la 2.0,
+restées à la racine du sprint, sont toujours lues (historique, versions d'un fichier, tableau de
+bord).
 
 ```json
 {
   "demande": "AVMDF4611",
   "sprint": "AVMDF4611_3",
-  "auteur": "guerrin-f",
+  "auteur": "durand-p",
   "date": "2026-08-06T14:52:10.000Z",
   "projet": "GPNet",
-  "racineLocale": "E:\\F Guerrin\\Process\\GPNET",
+  "racineLocale": "E:\\Sources\\GPNET",
   "racineProd": "Z:\\GPNet",
   "dossierSauvegarde": "Z:\\AvMdf\\AVMDF4611\\AVMDF4611_3",
   "archivage": true,
@@ -237,6 +250,14 @@ production, fichiers déployés, lignes de code, retours arrière, échecs, acti
 derniers mois, répartition par projet et par auteur, fichiers les plus souvent déployés et
 activité récente. Les chiffres viennent du disque, pas d'une base : ce sont les traces réelles.
 Les simulations sont comptées à part et n'entrent dans aucun total.
+
+La 2.0 le pousse plus loin : volume réellement écrit en production et cadence moyenne entre deux
+passages, rythme de la semaine (à quels jours partent les livraisons), répartition par type de
+fichier, demandes revisitées (plusieurs passages sous le même numéro AVMDF). Un clic sur un
+fichier chaud ouvre sa frise chronologique. Et depuis la tuile « dernière mise en production »,
+le bouton « La production est-elle toujours conforme ? » re-hashe chaque fichier du dernier
+passage et confronte la production au manifeste : conforme, ou dérive détaillée (modifiés depuis,
+absents, réapparus), sans rien écrire.
 
 Les manifestes sont lus une fois, en lectures parallèles bornées, et partagés entre l'historique
 et le tableau de bord (cache de 30 secondes, invalidé après chaque passage réel) : passer d'un
@@ -363,6 +384,24 @@ rapprocher de la suppression d'orphelins. La limite est dite dans l'écran même
 dynamiquement par le code (chaîne concaténée, configuration IIS, rewrite) ne peut pas être vu ;
 zéro mention n'est pas une preuve, c'est une forte présomption. L'index se périme tout seul dès
 qu'un contenu change (analyse, éditeur, mise en production) et se reconstruit d'un clic.
+
+## Frise chronologique d'un fichier
+
+Clic droit sur un fichier, « Frise chronologique » (aussi depuis l'en-tête de la comparaison, et
+d'un clic sur les fichiers chauds du tableau de bord) : l'histoire du fichier se déroule sur un
+rail vertical, du plus récent au plus ancien. Chaque événement est un fait écrit sur le disque :
+
+- un **passage en production** lu dans un manifeste : demande de travaux, sprint, auteur, action
+  (créé, remplacé, supprimé, restauré), lignes ajoutées et supprimées, commentaire du passage, et
+  le chemin de la copie conservée ;
+- une **version archivée** dont aucun manifeste ne parle (ancienne organisation) : elle figure
+  quand même, datée du fichier.
+
+En tête, le résumé : combien de passages, combien de versions conservées, premier et dernier
+mouvement. Le point de chaque événement porte sa couleur (vert : déploiement ; rouge :
+suppression ou échec ; gris : archive sans manifeste). Depuis l'analyse, un bouton enchaîne sur
+« Versions archivées » pour comparer ou restaurer. La frise ne devine rien : ce que l'outil n'a
+pas écrit (copie à la main, autre outil) ne peut pas y figurer, et l'écran le dit.
 
 ## Aperçu des binaires : icônes, images, sons, polices
 

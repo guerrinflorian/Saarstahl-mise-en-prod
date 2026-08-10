@@ -1,6 +1,6 @@
 {
   "name": "avmdf-deploy",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Comparaison des sources locales et de la production IIS, archivage AVMDF et mise en production assistée.",
   "main": "electron/main.js",

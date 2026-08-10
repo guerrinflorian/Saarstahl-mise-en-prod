@@ -27,6 +27,19 @@ const CONVENTION_MIXTE = 'mixte';
 const MOTIF_DEMANDE = /^AVMDF(\d+)$/i;
 const MOTIF_SPRINT = /^Sprint\s*(\d+)$/i;
 
+/**
+ * Sous-dossier où l'outil range SES fichiers dans un dossier de sprint :
+ * manifestes, récapitulatif, LISEZMOI. Le nom dit ce qu'il est, pour que
+ * quiconque parcourt les archives comprenne d'un coup d'œil que rien ici
+ * n'appartient à la demande de travaux. Les versions écrites avant la 2.0
+ * restent à la racine du sprint (`_deploiement_*.json`, `_recapitulatif.md`)
+ * et sont toujours lues.
+ */
+const DOSSIER_OUTIL = '_donnees-outil';
+
+/** Fichiers de l'outil restés à la racine d'un sprint (avant la 2.0). */
+const MOTIF_FICHIER_OUTIL = /^_(deploiement|restauration)_.*\.json$|^_recapitulatif\.md$/i;
+
 const LIBELLES_CONVENTION = {
   [CONVENTION_SPRINT]: 'sprints numérotés (Sprint1, Sprint2…)',
   [CONVENTION_SUFFIXE]: 'suffixe numéroté (AVMDF0000_1, _2…)',
@@ -120,8 +133,10 @@ async function inspecterDemande(cheminDemande, nomDemande) {
     };
   }
 
-  const sousDossiers = contenu.filter((e) => e.isDirectory()).map((e) => e.name);
-  const fichiersRacine = contenu.filter((e) => e.isFile() && !e.name.startsWith('_deploiement_')).length;
+  const sousDossiers = contenu
+    .filter((e) => e.isDirectory() && e.name.toLowerCase() !== DOSSIER_OUTIL)
+    .map((e) => e.name);
+  const fichiersRacine = contenu.filter((e) => e.isFile() && !MOTIF_FICHIER_OUTIL.test(e.name)).length;
 
   const numerosSprint = [];
   const numerosSuffixe = [];
@@ -258,14 +273,29 @@ function estSousRacine(chemin, racine) {
   return cible.startsWith(base + path.sep.toLowerCase()) || cible.startsWith(base + '\\') || cible.startsWith(base + '/');
 }
 
-/** Contenu d'un dossier de sprint, pour avertir avant d'y déposer des fichiers. */
+/**
+ * Contenu d'un dossier de sprint, pour avertir avant d'y déposer des fichiers.
+ *
+ * Les fichiers de l'outil (dossier `_donnees-outil`, et manifestes ou
+ * récapitulatif restés à la racine avant la 2.0) ne comptent ni dans
+ * `fichiers` ni dans `vide` : ce que l'avertissement mesure, ce sont les
+ * versions archivées déjà présentes, pas les traces de l'outil.
+ */
 async function inspecterSprint(cheminSprint) {
   try {
     const contenu = await fsp.readdir(cheminLong(cheminSprint), { withFileTypes: true });
-    const fichiers = contenu.filter((e) => e.isFile()).length;
-    const dossiers = contenu.filter((e) => e.isDirectory()).length;
-    const manifestes = contenu.filter((e) => e.isFile() && /^_deploiement_.*\.json$/i.test(e.name)).length;
-    return { existe: true, vide: contenu.length === 0, fichiers, dossiers, manifestes };
+    const fichiers = contenu.filter((e) => e.isFile() && !MOTIF_FICHIER_OUTIL.test(e.name)).length;
+    const dossiers = contenu.filter((e) => e.isDirectory() && e.name.toLowerCase() !== DOSSIER_OUTIL).length;
+    let manifestes = contenu.filter((e) => e.isFile() && /^_deploiement_.*\.json$/i.test(e.name)).length;
+    if (contenu.some((e) => e.isDirectory() && e.name.toLowerCase() === DOSSIER_OUTIL)) {
+      try {
+        const outil = await fsp.readdir(cheminLong(path.join(cheminSprint, DOSSIER_OUTIL)));
+        manifestes += outil.filter((n) => /^_deploiement_.*\.json$/i.test(n)).length;
+      } catch (err) {
+        /* dossier de l'outil illisible : le compte des manifestes reste partiel */
+      }
+    }
+    return { existe: true, vide: fichiers === 0 && dossiers === 0, fichiers, dossiers, manifestes };
   } catch (err) {
     if (err.code === 'ENOENT') return { existe: false, vide: true, fichiers: 0, dossiers: 0, manifestes: 0 };
     return { existe: true, erreur: raisonLisible(err), vide: false, fichiers: 0, dossiers: 0, manifestes: 0 };
@@ -366,18 +396,24 @@ async function enrichirParLesManifestes(versions, cheminRelatif, concurrence, si
     dossiers,
     concurrence,
     async (dossier) => {
-      let noms = [];
-      try {
-        noms = (await fsp.readdir(cheminLong(dossier))).filter((n) =>
-          /^_(deploiement|restauration)_.*\.json$/i.test(n)
-        );
-      } catch (err) {
-        return;
-      }
-      const entrees = [];
-      for (const nom of noms) {
+      // Les manifestes vivent dans `_donnees-outil` depuis la 2.0, à la
+      // racine du sprint avant : les deux emplacements sont lus.
+      const chemins = [];
+      for (const emplacement of [dossier, path.join(dossier, DOSSIER_OUTIL)]) {
         try {
-          const manifeste = JSON.parse(await fsp.readFile(cheminLong(path.join(dossier, nom)), 'utf8'));
+          const noms = (await fsp.readdir(cheminLong(emplacement))).filter((n) =>
+            /^_(deploiement|restauration)_.*\.json$/i.test(n)
+          );
+          chemins.push(...noms.map((nom) => path.join(emplacement, nom)));
+        } catch (err) {
+          /* emplacement absent ou illisible : l'autre suffit */
+        }
+      }
+      if (!chemins.length) return;
+      const entrees = [];
+      for (const chemin of chemins) {
+        try {
+          const manifeste = JSON.parse(await fsp.readFile(cheminLong(chemin), 'utf8'));
           const fichier = (manifeste.fichiers || []).find(
             (f) => String(f.chemin || '').toLowerCase() === cheminRelatif.toLowerCase()
           );
@@ -387,7 +423,7 @@ async function enrichirParLesManifestes(versions, cheminRelatif, concurrence, si
               auteur: manifeste.auteur,
               action: fichier.action,
               simulation: Boolean(manifeste.simulation),
-              manifeste: path.join(dossier, nom)
+              manifeste: chemin
             });
           }
         } catch (err) {
@@ -417,6 +453,8 @@ module.exports = {
   CONVENTION_HISTORIQUE,
   CONVENTION_VIDE,
   CONVENTION_MIXTE,
+  DOSSIER_OUTIL,
+  MOTIF_FICHIER_OUTIL,
   LIBELLES_CONVENTION,
   normaliserDemande,
   listerDemandes,
