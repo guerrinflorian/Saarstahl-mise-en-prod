@@ -70,6 +70,15 @@ contextBridge.exposeInMainWorld('avmdf', {
     surProgression: (rappel) => abonner('recherche:progression', rappel)
   },
 
+  references: {
+    /** Construit l'index « qui utilise ce fichier » sur la dernière analyse. */
+    analyser: () => ipcRenderer.invoke('references:analyser'),
+    annuler: () => ipcRenderer.invoke('references:annuler'),
+    /** Références d'un fichier : qui l'utilise, et ce qu'il utilise. */
+    fichier: (cle) => ipcRenderer.invoke('references:fichier', { cle }),
+    surProgression: (rappel) => abonner('references:progression', rappel)
+  },
+
   fichier: {
     /** Comparaison ligne à ligne d'un fichier de la dernière analyse. */
     diff: (cle, options = {}) =>

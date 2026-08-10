@@ -16,6 +16,7 @@ import { TableauDeBord } from './components/TableauDeBord.js';
 import { Aide } from './components/Aide.js';
 import { Bienvenue } from './components/Bienvenue.js';
 import { VersionsFichier } from './components/VersionsFichier.js';
+import { ReferencesFichier } from './components/ReferencesFichier.js';
 import { EditeurFichier } from './components/EditeurFichier.js';
 import { PaletteFichiers } from './components/PaletteFichiers.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
@@ -86,6 +87,11 @@ function App() {
   const [selection, setSelection] = useState(() => new Set());
   const [fichierActif, setFichierActif] = useState(null);
   const [diff, setDiff] = useState({ etat: 'vide' });
+
+  // Index des références (« qui utilise ce fichier ») : construit à la
+  // demande, badges dans l'arbre une fois prêt, détail par fichier en modale.
+  const [references, setReferences] = useState({ etat: 'aucune', compteurs: null, avancement: null });
+  const [referencesDe, setReferencesDe] = useState(null);
 
   const [destination, setDestination] = useState(null);
   // L'archivage AVMDF est le comportement normal. Le décocher est un choix
@@ -176,10 +182,20 @@ function App() {
       ),
       window.avmdf.deploiement.surProgression((avancement) =>
         setDeploiement((precedent) => (precedent ? { ...precedent, progression: avancement } : precedent))
+      ),
+      window.avmdf.references.surProgression((avancement) =>
+        setReferences((precedent) => (precedent.etat === 'encours' ? { ...precedent, avancement } : precedent))
       )
     ];
     return () => desabonnements.forEach((f) => f());
   }, []);
+
+  // L'index des références décrit des contenus : toute nouvelle analyse, toute
+  // édition et tout passage le périment, badges compris.
+  useEffect(() => {
+    setReferences({ etat: 'aucune', compteurs: null, avancement: null });
+    setReferencesDe(null);
+  }, [analyse.resultat]);
 
   // -- Projet courant -------------------------------------------------------
   const projet = useMemo(() => {
@@ -421,6 +437,45 @@ function App() {
     });
   }, [fichiersFiltres, operation, resumeSelection, notifier]);
 
+  /** Construit l'index des références et affiche les badges dans l'arbre. */
+  const analyserReferences = useCallback(async () => {
+    if (!analyse.resultat) return null;
+    setReferences({ etat: 'encours', compteurs: null, avancement: null });
+    const reponse = await window.avmdf.references.analyser();
+    if (!reponse.ok || reponse.annule) {
+      setReferences({ etat: 'aucune', compteurs: null, avancement: null });
+      if (!reponse.ok) notifierEchec(reponse, 'Analyse des références impossible.');
+      else notifier({ type: 'info', titre: 'Analyse des références annulée.' });
+      return null;
+    }
+    const compteurs = new Map(reponse.compteurs);
+    setReferences({ etat: 'pret', compteurs, avancement: null });
+    notifier({
+      type: 'succes',
+      titre: 'Références analysées.',
+      texte:
+        formaterNombre(reponse.examines) +
+        ' fichier(s) lus en ' +
+        (reponse.dureeMs / 1000).toFixed(1) +
+        ' s. Le nombre d\'utilisations s\'affiche à côté de chaque fichier ; clic droit puis « Voir les références » pour le détail.',
+      duree: 7000
+    });
+    return compteurs;
+  }, [analyse.resultat, notifier, notifierEchec]);
+
+  /** Ouvre le détail des références d'un fichier, en construisant l'index au besoin. */
+  const ouvrirReferences = useCallback(
+    async (noeud) => {
+      if (references.etat === 'encours') return;
+      if (references.etat !== 'pret') {
+        const compteurs = await analyserReferences();
+        if (!compteurs) return;
+      }
+      setReferencesDe({ cle: noeud.cle, chemin: noeud.chemin });
+    },
+    [references.etat, analyserReferences]
+  );
+
   /** Menu contextuel de l'arborescence : les fichiers comme les dossiers. */
   const actionSurNoeud = useCallback(
     async (action, noeud) => {
@@ -493,6 +548,10 @@ function App() {
         setVersionsDe({ cle: noeud.cle, chemin: noeud.chemin });
         return;
       }
+      if (action === 'references') {
+        ouvrirReferences(noeud);
+        return;
+      }
       if (action === 'modifier') {
         setEditeurDe({ cle: noeud.cle, chemin: noeud.chemin });
         return;
@@ -551,7 +610,7 @@ function App() {
         notifierEchec(reponse, dansExplorateur ? 'Affichage impossible.' : 'Ouverture impossible.');
       }
     },
-    [notifier, notifierEchec, fichierActif]
+    [notifier, notifierEchec, fichierActif, ouvrirReferences]
   );
 
   const ouvrirExterne = useCallback(
@@ -886,6 +945,8 @@ function App() {
           onAnalyser=${analyser}
           onAnnuler=${() => window.avmdf.analyse.annuler()}
           onNotifier=${notifier}
+          references=${references}
+          onReferences=${analyserReferences}
         />
 
         <div
@@ -980,6 +1041,21 @@ function App() {
             recents=${recents}
             onChoisir=${choisirFichier}
             onFermer=${() => setPaletteOuverte(false)}
+          />`
+        : null}
+
+      ${referencesDe
+        ? html`<${ReferencesFichier}
+            fichier=${referencesDe}
+            onFermer=${() => setReferencesDe(null)}
+            onEchec=${(reponse) => notifierEchec(reponse, 'Références indisponibles.')}
+            onChoisir=${(cle) => {
+              const cible = analyse.resultat && analyse.resultat.fichiers.find((f) => f.cle === cle);
+              if (cible) {
+                setReferencesDe(null);
+                choisirFichier(cible);
+              }
+            }}
           />`
         : null}
 

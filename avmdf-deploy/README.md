@@ -337,6 +337,33 @@ correspondances exactes passent devant les correspondances à trous, le nom du f
 lourd que le chemin, et `Entrée` ouvre la comparaison. Palette vide, les écarts s'affichent
 d'abord.
 
+## Références : qui utilise ce fichier
+
+Le bouton **Références** en tête du panneau de gauche (ou clic droit sur un fichier, « Voir les
+références ») lit le contenu des fichiers texte de l'analyse, des deux côtés, et compte où chaque
+fichier est mentionné. Le nombre d'utilisations s'affiche alors à côté de chaque fichier, et le
+détail se consulte ligne par ligne : qui l'utilise, et ce qu'il utilise lui-même.
+
+Le principe est textuel et assumé comme tel : un fichier est « utilisé » là où son **nom** apparaît.
+Cela couvre d'un même geste les `<script src=…>`, les `<%@ Register Src=…>`, les `CodeFile=` et
+`MasterPageFile=`, les `url(…)` de CSS, les `Response.Redirect`, les appels AJAX, les images - toute
+syntaxe qui désigne un fichier par son nom. Pour les noms de composant (tirets ou camelCase), la
+forme balise est cherchée aussi : `vjc-Gestion-Code-Acier.js` est retrouvé dans un gabarit qui
+écrit `<vjc-gestion-code-acier>`, et `GestionCodeAcier.js` dans `<gestion-code-acier>`. Les
+frontières de nom sont respectées : `form.js` ne compte pas dans `platform.js`, ni
+`Recherche.aspx` dans `Recherche.aspx.vb`.
+
+Tous les noms sont cherchés en une seule passe par fichier (automate de correspondance multiple) :
+le coût est une lecture de chaque fichier texte, la même qu'une recherche dans le contenu. Un
+fichier « identique » n'est lu qu'une fois, un « modifié » l'est des deux côtés, et chaque mention
+porte son côté (local, production, ou les deux).
+
+Un fichier à **zéro référence** porte une pastille distincte : c'est le candidat au ménage, à
+rapprocher de la suppression d'orphelins. La limite est dite dans l'écran même : un nom construit
+dynamiquement par le code (chaîne concaténée, configuration IIS, rewrite) ne peut pas être vu ;
+zéro mention n'est pas une preuve, c'est une forte présomption. L'index se périme tout seul dès
+qu'un contenu change (analyse, éditeur, mise en production) et se reconstruit d'un clic.
+
 ## Interface
 
 - Les deux panneaux de l'analyse se redimensionnent à la souris (double-clic sur la poignée pour

@@ -854,6 +854,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               <button type="button" class="menu-entree">Réanalyser ce fichier</button>
               <button type="button" class="menu-entree">Copier le chemin relatif</button>
               <button type="button" class="menu-entree">Voir les versions archivées</button>
+              <button type="button" class="menu-entree">Voir les références</button>
               <div class="menu-separateur"></div>
               <button type="button" class="menu-entree">Masquer pour cette analyse</button>
               <button type="button" class="menu-entree danger">Exclure ce fichier</button>
@@ -878,6 +879,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               ['Copier le chemin relatif', 'Met le chemin dans le presse-papiers, prêt à coller dans un compte rendu.'],
               ['Voir les versions archivées', 'Toutes les versions « avant modification » de ce fichier retrouvées sous la racine AVMDF.'],
+              [
+                'Voir les références',
+                'Où ce fichier est utilisé (script src, registres ASPX, CodeFile, gabarits de composant, url() de CSS…) et ce qu\'il utilise lui-même, ligne par ligne, des deux côtés. L\'index se construit à la première demande, ou depuis le bouton « Références » en tête du panneau ; le nombre d\'utilisations s\'affiche alors à côté de chaque fichier, et un zéro désigne un candidat au ménage. La recherche porte sur le nom exact (et la forme balise des composants) : un nom construit dynamiquement par le code lui échappe.'
+              ],
               [
                 'Masquer pour cette analyse',
                 'Écarte le fichier de la vue sans toucher aux réglages. La barre de filtres affiche « N masqués · Rétablir », et la prochaine analyse repart au complet. Pour faire le tri dans le bruit d\'un jour, sans rien engager.'

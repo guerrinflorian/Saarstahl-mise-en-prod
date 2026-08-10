@@ -56,7 +56,9 @@ export function ArbreFichiers({
   onAction,
   onAnalyser,
   onAnnuler,
-  onNotifier
+  onNotifier,
+  references,
+  onReferences
 }) {
   const conteneur = useRef(null);
   const [defilement, setDefilement] = useState(0);
@@ -296,6 +298,25 @@ export function ArbreFichiers({
       <div class="panneau-entete">
         <span>Fichiers</span>
         <div style="flex:1"></div>
+        ${analyse.resultat && references
+          ? html`<button
+              type="button"
+              class=${'btn btn-mini' + (references.etat === 'pret' ? ' btn-marque' : '')}
+              title=${references.etat === 'encours'
+                ? 'Annuler l\'analyse des références'
+                : 'Lit le contenu des fichiers texte des deux côtés et compte où chaque fichier est utilisé : script src, registres ASPX, CodeFile, gabarits de composant, url() de CSS… Le compte s\'affiche à côté de chaque fichier ; clic droit, « Voir les références » pour le détail ligne à ligne.'}
+              onClick=${references.etat === 'encours' ? () => window.avmdf.references.annuler() : onReferences}
+            >
+              ${references.etat === 'encours'
+                ? 'Références… ' +
+                  (references.avancement
+                    ? formaterNombre(references.avancement.faits) + '/' + formaterNombre(references.avancement.total)
+                    : '')
+                : references.etat === 'pret'
+                  ? 'Références ✓'
+                  : 'Références'}
+            </button>`
+          : null}
         ${analyse.resultat
           ? html`<span class="attenue mono" title="Durée de la dernière analyse">
               ${formaterNombre(analyse.resultat.fichiers.length)} fichiers ·
@@ -414,6 +435,7 @@ export function ArbreFichiers({
                       selection=${selection}
                       etats=${etatsCoche}
                       nature=${natureSelection}
+                      refs=${references && references.etat === 'pret' ? references.compteurs : null}
                       onBasculerDossier=${basculerDossier}
                       onCase=${(majuscule) => cliqueCase(ligne.noeud, debut + position, majuscule)}
                       onChoisir=${onChoisir}
@@ -546,6 +568,7 @@ function Ligne({
   selection,
   etats,
   nature,
+  refs,
   onBasculerDossier,
   onCase,
   onChoisir,
@@ -643,6 +666,19 @@ function Ligne({
 
       <span class=${'ligne-nom' + (estDossier ? ' dossier' : '')}>${noeud.nom}</span>
 
+      ${!estDossier && refs
+        ? html`<span
+            class=${'ligne-refs mono' + ((refs.get(noeud.cle) || 0) === 0 ? ' zero' : '')}
+            title=${(refs.get(noeud.cle) || 0) === 0
+              ? 'Jamais référencé dans les fichiers analysés. Si rien ne le charge dynamiquement, c\'est un candidat au ménage.'
+              : 'Utilisé par ' +
+                formaterNombre(refs.get(noeud.cle)) +
+                ' fichier(s). Clic droit, « Voir les références » pour le détail.'}
+          >
+            ${formaterNombre(refs.get(noeud.cle) || 0)}
+          </span>`
+        : null}
+
       ${estDossier
         ? html`<span class="ligne-compteurs">
             ${STATUTS.filter((statut) => noeud.compteurs[statut] > 0).map(
@@ -700,6 +736,15 @@ function entreesFichier(fichier) {
     },
     { action: 'copier', libelle: 'Copier le chemin relatif', actif: true },
     { action: 'versions', libelle: 'Voir les versions archivées', actif: true },
+    {
+      action: 'references',
+      libelle: 'Voir les références',
+      titre:
+        'Où ce fichier est utilisé, et ce qu\'il utilise : script src, registres ASPX, CodeFile, ' +
+        'gabarits de composant, url() de CSS… Recherche du nom exact dans le contenu des fichiers ' +
+        'analysés, des deux côtés (l\'index se construit à la première demande).',
+      actif: true
+    },
     { separateur: true },
     {
       action: 'masquer',

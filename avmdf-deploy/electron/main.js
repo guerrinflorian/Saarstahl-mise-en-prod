@@ -24,6 +24,7 @@ const avmdf = require('./core/avmdf');
 const deploy = require('./core/deploy');
 const journal = require('./core/journal');
 const stats = require('./core/stats');
+const references = require('./core/references');
 
 const MODE_DEV = process.argv.includes('--dev');
 
@@ -40,6 +41,18 @@ let dernierScan = null;
 let rechercheEnCours = null;
 let operationEnCours = null;
 let preflightEnCours = null;
+
+/**
+ * Index des références (« qui utilise ce fichier »), construit à la demande
+ * sur la dernière analyse, invalidé dès qu'un contenu change : l'index décrit
+ * des fichiers, pas une analyse figée.
+ */
+let dernieresReferences = null;
+let referencesEnCours = null;
+
+function invaliderReferences() {
+  dernieresReferences = null;
+}
 
 /**
  * Dernier préflight réussi, réutilisable par l'exécution : entre la fenêtre de
@@ -422,6 +435,7 @@ function handlersAnalyse() {
 
       const ignores = [...local.ignores.map((i) => ({ ...i, cote: 'local' })), ...prod.ignores.map((i) => ({ ...i, cote: 'prod' })), ...resultat.incidents.map((i) => ({ ...i, cote: 'contenu' }))];
 
+      invaliderReferences();
       dernierScan = {
         cheminLocal,
         cheminProd,
@@ -533,6 +547,7 @@ function handlersAnalyse() {
     dernierScan.compteurs = compare.compter(dernierScan.fichiers);
     dernierScan.extensions = compare.inventaireExtensions(dernierScan.fichiers);
     cacheHash.enregistrer();
+    invaliderReferences();
 
     carnet.ecrire(
       'INFO',
@@ -906,6 +921,7 @@ function handlersDiff() {
     }
     dernierScan.compteurs = compare.compter(dernierScan.fichiers);
     cacheHash.enregistrer();
+    invaliderReferences();
 
     carnet.ecrire('INFO', `fichier local enregistré depuis l'éditeur : ${fichier.chemin} (${etat.size} octets)`);
 
@@ -1039,7 +1055,10 @@ function handlersDiff() {
       dossierSecours: path.join(app.getPath('userData'), 'manifestes-secours')
     });
     cacheHash.enregistrer();
-    if (!plan.simulation) invaliderManifestes();
+    if (!plan.simulation) {
+      invaliderManifestes();
+      invaliderReferences();
+    }
 
     if (resultat.manifeste.fichiers[0].erreur) {
       return Object.assign(
@@ -1107,6 +1126,65 @@ function fichierEditable(cle) {
     };
   }
   return { fichier };
+}
+
+// ---------------------------------------------------------------------------
+// Références : qui utilise ce fichier
+// ---------------------------------------------------------------------------
+
+function handlersReferences() {
+  gerer('references:analyser', () => exclusif('une analyse des références', async () => {
+    if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
+
+    const actuels = reglages();
+    const signal = fsindex.creerSignal();
+    referencesEnCours = signal;
+    const debut = Date.now();
+    try {
+      const index = await references.construireIndex(dernierScan.fichiers, {
+        extensionsTexte: actuels.extensionsTexte,
+        concurrence: actuels.options.lecturesSimultanees,
+        signal,
+        surProgression: (avancement) => emettre('references:progression', avancement)
+      });
+      if (signal.annule) return succes({ annule: true });
+
+      dernieresReferences = { scan: dernierScan, index, date: Date.now() };
+      carnet.ecrire(
+        'INFO',
+        `références analysées : ${index.examines} fichier(s) lus, ${index.ignores} ignoré(s), en ` +
+          `${Math.round((Date.now() - debut) / 1000)} s`
+      );
+      return succes({
+        annule: false,
+        compteurs: [...index.compteurs],
+        examines: index.examines,
+        ignores: index.ignores,
+        dureeMs: Date.now() - debut
+      });
+    } finally {
+      referencesEnCours = null;
+    }
+  }));
+
+  gerer('references:annuler', () => {
+    if (referencesEnCours) referencesEnCours.annuler();
+    return succes({});
+  });
+
+  gerer('references:fichier', (parametres) => {
+    if (!dernieresReferences || dernieresReferences.scan !== dernierScan) {
+      return echec(
+        'L\'index des références n\'est plus à jour.',
+        'Relancez l\'analyse des références : un contenu a changé depuis.'
+      );
+    }
+    const cle = String(parametres.cle || '');
+    return succes({
+      utilisePar: dernieresReferences.index.parCible.get(cle) || [],
+      utilise: dernieresReferences.index.parSource.get(cle) || []
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1370,7 +1448,10 @@ function handlersDeploiement() {
       });
       cacheHash.enregistrer();
       dernierPreflight = null;
-      if (!plan.simulation) invaliderManifestes();
+      if (!plan.simulation) {
+        invaliderManifestes();
+        invaliderReferences();
+      }
 
       const r = resultat.rapport;
       carnet.ecrire(
@@ -1806,6 +1887,7 @@ if (!app.requestSingleInstanceLock()) {
     handlersConfig();
     handlersAnalyse();
     handlersDiff();
+    handlersReferences();
     handlersAvmdf();
     handlersDeploiement();
     handlersHistorique();
