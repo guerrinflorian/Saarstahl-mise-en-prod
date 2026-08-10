@@ -210,9 +210,14 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onM
     () => (donnees && donnees.type === 'texte' ? langueDe(donnees.chemin) : null),
     [donnees]
   );
+  // Le résultat contient à la fois les jetons et les guides : les boutons
+  // « Couleur » et « Guides » ne font que choisir dedans, ils ne relancent pas
+  // la tokenisation (jusqu'à 1,5 Mo de texte passait de nouveau dans Prism à
+  // chaque clic). Seul le passage de « tout éteint » à « au moins un » calcule.
+  const colorationUtile = couleur || guidesVisibles;
   const coloration = useMemo(
-    () => (langue && (couleur || guidesVisibles) ? calculerColoration(donnees.groupes, langue.id) : null),
-    [donnees, langue, couleur, guidesVisibles]
+    () => (langue && colorationUtile ? calculerColoration(donnees.groupes, langue.id) : null),
+    [donnees, langue, colorationUtile]
   );
   const jetons = couleur && coloration ? coloration.jetons : null;
   const guides = guidesVisibles && coloration ? coloration.guides : null;

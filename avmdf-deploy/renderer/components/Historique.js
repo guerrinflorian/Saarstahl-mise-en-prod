@@ -118,7 +118,14 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
     onRapport(reponse);
   }
 
-  const numero = choisi ? String(choisi.demande || '').replace(/\D/g, '') : '';
+  // Sans chiffre dans le nom de la demande, la confirmation se fait sur le
+  // nombre d'opérations, comme à la mise en production : un champ vide ne doit
+  // jamais se valider seul.
+  const numeroDemande = choisi ? String(choisi.demande || '').replace(/\D/g, '') : '';
+  const aRecopier =
+    numeroDemande ||
+    String(restauration && restauration.operations ? restauration.operations.length : choisi ? choisi.fichiers.length : 0);
+  const libelleARecopier = numeroDemande ? 'le numéro de la demande' : 'le nombre de fichiers';
 
   // La recherche balaie tout ce qu'on peut avoir en tête en rouvrant
   // l'historique : le numéro de demande, le sprint, le projet, l'auteur, le
@@ -410,7 +417,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                 </div>
                 <div class="modale-pied">
                   <label for="confirmation-retour">
-                    Saisissez le numéro de la demande (<span class="mono">${numero}</span>) :
+                    Saisissez ${libelleARecopier} (<span class="mono">${aRecopier}</span>) :
                   </label>
                   <input
                     type="text"
@@ -427,7 +434,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                   <button
                     type="button"
                     class="btn"
-                    disabled=${!restauration.ok || saisie.trim() !== numero || occupe}
+                    disabled=${!restauration.ok || saisie.trim() !== aRecopier || occupe}
                     onClick=${() => lancerRetour(true)}
                   >
                     Simuler
@@ -435,7 +442,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                   <button
                     type="button"
                     class="btn btn-accent"
-                    disabled=${!restauration.ok || saisie.trim() !== numero || occupe}
+                    disabled=${!restauration.ok || saisie.trim() !== aRecopier || occupe}
                     onClick=${() => lancerRetour(false)}
                   >
                     ${occupe ? 'En cours…' : 'Revenir en arrière'}

@@ -123,7 +123,10 @@ function filtrer(fichiers, criteres, occurrences = null) {
   for (const fichier of fichiers) {
     if (!statuts[fichier.statut]) continue;
 
-    if (extensions && !extensions.has(fichier.extension || '')) continue;
+    // La clé « (sans extension) » est celle de l'inventaire (compare.js) : avec
+    // la chaîne vide, tout filtre d'extension actif faisait disparaître les
+    // fichiers sans extension, case cochée ou non.
+    if (extensions && !extensions.has(fichier.extension || '(sans extension)')) continue;
 
     if (dossier) {
       const cle = fichier.cle;
@@ -135,9 +138,13 @@ function filtrer(fichiers, criteres, occurrences = null) {
       if (!fichier.local || fichier.local.mtimeMs < depuis) continue;
     }
 
-    if (chercheContenu && !occurrences.has(fichier.cle)) continue;
-
-    if (filtre.actif && !chercheContenu && !filtre.teste(fichier.chemin)) continue;
+    if (chercheContenu) {
+      // « Chercher aussi dans le contenu » : la requête retient un fichier par
+      // son chemin ou par son contenu, elle n'éteint pas la recherche de chemin.
+      if (!occurrences.has(fichier.cle) && !(filtre.actif && filtre.teste(fichier.chemin))) continue;
+    } else if (filtre.actif && !filtre.teste(fichier.chemin)) {
+      continue;
+    }
 
     retenus.push(fichier);
   }

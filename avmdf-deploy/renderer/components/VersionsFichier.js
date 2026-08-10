@@ -90,7 +90,12 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
     onRapport(reponse);
   }
 
-  const numero = destination ? String(destination.demande || '').replace(/\D/g, '') : '';
+  // Même règle qu'à la mise en production : sans chiffre dans le nom de la
+  // demande, la confirmation se fait sur le nombre de fichiers (ici, un seul).
+  // Un champ vide ne doit jamais se valider seul.
+  const numeroDemande = destination ? String(destination.demande || '').replace(/\D/g, '') : '';
+  const aRecopier = numeroDemande || '1';
+  const libelleARecopier = numeroDemande ? 'le numéro de la demande' : 'le nombre de fichiers';
 
   return html`
     <div class="voile" role="dialog" aria-modal="true" aria-label="Versions archivées du fichier">
@@ -215,7 +220,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
                 </div>
                 <div class="modale-pied">
                   <label for="confirmation-version">
-                    Saisissez le numéro de la demande (<span class="mono">${numero}</span>) :
+                    Saisissez ${libelleARecopier} (<span class="mono">${aRecopier}</span>) :
                   </label>
                   <input
                     type="text"
@@ -234,7 +239,7 @@ export function VersionsFichier({ fichier, destination, simulation, onChoisirDes
                   <button
                     type="button"
                     class="btn btn-accent"
-                    disabled=${occupe || saisie.trim() !== numero}
+                    disabled=${occupe || saisie.trim() !== aRecopier}
                     onClick=${restaurer}
                   >
                     ${occupe ? 'En cours…' : simulation ? 'Simuler la remise en production' : 'Remettre en production'}

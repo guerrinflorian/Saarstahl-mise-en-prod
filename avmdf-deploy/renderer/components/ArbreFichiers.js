@@ -9,7 +9,7 @@ import {
   STATUTS,
   aplatir,
   estDeployable,
-  etatSelection,
+  etatsSelection,
   fichiersDe,
   formaterNombre
 } from './arborescence.js';
@@ -67,6 +67,24 @@ export function ArbreFichiers({
   const dernierIndexCoche = useRef(null);
 
   const lignes = useMemo(() => aplatir(arbre, ouverts), [arbre, ouverts]);
+
+  // Une seule passe sur l'arbre par changement de sélection : chaque ligne de
+  // dossier lit son état de coche dans la Map au lieu de retraverser sa branche.
+  const etatsCoche = useMemo(() => etatsSelection(arbre, selection), [arbre, selection]);
+
+  // Le défilement passe par requestAnimationFrame : un rendu par image au
+  // plus, pas un par événement de molette.
+  const defilementBrut = useRef(0);
+  const cadreDefilement = useRef(0);
+  function surDefilement(evenement) {
+    defilementBrut.current = evenement.target.scrollTop;
+    if (cadreDefilement.current) return;
+    cadreDefilement.current = requestAnimationFrame(() => {
+      cadreDefilement.current = 0;
+      setDefilement(defilementBrut.current);
+    });
+  }
+  useEffect(() => () => cancelAnimationFrame(cadreDefilement.current), []);
 
   useEffect(() => {
     const element = conteneur.current;
@@ -285,7 +303,7 @@ export function ArbreFichiers({
         tabindex="0"
         role="tree"
         aria-label="Écarts entre le local et la production"
-        onScroll=${(e) => setDefilement(e.target.scrollTop)}
+        onScroll=${surDefilement}
         onKeyDown=${surTouche}
       >
         ${!analyse.resultat && !enCours
@@ -351,6 +369,7 @@ export function ArbreFichiers({
                       actif=${ligne.noeud.cle === fichierActif}
                       curseur=${debut + position === curseur}
                       selection=${selection}
+                      etats=${etatsCoche}
                       onBasculerDossier=${basculerDossier}
                       onCase=${(majuscule) => cliqueCase(ligne.noeud, debut + position, majuscule)}
                       onChoisir=${onChoisir}
@@ -481,6 +500,7 @@ function Ligne({
   actif,
   curseur,
   selection,
+  etats,
   onBasculerDossier,
   onCase,
   onChoisir,
@@ -489,9 +509,14 @@ function Ligne({
 }) {
   const { noeud, profondeur } = ligne;
   const estDossier = noeud.type === 'dossier';
-  const etat = estDossier ? etatSelection(noeud, selection) : null;
+  const infos = estDossier ? etats.get(noeud.cle) : null;
+  const etat = infos ? infos.etat : null;
   const coche = estDossier ? etat === 'complet' : selection.has(noeud.cle);
-  const cochable = estDossier ? etat !== 'vide' || fichiersDe(noeud).some(estDeployable) : true;
+  // Un dossier se coche dès qu'il contient de quoi déployer ou de quoi
+  // supprimer ; un fichier « identique », lui, n'a rien à cocher.
+  const cochable = estDossier
+    ? Boolean(infos && infos.cochable)
+    : estDeployable(noeud) || noeud.statut === 'orphelin';
 
   const classes = ['ligne'];
   if (estDossier) classes.push('ligne-dossier');

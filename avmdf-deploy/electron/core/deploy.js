@@ -63,10 +63,39 @@ function probleme(niveau, code, message, conseil, fichiers) {
  * datait la version remplacée.
  */
 async function copierAvecDate(source, destination) {
-  await fsp.mkdir(cheminLong(path.dirname(destination)), { recursive: true });
-  await fsp.copyFile(cheminLong(source), cheminLong(destination));
+  await copierAtomique(source, destination);
   const etat = await fsp.stat(cheminLong(source));
   await fsp.utimes(cheminLong(destination), etat.atime, etat.mtime);
+}
+
+/**
+ * Copie en deux temps : fichier temporaire voisin, puis renommage par-dessus la
+ * cible. Un processus tué ou un partage qui tombe en pleine copie ne peut ainsi
+ * laisser ni archive tronquée qui passerait ensuite pour complète, ni fichier
+ * de production à moitié écrit.
+ */
+async function copierAtomique(source, destination) {
+  await fsp.mkdir(cheminLong(path.dirname(destination)), { recursive: true });
+  const temporaire = destination + '.avmdf-tmp';
+  await fsp.copyFile(cheminLong(source), cheminLong(temporaire));
+  try {
+    await fsp.rename(cheminLong(temporaire), cheminLong(destination));
+  } catch (err) {
+    await fsp.unlink(cheminLong(temporaire)).catch(() => {});
+    throw err;
+  }
+}
+
+/** Même geste pour un contenu en mémoire : le manifeste ne doit jamais être tronqué. */
+async function ecrireAtomique(chemin, contenu) {
+  const temporaire = chemin + '.avmdf-tmp';
+  await fsp.writeFile(cheminLong(temporaire), contenu, 'utf8');
+  try {
+    await fsp.rename(cheminLong(temporaire), cheminLong(chemin));
+  } catch (err) {
+    await fsp.unlink(cheminLong(temporaire)).catch(() => {});
+    throw err;
+  }
 }
 
 /**
@@ -81,18 +110,25 @@ async function copierAvecDate(source, destination) {
  * puis sur l'empreinte, jamais sur la date.
  */
 async function copierVersProduction(source, destination) {
-  await fsp.mkdir(cheminLong(path.dirname(destination)), { recursive: true });
-  await fsp.copyFile(cheminLong(source), cheminLong(destination));
+  await copierAtomique(source, destination);
   const maintenant = new Date();
   await fsp.utimes(cheminLong(destination), maintenant, maintenant);
 }
 
+/**
+ * Le fichier existe-t-il ? Seul `ENOENT` vaut « non » : toute autre erreur
+ * (droits, partage qui ne répond plus, E/S) est propagée. Conclure « absent »
+ * sur un partage injoignable ferait sauter l'archivage et écraser la
+ * production sans copie de sauvegarde - chaque appelant décide quoi faire de
+ * l'erreur, jamais elle ne se déguise en absence.
+ */
 async function existe(chemin) {
   try {
     await fsp.access(cheminLong(chemin));
     return true;
   } catch (err) {
-    return false;
+    if (err && err.code === 'ENOENT') return false;
+    throw err;
   }
 }
 
@@ -331,6 +367,7 @@ async function preflight(plan, options = {}) {
   const disparus = [];
   const obstacles = creerRegistreObstacles();
   const concurrents = [];
+  const apparus = [];
   const tailleChangee = [];
   let faits = 0;
 
@@ -355,7 +392,16 @@ async function preflight(plan, options = {}) {
       const obstacle = await obstacleEcriture(cheminProd);
       if (obstacle) obstacles.noter(obstacle.cause, obstacle.code, fichier.chemin);
 
-      if (await existe(cheminProd)) {
+      let presentEnProd = false;
+      try {
+        presentEnProd = await existe(cheminProd);
+      } catch (err) {
+        // Le partage ne répond pas pour ce fichier : impossible de savoir s'il
+        // existe, donc impossible de garantir l'archivage. Bloquant.
+        if (!obstacle) obstacles.noter(CAUSE_ILLISIBLE, err.code || 'inconnu', fichier.chemin);
+      }
+
+      if (presentEnProd) {
         try {
           const etat = await fsp.stat(cheminLong(cheminProd));
           const hashActuel = await hashFichier(cheminProd);
@@ -372,6 +418,11 @@ async function preflight(plan, options = {}) {
             if (memeHash === false || (memeHash === null && !memeTailleEtDate)) {
               concurrents.push(fichier.chemin);
             }
+          } else if (plan.operation !== OPERATION_SUPPRESSION) {
+            // L'analyse donnait ce fichier pour nouveau : quelqu'un l'a créé en
+            // production depuis. L'écraser sans l'avoir comparé serait un
+            // écrasement aveugle, pas une création.
+            apparus.push(fichier.chemin);
           }
         } catch (err) {
           // Le fichier existe mais ne se laisse ni mesurer ni lire : ce n'est
@@ -411,6 +462,17 @@ async function preflight(plan, options = {}) {
       )
     );
   }
+  if (apparus.length) {
+    problemes.push(
+      probleme(
+        BLOQUANT,
+        'concurrence',
+        `${apparus.length} fichier(s) donnés pour nouveaux existent désormais en production.`,
+        'Quelqu\'un d\'autre les y a déposés depuis votre analyse. Relancez une analyse pour les comparer avant d\'écraser quoi que ce soit.',
+        apparus
+      )
+    );
+  }
   if (tailleChangee.length) {
     problemes.push(
       probleme(
@@ -427,7 +489,12 @@ async function preflight(plan, options = {}) {
   if (plan.archiver === false && plan.operation !== OPERATION_SUPPRESSION) {
     const remplaces = [];
     for (const fichier of plan.fichiers) {
-      if (await existe(joindreRelatif(plan.racineProd, fichier.chemin))) remplaces.push(fichier.chemin);
+      try {
+        if (await existe(joindreRelatif(plan.racineProd, fichier.chemin))) remplaces.push(fichier.chemin);
+      } catch (err) {
+        // Injoignable : mieux vaut prévenir d'un écrasement possible que le taire.
+        remplaces.push(fichier.chemin);
+      }
     }
     if (remplaces.length) {
       problemes.push(
@@ -469,13 +536,26 @@ async function preflight(plan, options = {}) {
     );
   }
 
-  // 7. Espace disque
+  // 7. Espace disque. La production reçoit les tailles locales, les archives
+  //    reçoivent les tailles de production. `statfs` n'existe qu'à partir de
+  //    Node 18 : sur Electron 22 (Node 16, le poste type), la mesure est
+  //    impossible - on le dit, parce qu'un contrôle qui se tait ressemble à un
+  //    feu vert.
   const octetsNecessaires = plan.fichiers.reduce(
-    (total, fichier) => total + (fichier.local ? fichier.local.taille : 0) + (fichier.prod ? fichier.prod.taille : 0),
+    (total, fichier) => total + (fichier.local ? fichier.local.taille : 0),
     0
   );
   const { mesurable, octets: espace } = await espaceDisponible(plan.racineProd);
-  if (espace !== null && espace < octetsNecessaires * 1.2) {
+  if (!mesurable) {
+    problemes.push(
+      probleme(
+        AVERTISSEMENT,
+        'espace-non-mesurable',
+        `L'espace disponible en production ne peut pas être mesuré sur ce poste (${formaterOctets(octetsNecessaires)} à écrire).`,
+        'La version de Node embarquée ne sait pas interroger le volume. Vérifiez à l\'œil qu\'il reste de la place sur le partage.'
+      )
+    );
+  } else if (espace !== null && espace < octetsNecessaires * 1.2) {
     problemes.push(
       probleme(
         BLOQUANT,
@@ -484,7 +564,7 @@ async function preflight(plan, options = {}) {
         'Libérez de la place sur le serveur avant de déployer.'
       )
     );
-  } else if (espace === null && mesurable) {
+  } else if (espace === null) {
     problemes.push(
       probleme(
         AVERTISSEMENT,
@@ -493,6 +573,23 @@ async function preflight(plan, options = {}) {
         'Vérifiez à l\'œil qu\'il reste de la place sur le partage.'
       )
     );
+  }
+  if (avecArchives && mesurable) {
+    const octetsArchives = plan.fichiers.reduce(
+      (total, fichier) => total + (fichier.prod ? fichier.prod.taille : 0),
+      0
+    );
+    const archives = await espaceDisponible(plan.racineAvmdf);
+    if (archives.octets !== null && archives.octets < octetsArchives * 1.2) {
+      problemes.push(
+        probleme(
+          BLOQUANT,
+          'espace',
+          `Espace insuffisant sur le dossier d'archives : ${formaterOctets(archives.octets)} disponibles pour ${formaterOctets(octetsArchives)} à archiver.`,
+          'Libérez de la place sous ' + plan.racineAvmdf + ' avant de déployer.'
+        )
+      );
+    }
   }
 
   const bloquants = problemes.filter((p) => p.niveau === BLOQUANT);
@@ -505,8 +602,12 @@ async function verifierEcriture(dossierSouhaite, racine) {
   let dossier = dossierSouhaite;
   // Le dossier de sprint n'existe pas forcément encore : on remonte au premier
   // ancêtre existant, sans jamais sortir de la racine.
-  while (!(await existe(dossier)) && estSousRacine(dossier, racine) && dossier !== path.dirname(dossier)) {
-    dossier = path.dirname(dossier);
+  try {
+    while (!(await existe(dossier)) && estSousRacine(dossier, racine) && dossier !== path.dirname(dossier)) {
+      dossier = path.dirname(dossier);
+    }
+  } catch (err) {
+    return { ok: false, dossier, raison: raisonLisible(err) };
   }
   const temoin = path.join(dossier, `.avmdf-test-${Date.now()}`);
   try {
@@ -571,20 +672,25 @@ async function executer(plan, options = {}) {
     surProgression = null,
     extensionsTexte = [],
     ignorerEspaces = false,
-    invaliderCache = null
+    invaliderCache = null,
+    etatsProd = null,
+    dossierSecours = null
   } = options;
 
   const simulation = Boolean(plan.simulation);
   const debut = new Date();
   const resultats = [];
   let appOfflineDepose = false;
+  let etatAppOffline = null;
 
   if (!simulation && plan.dossierSauvegarde) {
     await fsp.mkdir(cheminLong(plan.dossierSauvegarde), { recursive: true });
   }
 
   if (plan.appOffline && plan.appOffline.actif) {
-    appOfflineDepose = await deposerAppOffline(plan, simulation);
+    const depot = await deposerAppOffline(plan, simulation);
+    etatAppOffline = { depose: depot.ok, erreurDepot: depot.erreur, retire: null, erreurRetrait: null };
+    appOfflineDepose = depot.ok;
   }
 
   try {
@@ -593,13 +699,19 @@ async function executer(plan, options = {}) {
     for (let index = 0; index < plan.fichiers.length; index += 1) {
       if (signal.annule) break;
       const fichier = plan.fichiers[index];
-      resultats.push(await traiterFichier(fichier, plan, { simulation, extensionsTexte, ignorerEspaces, invaliderCache }));
+      resultats.push(
+        await traiterFichier(fichier, plan, { simulation, extensionsTexte, ignorerEspaces, invaliderCache, etatsProd })
+      );
       if (surProgression) {
         surProgression({ phase: 'copie', faits: index + 1, total: plan.fichiers.length, chemin: fichier.chemin });
       }
     }
   } finally {
-    if (appOfflineDepose) await retirerAppOffline(plan, simulation);
+    if (appOfflineDepose) {
+      const retrait = await retirerAppOffline(plan, simulation);
+      etatAppOffline.retire = retrait.ok;
+      etatAppOffline.erreurRetrait = retrait.erreur;
+    }
   }
 
   const manifeste = {
@@ -618,25 +730,67 @@ async function executer(plan, options = {}) {
     archivage: plan.archiver !== false,
     simulation,
     annule: signal.annule,
+    appOffline: etatAppOffline,
     fichiers: resultats
   };
 
   // Sans dossier de sauvegarde, il n'y a nulle part où déposer le manifeste :
   // le passage ne laisse de trace que dans le journal, et le rapport le dit.
-  const chemins = { manifeste: null, recapitulatif: null };
-  if (!simulation && plan.dossierSauvegarde) {
-    const suffixe = horodatageFichier(debut);
-    chemins.manifeste = path.join(plan.dossierSauvegarde, `_deploiement_${suffixe}.json`);
-    chemins.recapitulatif = path.join(plan.dossierSauvegarde, '_recapitulatif.md');
-    await fsp.writeFile(cheminLong(chemins.manifeste), JSON.stringify(manifeste, null, 2) + '\n', 'utf8');
-    await ajouterAuRecapitulatif(chemins.recapitulatif, manifeste);
-  }
+  const chemins = await deposerTraces(manifeste, plan.dossierSauvegarde, `_deploiement_${horodatageFichier(debut)}.json`, {
+    simulation,
+    dossierSecours
+  });
 
   return { manifeste, chemins, rapport: resumer(manifeste) };
 }
 
+/**
+ * Dépose le manifeste et complète le récapitulatif dans le dossier de sprint.
+ *
+ * Le manifeste est la seule preuve de ce qui vient d'être écrit : il part en
+ * deux temps (fichier temporaire puis renommage) et un échec ne se perd jamais
+ * en silence. Si le partage refuse, une copie de secours part dans
+ * `dossierSecours` (sous le profil local du poste) et l'erreur est portée par
+ * `chemins.erreurEcriture`, donc par le rapport et le journal.
+ */
+async function deposerTraces(manifeste, dossier, nomManifeste, options = {}) {
+  const { simulation = false, dossierSecours = null } = options;
+  const chemins = { manifeste: null, recapitulatif: null, manifesteSecours: null, erreurEcriture: null };
+  if (simulation || !dossier) return chemins;
+
+  const contenu = JSON.stringify(manifeste, null, 2) + '\n';
+  const cible = path.join(dossier, nomManifeste);
+  try {
+    await ecrireAtomique(cible, contenu);
+    chemins.manifeste = cible;
+  } catch (err) {
+    chemins.erreurEcriture = `manifeste non écrit dans le sprint (${raisonLisible(err)} - ${err.message})`;
+    if (dossierSecours) {
+      try {
+        await fsp.mkdir(cheminLong(dossierSecours), { recursive: true });
+        const secours = path.join(dossierSecours, nomManifeste);
+        await ecrireAtomique(secours, contenu);
+        chemins.manifesteSecours = secours;
+      } catch (autre) {
+        chemins.erreurEcriture += ` ; copie de secours impossible (${raisonLisible(autre)})`;
+      }
+    }
+  }
+
+  try {
+    const recapitulatif = path.join(dossier, '_recapitulatif.md');
+    await ajouterAuRecapitulatif(recapitulatif, manifeste);
+    chemins.recapitulatif = recapitulatif;
+  } catch (err) {
+    const message = `récapitulatif non complété (${raisonLisible(err)})`;
+    chemins.erreurEcriture = chemins.erreurEcriture ? `${chemins.erreurEcriture} ; ${message}` : message;
+  }
+
+  return chemins;
+}
+
 async function traiterFichier(fichier, plan, contexte) {
-  const { simulation, extensionsTexte, ignorerEspaces, invaliderCache } = contexte;
+  const { simulation, extensionsTexte, ignorerEspaces, invaliderCache, etatsProd } = contexte;
   // Pas de dossier de sauvegarde, pas d'archivage : l'invariant tient quoi que
   // dise le drapeau.
   const archiver = plan.archiver !== false && Boolean(plan.dossierSauvegarde);
@@ -676,9 +830,18 @@ async function traiterFichier(fichier, plan, contexte) {
     //    même s'il ne peut plus le rendre.
     if (presentEnProd) {
       if (!suppression) entree.action = ACTION_REMPLACEMENT;
-      const etatProd = await fsp.stat(cheminLong(cheminProd));
-      entree.tailleAvant = etatProd.size;
-      entree.hashAvant = await hashFichier(cheminProd);
+      // Le préflight vient de relever taille et empreinte de chaque destination,
+      // et il bloque à la moindre modification concurrente : inutile de relire
+      // tout le fichier sur le partage une troisième fois.
+      const connu = etatsProd ? etatsProd.get(fichier.cle || fichier.chemin.toLowerCase()) : null;
+      if (connu && connu.hash) {
+        entree.tailleAvant = connu.taille;
+        entree.hashAvant = connu.hash;
+      } else {
+        const etatProd = await fsp.stat(cheminLong(cheminProd));
+        entree.tailleAvant = etatProd.size;
+        entree.hashAvant = await hashFichier(cheminProd);
+      }
 
       if (archiver) {
         if (!estSousRacine(cheminSauvegarde, plan.racineAvmdf)) {
@@ -761,27 +924,39 @@ async function compterLignesFichiers(cheminGauche, cheminDroite, options) {
 
 async function deposerAppOffline(plan, simulation) {
   const destination = path.join(plan.racineProd, NOM_APP_OFFLINE);
-  if (!estSousRacine(destination, plan.racineProd)) return false;
-  if (simulation) return true;
+  if (!estSousRacine(destination, plan.racineProd)) {
+    return { ok: false, erreur: 'destination hors de la racine de production' };
+  }
+  if (simulation) return { ok: true, erreur: null };
   try {
     await fsp.writeFile(cheminLong(destination), plan.appOffline.contenu, 'utf8');
-    return true;
+    return { ok: true, erreur: null };
   } catch (err) {
-    process.emitWarning(`app_offline.htm non déposé : ${err.message}`);
-    return false;
+    return { ok: false, erreur: `${raisonLisible(err)} - ${err.message}` };
   }
 }
 
+/**
+ * Retire le fichier d'attente. C'est le geste qui remet le site en ligne : un
+ * échec ici laisserait la production hors service, donc on réessaie, et le
+ * résultat remonte jusqu'au manifeste et au rapport au lieu de s'évaporer dans
+ * un avertissement de console.
+ */
 async function retirerAppOffline(plan, simulation) {
-  if (simulation) return;
+  if (simulation) return { ok: true, erreur: null };
   const destination = path.join(plan.racineProd, NOM_APP_OFFLINE);
-  try {
-    await fsp.unlink(cheminLong(destination));
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      process.emitWarning(`app_offline.htm non retiré (${err.message}) : retirez-le à la main, le site reste hors service.`);
+  let derniere = null;
+  for (let essai = 0; essai < 3; essai += 1) {
+    try {
+      await fsp.unlink(cheminLong(destination));
+      return { ok: true, erreur: null };
+    } catch (err) {
+      if (err.code === 'ENOENT') return { ok: true, erreur: null };
+      derniere = err;
+      await new Promise((reprendre) => setTimeout(reprendre, 500));
     }
   }
+  return { ok: false, erreur: `${raisonLisible(derniere)} - ${derniere.message}` };
 }
 
 function resumer(manifeste) {
@@ -864,8 +1039,12 @@ function libelleOperation(manifeste) {
 
 async function ajouterAuRecapitulatif(chemin, manifeste) {
   let entete = '';
-  if (!(await existe(chemin))) {
-    entete = `# Récapitulatif - ${manifeste.demande} / ${manifeste.sprint}\n\n`;
+  try {
+    if (!(await existe(chemin))) {
+      entete = `# Récapitulatif - ${manifeste.demande} / ${manifeste.sprint}\n\n`;
+    }
+  } catch (err) {
+    entete = '';
   }
   await fsp.appendFile(cheminLong(chemin), entete + redigerRecapitulatif(manifeste) + '\n', 'utf8');
 }
@@ -878,34 +1057,53 @@ async function ajouterAuRecapitulatif(chemin, manifeste) {
  * Retrouve tous les manifestes présents sous la racine d'archives, toutes demandes
  * confondus. On ne descend que de deux niveaux : demande puis sprint.
  */
-async function listerManifestes(racineAvmdf) {
+async function listerManifestes(racineAvmdf, options = {}) {
+  const { concurrence = 6 } = options;
   const manifestes = [];
   const erreurs = [];
+  const aLire = [];
 
-  async function lireDossier(dossier, profondeur) {
+  async function inventorier(dossier, profondeur) {
     let contenu;
     try {
       contenu = await fsp.readdir(cheminLong(dossier), { withFileTypes: true });
     } catch (err) {
       erreurs.push(`${dossier} : ${raisonLisible(err)}`);
-      return;
+      return [];
     }
+    const sousDossiers = [];
     for (const element of contenu) {
       const chemin = path.join(dossier, element.name);
       if (element.isDirectory() && profondeur < 2) {
-        await lireDossier(chemin, profondeur + 1);
+        sousDossiers.push(chemin);
       } else if (element.isFile() && /^_(deploiement|restauration)_.*\.json$/i.test(element.name)) {
-        try {
-          const brut = JSON.parse(await fsp.readFile(cheminLong(chemin), 'utf8'));
-          manifestes.push({ chemin, ...brut, resume: resumer(brut) });
-        } catch (err) {
-          erreurs.push(`${chemin} : manifeste illisible (${err.message})`);
-        }
+        aLire.push(chemin);
       }
     }
+    return sousDossiers;
   }
 
-  await lireDossier(racineAvmdf, 0);
+  // Niveau par niveau (racine, demandes, sprints), en concurrence bornée : sur
+  // un partage à plusieurs centaines de demandes, la version séquentielle se
+  // comptait en dizaines de secondes.
+  let niveau = [racineAvmdf];
+  for (let profondeur = 0; profondeur < 3 && niveau.length; profondeur += 1) {
+    const suivant = [];
+    await pool(niveau, concurrence, async (dossier) => {
+      suivant.push(...(await inventorier(dossier, profondeur)));
+    });
+    niveau = suivant;
+  }
+
+  await pool(aLire, concurrence, async (chemin) => {
+    try {
+      const brut = JSON.parse(await fsp.readFile(cheminLong(chemin), 'utf8'));
+      manifestes.push({ chemin, ...brut, resume: resumer(brut) });
+    } catch (err) {
+      erreurs.push(`${chemin} : manifeste illisible (${err.message})`);
+    }
+  });
+
   manifestes.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   return { manifestes, erreurs };
 }
@@ -952,8 +1150,15 @@ async function verifierManifeste(manifeste, options = {}) {
       const cheminProd = joindreRelatif(manifeste.racineProd, fichier.chemin);
       const entree = { chemin: fichier.chemin, action: fichier.action, verdict: null, hashActuel: null };
 
-      const present = await existe(cheminProd);
-      if (fichier.action === ACTION_SUPPRESSION) {
+      let present = null;
+      try {
+        present = await existe(cheminProd);
+      } catch (err) {
+        present = null;
+      }
+      if (present === null) {
+        entree.verdict = VERDICT_INVERIFIABLE;
+      } else if (fichier.action === ACTION_SUPPRESSION) {
         entree.verdict = present ? VERDICT_REAPPARU : VERDICT_CONFORME;
       } else if (!present) {
         entree.verdict = VERDICT_ABSENT;
@@ -1004,6 +1209,29 @@ async function verifierManifeste(manifeste, options = {}) {
  */
 async function preparerRestauration(manifeste, options = {}) {
   const { concurrence = 6, signal = { annule: false } } = options;
+
+  // Deux cas où il n'y a rien à restaurer, à refuser avant le moindre calcul :
+  // sans ces gardes, un manifeste sans dossier de sauvegarde pouvait mener à
+  // des suppressions réelles suivies d'un plantage.
+  if (manifeste.simulation) {
+    const seul = probleme(
+      BLOQUANT,
+      'simulation',
+      'Ce manifeste est une simulation : rien n\'a été écrit, il n\'y a rien à restaurer.',
+      ''
+    );
+    return { operations: [], problemes: [seul], bloquants: [seul], avertissements: [], ok: false };
+  }
+  if (!manifeste.dossierSauvegarde) {
+    const seul = probleme(
+      BLOQUANT,
+      'sans-archive',
+      'Ce manifeste ne référence aucun dossier de sauvegarde : le retour arrière est impossible.',
+      'Ce passage a été fait sans archivage AVMDF. Le manifeste garde l\'empreinte des versions remplacées, à défaut de leur contenu.'
+    );
+    return { operations: [], problemes: [seul], bloquants: [seul], avertissements: [], ok: false };
+  }
+
   const operations = [];
   const problemes = [];
   const modifiesDepuis = [];
@@ -1022,15 +1250,15 @@ async function preparerRestauration(manifeste, options = {}) {
       const obstacle = await obstacleEcriture(cheminProd);
       if (obstacle) obstacles.noter(obstacle.cause, obstacle.code, fichier.chemin);
 
-      if (await existe(cheminProd)) {
-        try {
+      try {
+        if (await existe(cheminProd)) {
           const hashActuel = await hashFichier(cheminProd);
           if (fichier.hashApres && hashActuel !== fichier.hashApres) {
             modifiesDepuis.push(fichier.chemin);
           }
-        } catch (err) {
-          obstacles.noter(CAUSE_ILLISIBLE, err.code || 'inconnu', fichier.chemin);
         }
+      } catch (err) {
+        if (!obstacle) obstacles.noter(CAUSE_ILLISIBLE, err.code || 'inconnu', fichier.chemin);
       }
 
       if (fichier.action === ACTION_CREATION) {
@@ -1038,7 +1266,15 @@ async function preparerRestauration(manifeste, options = {}) {
         return;
       }
 
-      if (!cheminSauvegarde || !(await existe(cheminSauvegarde))) {
+      let sauvegardePresente = false;
+      try {
+        sauvegardePresente = Boolean(cheminSauvegarde) && (await existe(cheminSauvegarde));
+      } catch (err) {
+        // Archives injoignables : autant dire manquante, cela bloque la
+        // restauration au lieu de la lancer à moitié.
+        sauvegardePresente = false;
+      }
+      if (!sauvegardePresente) {
         sauvegardesManquantes.push(fichier.chemin);
         return;
       }
@@ -1116,8 +1352,19 @@ async function restaurer(manifeste, preparation, options = {}) {
     auteur = '',
     signal = { annule: false },
     surProgression = null,
-    invaliderCache = null
+    invaliderCache = null,
+    dossierSecours = null
   } = options;
+
+  // Mêmes gardes qu'à la préparation : sans elles, un manifeste sans dossier de
+  // sauvegarde exécutait ses suppressions puis plantait sur path.join(null, …),
+  // sans écrire le manifeste de restauration.
+  if (manifeste.simulation) {
+    throw new Error('ce manifeste est une simulation : rien n\'a été écrit, il n\'y a rien à restaurer');
+  }
+  if (!manifeste.dossierSauvegarde) {
+    throw new Error('ce manifeste ne référence aucun dossier de sauvegarde : le retour arrière est impossible');
+  }
 
   const debut = new Date();
   const resultats = [];
@@ -1186,14 +1433,12 @@ async function restaurer(manifeste, preparation, options = {}) {
     fichiers: resultats
   };
 
-  const chemins = { manifeste: null, recapitulatif: null };
-  if (!simulation) {
-    const suffixe = horodatageFichier(debut);
-    chemins.manifeste = path.join(manifeste.dossierSauvegarde, `_restauration_${suffixe}.json`);
-    chemins.recapitulatif = path.join(manifeste.dossierSauvegarde, '_recapitulatif.md');
-    await fsp.writeFile(cheminLong(chemins.manifeste), JSON.stringify(manifesteRestauration, null, 2) + '\n', 'utf8');
-    await ajouterAuRecapitulatif(chemins.recapitulatif, manifesteRestauration);
-  }
+  const chemins = await deposerTraces(
+    manifesteRestauration,
+    manifeste.dossierSauvegarde,
+    `_restauration_${horodatageFichier(debut)}.json`,
+    { simulation, dossierSecours }
+  );
 
   return { manifeste: manifesteRestauration, chemins, rapport: resumer(manifesteRestauration) };
 }
@@ -1292,14 +1537,13 @@ async function restaurerVersion(plan, options = {}) {
     fichiers: [entree]
   };
 
-  const chemins = { manifeste: null, recapitulatif: null };
+  let chemins = { manifeste: null, recapitulatif: null, manifesteSecours: null, erreurEcriture: null };
   if (!simulation && !entree.erreur) {
-    const suffixe = horodatageFichier(debut);
     await fsp.mkdir(cheminLong(plan.dossierSauvegarde), { recursive: true });
-    chemins.manifeste = path.join(plan.dossierSauvegarde, `_restauration_${suffixe}.json`);
-    chemins.recapitulatif = path.join(plan.dossierSauvegarde, '_recapitulatif.md');
-    await fsp.writeFile(cheminLong(chemins.manifeste), JSON.stringify(manifeste, null, 2) + '\n', 'utf8');
-    await ajouterAuRecapitulatif(chemins.recapitulatif, manifeste);
+    chemins = await deposerTraces(manifeste, plan.dossierSauvegarde, `_restauration_${horodatageFichier(debut)}.json`, {
+      simulation,
+      dossierSecours: options.dossierSecours || null
+    });
   }
 
   return { manifeste, chemins, rapport: resumer(manifeste), problemes };

@@ -186,6 +186,16 @@ archivage, rien n'est écrit du tout), mais ces manifestes-là restent lus et ma
 signale une archive héritée d'un passage précédent dans le même sprint ; `sansArchive` marque une
 entrée dont la version de production a été écrasée sans copie de sauvegarde.
 
+Depuis la 1.6.0, un champ `appOffline` (ou `null`) consigne le sort du fichier d'attente quand
+l'option est active : `depose`, `erreurDepot`, `retire`, `erreurRetrait`. Un retrait en échec est
+signalé en rouge dans le rapport et en ERREUR au journal : le site resté hors service ne passe
+plus inaperçu.
+
+Le manifeste s'écrit en deux temps (fichier temporaire puis renommage) : il ne peut pas exister
+tronqué. Si le partage refuse l'écriture alors que les fichiers sont déjà partis, une copie de
+secours part dans `%APPDATA%\avmdf-deploy\manifestes-secours` et le rapport le dit : le
+déroulé d'un passage réussi ne se perd jamais en silence.
+
 C'est ce fichier que relit l'écran Historique pour proposer le retour arrière. Un
 `_recapitulatif.md` lisible est complété dans le même dossier à chaque passage : c'est lui qu'on
 transmet pour la traçabilité.
@@ -227,6 +237,22 @@ production, fichiers déployés, lignes de code, retours arrière, échecs, acti
 derniers mois, répartition par projet et par auteur, fichiers les plus souvent déployés et
 activité récente. Les chiffres viennent du disque, pas d'une base : ce sont les traces réelles.
 Les simulations sont comptées à part et n'entrent dans aucun total.
+
+Les manifestes sont lus une fois, en lectures parallèles bornées, et partagés entre l'historique
+et le tableau de bord (cache de 30 secondes, invalidé après chaque passage réel) : passer d'un
+écran à l'autre ne relit plus tout le partage à chaque fois.
+
+## Contrôles préalables : ce qui a changé en 1.6.0
+
+- Un fichier donné pour « nouveau » qui existe désormais en production est **bloquant** :
+  quelqu'un l'y a déposé depuis l'analyse, il faut recomparer avant d'écraser.
+- Quand la mesure d'espace disque est impossible (Electron 22 embarque Node 16, qui ne sait pas
+  interroger le volume), l'avertissement le **dit**, avec le volume à écrire, au lieu de se
+  taire ; quand elle est possible, la racine des archives est mesurée en plus de la production.
+- Le préflight montré à la confirmation vaut pour l'exécution : si le plan et l'analyse n'ont pas
+  bougé (et moins de cinq minutes ont passé), l'exécution réutilise ses empreintes au lieu de
+  relire toute la production une deuxième puis une troisième fois. « Rejouer les contrôles » ou
+  toute attente prolongée refait un préflight complet.
 
 ## Précision sur les blancs
 
@@ -608,6 +634,18 @@ fichiers à conserver se traite en deux passages.
 
 - déployer sans avoir archivé la version écrasée, hors renoncement explicite tracé dans le
   manifeste (voir ci-dessus) ;
+- prendre un partage injoignable pour un fichier absent : seule une vraie absence (`ENOENT`)
+  autorise à conclure, toute autre erreur met le fichier en échec - un `Z:\` qui vacille ne peut
+  plus faire sauter l'archivage ;
+- laisser un fichier à moitié écrit : copies vers la production, archives et manifestes passent
+  par un fichier temporaire puis un renommage, une copie interrompue ne laisse rien qui puisse
+  passer pour complet ;
+- écraser un fichier donné pour « nouveau » qui existe désormais en production : quelqu'un l'y a
+  déposé depuis l'analyse, les contrôles préalables bloquent et demandent une nouvelle analyse ;
+- mener deux opérations lourdes en même temps : une analyse pendant une mise en production (ou
+  l'inverse) est refusée avec un message, pas subie ;
+- restaurer d'après un manifeste dont les racines sortent du périmètre configuré, ni d'après un
+  manifeste sans dossier de sauvegarde ou issu d'une simulation ;
 - écraser une archive déjà présente dans un sprint - la version « avant modification » d'origine
   gagne toujours, un second passage la conserve ;
 - ré-encoder, reformater ou normaliser les fins de ligne : la copie est binaire, octet pour octet ;
@@ -634,4 +672,5 @@ fichiers à conserver se traite en deux passages.
 |---|---|
 | `config.json` | réglages ; `config.precedent.json` garde la version d'avant |
 | `cache-hash.json` | empreintes connues, indexées sur chemin + taille + date |
+| `manifestes-secours\` | copies de secours des manifestes que le partage a refusé d'écrire |
 | `logs\journal-AAAA-MM-JJ.log` | une ligne par événement horodaté |

@@ -21,7 +21,7 @@ import { PaletteFichiers } from './components/PaletteFichiers.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { appliquerTheme, lireTheme } from './components/theme.js';
 import { joindreChemin } from './components/chemins.js';
-import { criteresParDefaut, filtrer, listerDossiers } from './components/filtres.js';
+import { criteresParDefaut, filtrer, listerDossiers, normaliser } from './components/filtres.js';
 import {
   LIBELLES,
   dossiersDePremierNiveau,
@@ -35,6 +35,18 @@ import {
 const html = htm.bind(h);
 
 const ANALYSE_INACTIVE = { etat: 'inactif', progression: null, resultat: null, acces: null };
+
+/**
+ * Le chemin normalisé (sans accents, en minuscules) est calculé une fois par
+ * analyse : la recherche l'utilisait à chaque frappe sur chacun des milliers
+ * de chemins, et cela se sentait au clavier.
+ */
+function preparerResultat(resultat) {
+  if (resultat && resultat.fichiers) {
+    for (const fichier of resultat.fichiers) fichier.cheminNormalise = normaliser(fichier.chemin);
+  }
+  return resultat;
+}
 
 function App() {
   const [etat, setEtat] = useState('chargement');
@@ -87,6 +99,10 @@ function App() {
 
   const { liste: notifications, notifier, notifierEchec, retirer, suspendre, reprendre } = useNotifications();
   const jeton = useRef(0);
+  // Jeton du dernier préflight : l'exécution le renvoie au processus principal,
+  // qui réutilise alors les contrôles déjà faits au lieu de relire toute la
+  // production une seconde fois.
+  const jetonPreflight = useRef(null);
 
   // -- Chargement initial ---------------------------------------------------
   useEffect(() => {
@@ -317,7 +333,7 @@ function App() {
       return;
     }
 
-    setAnalyse({ etat: 'termine', progression: null, resultat: reponse.resultat, acces: null });
+    setAnalyse({ etat: 'termine', progression: null, resultat: preparerResultat(reponse.resultat), acces: null });
     setOuverts(dossiersDePremierNiveau(reponse.resultat.arbre, 1));
 
     const compteurs = reponse.resultat.compteurs;
@@ -416,7 +432,7 @@ function App() {
           notifierEchec(reponse, 'Réanalyse impossible.');
           return;
         }
-        setAnalyse({ etat: 'termine', progression: null, resultat: reponse.analyse, acces: null });
+        setAnalyse({ etat: 'termine', progression: null, resultat: preparerResultat(reponse.analyse), acces: null });
         if (reponse.supprime || reponse.statut === 'identique') {
           setSelection((precedente) => {
             if (!precedente.has(noeud.cle)) return precedente;
@@ -613,6 +629,7 @@ function App() {
       notifierEchec(reponse, 'Contrôles préalables impossibles.');
       return;
     }
+    jetonPreflight.current = reponse.jeton || null;
     setDeploiement({
       etape: 'confirmation',
       controle: reponse.controle,
@@ -632,7 +649,8 @@ function App() {
       operation,
       archiver: archivageAvmdf,
       simulation: config.options.simulation,
-      commentaire: typeof commentaire === 'string' ? commentaire : ''
+      commentaire: typeof commentaire === 'string' ? commentaire : '',
+      jetonPreflight: jetonPreflight.current
     });
     if (!reponse.ok) {
       setDeploiement((precedent) =>
@@ -653,7 +671,7 @@ function App() {
       // « identique » et sort donc de la liste, ce qui a échoué y reste. La
       // comparaison ouverte, elle, décrit un écart qui n'existe plus.
       if (reponse.analyse) {
-        setAnalyse({ etat: 'termine', progression: null, resultat: reponse.analyse, acces: null });
+        setAnalyse({ etat: 'termine', progression: null, resultat: preparerResultat(reponse.analyse), acces: null });
         setFichierActif(null);
         setDiff({ etat: 'vide' });
       }
@@ -700,6 +718,7 @@ function App() {
       const lacher = () => {
         window.removeEventListener('pointermove', bouger);
         window.removeEventListener('pointerup', lacher);
+        window.removeEventListener('pointercancel', lacher);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       };
@@ -707,33 +726,48 @@ function App() {
       document.body.style.userSelect = 'none';
       window.addEventListener('pointermove', bouger);
       window.addEventListener('pointerup', lacher);
+      // Pointeur perdu hors de la fenêtre : sans cela, le curseur et la
+      // sélection restaient bloqués en mode redimensionnement.
+      window.addEventListener('pointercancel', lacher);
     },
     [largeurPanneau]
   );
 
   // -- Raccourcis clavier ---------------------------------------------------
+  // L'écouteur est posé une seule fois ; il lit l'état du moment dans une ref,
+  // au lieu d'être décroché puis raccroché à chaque rendu de l'application.
+  const refRaccourcis = useRef(null);
+  refRaccourcis.current = { vue, analyse, ecran, editeurDe, deploiement, resumeSelection, analyser, lancerPreflight };
   useEffect(() => {
     function surTouche(evenement) {
+      const r = refRaccourcis.current;
+      if (!r) return;
       const dansUnChamp = ['INPUT', 'TEXTAREA', 'SELECT'].includes(evenement.target.tagName);
       if (evenement.key === 'F5') {
         evenement.preventDefault();
-        if (vue === 'analyse' && analyse.etat !== 'encours' && !ecran && !editeurDe) analyser();
+        if (r.vue === 'analyse' && r.analyse.etat !== 'encours' && !r.ecran && !r.editeurDe) r.analyser();
       } else if (evenement.key.toLowerCase() === 'p' && (evenement.ctrlKey || evenement.metaKey)) {
         evenement.preventDefault();
-        if (vue === 'analyse' && analyse.resultat && !ecran && !editeurDe && !deploiement) {
+        if (r.vue === 'analyse' && r.analyse.resultat && !r.ecran && !r.editeurDe && !r.deploiement) {
           setPaletteOuverte(true);
         }
       } else if (evenement.key === 'Enter' && (evenement.ctrlKey || evenement.metaKey)) {
         if (dansUnChamp) return;
         evenement.preventDefault();
-        if (vue === 'analyse' && !ecran && !deploiement && !editeurDe && resumeSelection.deployables + resumeSelection.orphelins > 0) {
-          lancerPreflight();
+        if (
+          r.vue === 'analyse' &&
+          !r.ecran &&
+          !r.deploiement &&
+          !r.editeurDe &&
+          r.resumeSelection.deployables + r.resumeSelection.orphelins > 0
+        ) {
+          r.lancerPreflight();
         }
       }
     }
     window.addEventListener('keydown', surTouche);
     return () => window.removeEventListener('keydown', surTouche);
-  });
+  }, []);
 
   // -- Rendu ----------------------------------------------------------------
   if (etat === 'chargement') {
@@ -919,7 +953,7 @@ function App() {
               if (reponse.analyse) {
                 setAnalyse((precedent) =>
                   precedent.resultat
-                    ? { etat: 'termine', progression: null, resultat: reponse.analyse, acces: null }
+                    ? { etat: 'termine', progression: null, resultat: preparerResultat(reponse.analyse), acces: null }
                     : precedent
                 );
               }

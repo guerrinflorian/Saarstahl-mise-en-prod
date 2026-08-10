@@ -151,6 +151,61 @@ export function etatSelection(noeud, selection) {
   return coches === candidats.length ? 'complet' : 'partiel';
 }
 
+/**
+ * États de coche de tous les dossiers, en une seule passe sur l'arbre.
+ *
+ * L'ancien calcul (`etatSelection` ligne par ligne) retraversait la branche
+ * entière de chaque dossier visible à chaque rendu, jusqu'à deux fois : sur un
+ * dossier racine à 5 000 descendants, chaque frame de défilement parcourait
+ * 10 000 nœuds. Ici l'arbre n'est parcouru qu'une fois par changement de
+ * sélection ou d'arbre, et chaque ligne lit son état dans la Map.
+ *
+ * Les orphelins comptent aussi : un dossier qui n'en contient que peut se
+ * cocher en bloc (la suppression est une opération à part entière), il n'a pas
+ * à être grisé.
+ *
+ * @returns {Map<string, {etat:'complet'|'partiel'|'vide', cochable:boolean}>}
+ */
+export function etatsSelection(racine, selection) {
+  const etats = new Map();
+  if (!racine) return etats;
+
+  const visiter = (noeud) => {
+    let deployables = 0;
+    let coches = 0;
+    let orphelins = 0;
+    let orphelinsCoches = 0;
+    for (const enfant of noeud.enfants) {
+      if (enfant.type === 'dossier') {
+        const sous = visiter(enfant);
+        deployables += sous.deployables;
+        coches += sous.coches;
+        orphelins += sous.orphelins;
+        orphelinsCoches += sous.orphelinsCoches;
+      } else if (estDeployable(enfant)) {
+        deployables += 1;
+        if (selection.has(enfant.cle)) coches += 1;
+      } else if (enfant.statut === 'orphelin') {
+        orphelins += 1;
+        if (selection.has(enfant.cle)) orphelinsCoches += 1;
+      }
+    }
+
+    const totalCoches = coches + orphelinsCoches;
+    const complet =
+      (deployables > 0 && coches === deployables) ||
+      (deployables === 0 && orphelins > 0 && orphelinsCoches === orphelins);
+    etats.set(noeud.cle, {
+      etat: totalCoches === 0 ? 'vide' : complet ? 'complet' : 'partiel',
+      cochable: deployables > 0 || orphelins > 0
+    });
+    return { deployables, coches, orphelins, orphelinsCoches };
+  };
+
+  visiter(racine);
+  return etats;
+}
+
 /** Chemin des dossiers menant à un fichier, pour les déplier automatiquement. */
 export function ancetres(cheminFichier) {
   const morceaux = cheminFichier.split('\\');
@@ -175,17 +230,22 @@ export function formaterOctets(octets) {
   return `${valeur < 10 && rang > 0 ? valeur.toFixed(1) : Math.round(valeur)} ${unites[rang]}`;
 }
 
+// Les formateurs Intl sont parmi les constructeurs les plus lourds de la
+// plateforme : construits une fois, pas à chaque nombre affiché.
+const FORMAT_DATE = new Intl.DateTimeFormat('fr-FR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+});
+const FORMAT_NOMBRE = new Intl.NumberFormat('fr-FR');
+
 export function formaterDate(millisecondes) {
   if (!millisecondes) return '-';
-  return new Date(millisecondes).toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  return FORMAT_DATE.format(new Date(millisecondes));
 }
 
 export function formaterNombre(nombre) {
-  return new Intl.NumberFormat('fr-FR').format(nombre);
+  return FORMAT_NOMBRE.format(nombre);
 }

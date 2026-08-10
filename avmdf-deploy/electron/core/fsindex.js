@@ -86,13 +86,17 @@ function creerSemaphore(maximum) {
         actifs += 1;
         return;
       }
+      // La place est transmise directement par liberer() : le compteur ne
+      // redescend pas entre-temps, la borne est stricte.
       await new Promise((resoudre) => attente.push(resoudre));
-      actifs += 1;
     },
     liberer() {
-      actifs -= 1;
       const suivant = attente.shift();
-      if (suivant) suivant();
+      if (suivant) {
+        suivant();
+        return;
+      }
+      actifs -= 1;
     }
   };
 }
@@ -308,11 +312,50 @@ function hashFichier(absolu) {
 function creerCacheHash(cheminFichier, { maximum = 120000 } = {}) {
   /** @type {Map<string, {hash:string, vu:number}>} */
   let entrees = new Map();
+  /**
+   * Index chemin → clés : invalider un fichier ne parcourt que ses propres
+   * versions, pas les 120 000 entrées du cache. Un déploiement de 500 fichiers
+   * parcourait 60 millions de clés ; il en parcourt maintenant 500 poignées.
+   * @type {Map<string, Set<string>>}
+   */
+  const parChemin = new Map();
   let modifie = false;
+  let ecriture = null;
+
+  const cheminDe = (identifiant) => identifiant.slice(0, identifiant.indexOf('|'));
+
+  function indexer(identifiant) {
+    const chemin = cheminDe(identifiant);
+    let cles = parChemin.get(chemin);
+    if (!cles) {
+      cles = new Set();
+      parChemin.set(chemin, cles);
+    }
+    cles.add(identifiant);
+  }
+
+  function desindexer(identifiant) {
+    const chemin = cheminDe(identifiant);
+    const cles = parChemin.get(chemin);
+    if (!cles) return;
+    cles.delete(identifiant);
+    if (!cles.size) parChemin.delete(chemin);
+  }
+
+  function elaguer() {
+    if (entrees.size <= maximum) return;
+    const triees = [...entrees.entries()].sort((a, b) => b[1].vu - a[1].vu).slice(0, maximum);
+    entrees = new Map(triees);
+    parChemin.clear();
+    for (const identifiant of entrees.keys()) indexer(identifiant);
+  }
 
   try {
     const brut = JSON.parse(fs.readFileSync(cheminFichier, 'utf8'));
-    if (brut && brut.entrees) entrees = new Map(Object.entries(brut.entrees));
+    if (brut && brut.entrees) {
+      entrees = new Map(Object.entries(brut.entrees));
+      for (const identifiant of entrees.keys()) indexer(identifiant);
+    }
   } catch (err) {
     if (err.code !== 'ENOENT') {
       process.emitWarning(`Cache d'empreintes illisible (${err.message}) : il sera reconstruit.`);
@@ -333,26 +376,67 @@ function creerCacheHash(cheminFichier, { maximum = 120000 } = {}) {
       }
       const hash = await hashFichier(absolu);
       entrees.set(identifiant, { hash, vu: Date.now() });
+      indexer(identifiant);
+      // Une nouvelle version d'un fichier remplace les anciennes : sans cela le
+      // cache grossit avec le nombre de modifications, pas de fichiers.
+      const chemin = absolu.toLowerCase();
+      const cles = parChemin.get(chemin);
+      if (cles && cles.size > 1) {
+        for (const ancienne of [...cles]) {
+          if (ancienne !== identifiant) {
+            entrees.delete(ancienne);
+            cles.delete(ancienne);
+          }
+        }
+      }
+      if (entrees.size > maximum * 1.1) elaguer();
       modifie = true;
       return hash;
     },
 
     /** Oublie ce que l'on sait d'un fichier (après écriture, par exemple). */
     invalider(absolu) {
-      const prefixe = absolu.toLowerCase() + '|';
-      for (const identifiant of entrees.keys()) {
-        if (identifiant.startsWith(prefixe)) entrees.delete(identifiant);
+      const cles = parChemin.get(absolu.toLowerCase());
+      if (!cles || !cles.size) return;
+      for (const identifiant of [...cles]) {
+        entrees.delete(identifiant);
+        desindexer(identifiant);
       }
       modifie = true;
     },
 
-    enregistrer() {
+    /**
+     * Écriture asynchrone : sérialiser 120 000 entrées en synchrone bloquait le
+     * processus principal après chaque analyse. Les appels se suivent, jamais
+     * ne se chevauchent.
+     */
+    async enregistrer() {
+      while (ecriture) await ecriture;
+      if (!modifie) return;
+      ecriture = (async () => {
+        try {
+          elaguer();
+          await fsp.mkdir(path.dirname(cheminFichier), { recursive: true });
+          const temporaire = cheminFichier + '.tmp';
+          await fsp.writeFile(temporaire, JSON.stringify({ v: 1, entrees: Object.fromEntries(entrees) }), 'utf8');
+          await fsp.rename(temporaire, cheminFichier);
+          modifie = false;
+        } catch (err) {
+          process.emitWarning(`Cache d'empreintes non enregistré : ${err.message}`);
+        }
+      })();
+      try {
+        await ecriture;
+      } finally {
+        ecriture = null;
+      }
+    },
+
+    /** Variante synchrone, réservée à la fermeture de l'application. */
+    enregistrerSync() {
       if (!modifie) return;
       try {
-        if (entrees.size > maximum) {
-          const triees = [...entrees.entries()].sort((a, b) => b[1].vu - a[1].vu).slice(0, maximum);
-          entrees = new Map(triees);
-        }
+        elaguer();
         fs.mkdirSync(path.dirname(cheminFichier), { recursive: true });
         const temporaire = cheminFichier + '.tmp';
         fs.writeFileSync(temporaire, JSON.stringify({ v: 1, entrees: Object.fromEntries(entrees) }), 'utf8');

@@ -88,6 +88,22 @@ export function BarreFiltres({
   const [choixDate, setChoixDate] = useState('');
   const [avancesOuverts, setAvancesOuverts] = useState(false);
 
+  // La saisie est locale et propagée après une courte pause : refiltrer des
+  // milliers de fichiers à chaque caractère rendait le champ poussif.
+  const [saisie, setSaisie] = useState(criteres.requete);
+  const minuteurSaisie = useRef(0);
+  const refCriteres = useRef(criteres);
+  refCriteres.current = criteres;
+  useEffect(() => {
+    setSaisie(criteres.requete);
+  }, [criteres.requete]);
+  useEffect(() => () => clearTimeout(minuteurSaisie.current), []);
+  const surSaisie = (valeur) => {
+    setSaisie(valeur);
+    clearTimeout(minuteurSaisie.current);
+    minuteurSaisie.current = setTimeout(() => onCriteres({ ...refCriteres.current, requete: valeur }), 150);
+  };
+
   const avancesActifs =
     (criteres.extensions ? 1 : 0) +
     (criteres.depuis ? 1 : 0) +
@@ -131,8 +147,8 @@ export function BarreFiltres({
           placeholder="Rechercher un chemin…"
           spellcheck="false"
           aria-label="Rechercher"
-          value=${criteres.requete}
-          onInput=${(e) => onCriteres({ ...criteres, requete: e.target.value })}
+          value=${saisie}
+          onInput=${(e) => surSaisie(e.target.value)}
         />
         <select
           class="filtres-mode"

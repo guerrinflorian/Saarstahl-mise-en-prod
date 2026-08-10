@@ -39,6 +39,31 @@ let analyseEnCours = null;
 let dernierScan = null;
 let rechercheEnCours = null;
 let operationEnCours = null;
+let preflightEnCours = null;
+
+/**
+ * Dernier préflight réussi, réutilisable par l'exécution : entre la fenêtre de
+ * confirmation et le clic, inutile de relire toute la production une seconde
+ * fois si rien n'a changé dans le plan. Le jeton est invalidé par un nouveau
+ * scan, un changement de plan, ou cinq minutes d'attente.
+ */
+let dernierPreflight = null;
+const DUREE_JETON_PREFLIGHT = 5 * 60 * 1000;
+
+/**
+ * Manifestes de la racine d'archives, partagés entre l'historique et le
+ * tableau de bord : les deux écrans relisaient chacun tout le partage à chaque
+ * affichage. Invalidé après chaque écriture réelle, et au bout de 30 secondes.
+ */
+let cacheManifestes = null;
+const DUREE_CACHE_MANIFESTES = 30 * 1000;
+
+/**
+ * Une seule opération lourde à la fois : un scan lancé pendant une mise en
+ * production laisserait le plan pointer sur les objets d'une analyse disparue,
+ * et deux opérations se partageraient la même poignée d'annulation.
+ */
+let operationExclusive = null;
 
 // ---------------------------------------------------------------------------
 // Réponses IPC
@@ -89,8 +114,94 @@ function contexteConfig() {
   return { utilisateur: process.env.USERNAME || process.env.USER || '' };
 }
 
+/**
+ * Réglages en mémoire : le fichier n'est relu qu'après une écriture, pas à
+ * chacun des vingt-quatre points d'appel (dont l'ouverture de chaque fichier).
+ */
+let reglagesConnus = null;
+
 function reglages() {
-  return depotConfig.charger().config;
+  if (!reglagesConnus) reglagesConnus = depotConfig.charger().config;
+  return reglagesConnus;
+}
+
+async function exclusif(nom, corps) {
+  if (operationExclusive) {
+    return echec(
+      `Opération refusée : ${operationExclusive} est en cours.`,
+      'Attendez la fin de l\'opération en cours, ou annulez-la, avant d\'en lancer une autre.'
+    );
+  }
+  operationExclusive = nom;
+  try {
+    return await corps();
+  } finally {
+    operationExclusive = null;
+  }
+}
+
+/** Ce qui rend un préflight réutilisable : même sélection, même destination, mêmes choix. */
+function signaturePlan(plan) {
+  return JSON.stringify({
+    operation: plan.operation,
+    simulation: plan.simulation,
+    archiver: plan.archiver,
+    dossierSauvegarde: plan.dossierSauvegarde,
+    racineProd: plan.racineProd,
+    cles: plan.fichiers.map((f) => f.cle).sort()
+  });
+}
+
+function listerManifestesEnCache(actuels, rafraichir = false) {
+  const racine = actuels.racines.avmdf;
+  const valide =
+    !rafraichir &&
+    cacheManifestes &&
+    cacheManifestes.racine === racine &&
+    Date.now() - cacheManifestes.date < DUREE_CACHE_MANIFESTES;
+  if (!valide) {
+    const promesse = deploy
+      .listerManifestes(racine, { concurrence: actuels.options.lecturesSimultanees })
+      .catch((err) => {
+        cacheManifestes = null;
+        throw err;
+      });
+    cacheManifestes = { racine, date: Date.now(), promesse };
+  }
+  return cacheManifestes.promesse;
+}
+
+function invaliderManifestes() {
+  cacheManifestes = null;
+}
+
+/**
+ * Les racines qu'un manifeste déclare doivent rester dans le périmètre
+ * configuré : un manifeste ancien (racine déplacée depuis) ou retouché à la
+ * main ne fait écrire nulle part ailleurs. Contrôlé avant toute restauration ;
+ * la simple lecture (comparer, vérifier) reste permise.
+ */
+function perimetreManifeste(contenu, actuels) {
+  const problemes = [];
+  if (!contenu.racineProd || !avmdf.estSousRacine(contenu.racineProd, actuels.racines.prod)) {
+    problemes.push(
+      `la racine de production du manifeste sort du périmètre configuré (${contenu.racineProd || 'absente'})`
+    );
+  }
+  if (contenu.dossierSauvegarde && !avmdf.estSousRacine(contenu.dossierSauvegarde, actuels.racines.avmdf)) {
+    problemes.push(`le dossier de sauvegarde du manifeste sort du dossier d'archives (${contenu.dossierSauvegarde})`);
+  }
+  return problemes;
+}
+
+function journaliserTraces(chemins) {
+  if (chemins && chemins.erreurEcriture) {
+    carnet.ecrire(
+      'ERREUR',
+      `traces du passage : ${chemins.erreurEcriture}` +
+        (chemins.manifesteSecours ? ` - copie de secours : ${chemins.manifesteSecours}` : '')
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +230,7 @@ function handlersConfig() {
 
   gerer('config:lire', () => {
     const { config: lus, existait, avertissements } = depotConfig.charger();
+    reglagesConnus = lus;
     return succes({ config: lus, existait, avertissements, controle: config.verifier(lus) });
   });
 
@@ -143,6 +255,7 @@ function handlersConfig() {
     }
     try {
       const { config: enregistre } = depotConfig.enregistrer(propre);
+      reglagesConnus = enregistre;
       return succes({ config: enregistre, controle: config.verifier(enregistre) });
     } catch (err) {
       return echec(
@@ -156,6 +269,7 @@ function handlersConfig() {
   gerer('config:reinitialiser', () => {
     try {
       const { config: neuf } = depotConfig.reinitialiser();
+      reglagesConnus = neuf;
       return succes({ config: neuf, controle: config.verifier(neuf) });
     } catch (err) {
       return echec(
@@ -230,6 +344,7 @@ function ajouterExclusion(categorie, brut, messageVide) {
 
   liste.push(motif);
   const { config: enregistre } = depotConfig.enregistrer(actuels);
+  reglagesConnus = enregistre;
   carnet.ecrire('INFO', `exclusion ajoutée (${categorie}) : ${motif}`);
   return succes({ config: enregistre, motif, deja: false });
 }
@@ -239,11 +354,7 @@ function ajouterExclusion(categorie, brut, messageVide) {
 // ---------------------------------------------------------------------------
 
 function handlersAnalyse() {
-  gerer('analyse:demarrer', async (parametres) => {
-    if (analyseEnCours) {
-      return echec('Une analyse est déjà en cours.', 'Attendez sa fin ou annulez-la.');
-    }
-
+  gerer('analyse:demarrer', (parametres) => exclusif('une analyse', async () => {
     const actuels = reglages();
     const cheminLocal = String(parametres.cheminLocal || '');
     const cheminProd = String(parametres.cheminProd || '');
@@ -348,7 +459,7 @@ function handlersAnalyse() {
     } finally {
       analyseEnCours = null;
     }
-  });
+  }));
 
   gerer('analyse:annuler', () => {
     if (analyseEnCours) analyseEnCours.annuler();
@@ -594,6 +705,24 @@ async function construireDiff(fichier, actuels, surcharges = {}) {
     typeof surcharges.ignorerEspaces === 'boolean'
       ? surcharges.ignorerEspaces
       : actuels.options.ignorerEspaces;
+
+  // Le scan connaît déjà les tailles : un fichier au-delà de la limite du
+  // comparateur est refusé avant d'être lu, pas après deux lectures complètes
+  // (un journal de 300 Mo passait deux fois en mémoire pour être refusé).
+  const plusGros = Math.max(fichier.local ? fichier.local.taille : 0, fichier.prod ? fichier.prod.taille : 0);
+  if (plusGros > textdiff.TAILLE_MAX_DIFF) {
+    return {
+      cle: fichier.cle,
+      chemin: fichier.chemin,
+      statut: fichier.statut,
+      ignorerEspaces,
+      local: fichier.local && { ...fichier.local, hash: fichier.local.hash || null },
+      prod: fichier.prod && { ...fichier.prod, hash: fichier.prod.hash || null },
+      type: 'volumineux',
+      limite: textdiff.TAILLE_MAX_DIFF,
+      taille: plusGros
+    };
+  }
 
   const lire = async (cote) => {
     if (!cote) return null;
@@ -860,7 +989,7 @@ function handlersDiff() {
     return succes({ diff: enveloppe });
   });
 
-  gerer('fichier:restaurerVersion', async (parametres) => {
+  gerer('fichier:restaurerVersion', (parametres) => exclusif('une restauration de version', async () => {
     const actuels = reglages();
     if (!dernierScan) return echec('Aucune analyse en mémoire.', 'Lancez d\'abord une analyse.');
     if (dernierScan.modeLibre) {
@@ -906,9 +1035,11 @@ function handlersDiff() {
       `${plan.simulation ? 'simulation de ' : ''}restauration de version : ${fichier.chemin} depuis ${source}`
     );
     const resultat = await deploy.restaurerVersion(plan, {
-      invaliderCache: (chemin) => cacheHash.invalider(chemin)
+      invaliderCache: (chemin) => cacheHash.invalider(chemin),
+      dossierSecours: path.join(app.getPath('userData'), 'manifestes-secours')
     });
     cacheHash.enregistrer();
+    if (!plan.simulation) invaliderManifestes();
 
     if (resultat.manifeste.fichiers[0].erreur) {
       return Object.assign(
@@ -920,8 +1051,9 @@ function handlersDiff() {
       );
     }
     carnet.ecrire('INFO', `restauration de version terminée : ${fichier.chemin}`);
+    journaliserTraces(resultat.chemins);
     return succes({ manifeste: resultat.manifeste, chemins: resultat.chemins, rapport: resultat.rapport });
-  });
+  }));
 }
 
 async function empreinteSure(chemin) {
@@ -1150,14 +1282,30 @@ function handlersDeploiement() {
     if (erreur) return erreur;
 
     const signal = fsindex.creerSignal();
-    operationEnCours = signal;
+    preflightEnCours = signal;
     try {
       const controle = await deploy.preflight(plan, {
         concurrence: actuels.options.lecturesSimultanees,
         signal,
         surProgression: (avancement) => emettre('deploiement:progression', avancement)
       });
+
+      // Le résultat vaut jeton : si le plan n'a pas bougé, l'exécution le
+      // réutilisera au lieu de relire toute la production une seconde fois.
+      let jeton = null;
+      if (!signal.annule) {
+        jeton = `pf-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        dernierPreflight = {
+          jeton,
+          signature: signaturePlan(plan),
+          scan: dernierScan,
+          date: Date.now(),
+          controle
+        };
+      }
+
       return succes({
+        jeton,
         controle: {
           ok: controle.ok,
           bloquants: controle.bloquants,
@@ -1166,19 +1314,28 @@ function handlersDeploiement() {
         resume: resumePlan(plan)
       });
     } finally {
-      operationEnCours = null;
+      preflightEnCours = null;
     }
   });
 
-  gerer('deploiement:executer', async (parametres) => {
+  gerer('deploiement:executer', (parametres) => exclusif('une mise en production', async () => {
     const { plan, erreur, actuels } = construirePlan(parametres);
     if (erreur) return erreur;
 
-    // Le préflight est rejoué juste avant d'écrire : entre la fenêtre de
+    // Le préflight qui vient d'être montré à l'utilisateur vaut pour
+    // l'exécution, tant que le plan et l'analyse n'ont pas bougé et que
+    // l'attente est restée courte. Sinon, il est rejoué : entre la fenêtre de
     // confirmation et le clic, la production a pu bouger.
-    const controle = await deploy.preflight(plan, {
-      concurrence: actuels.options.lecturesSimultanees
-    });
+    const reutilisable =
+      dernierPreflight &&
+      parametres.jetonPreflight === dernierPreflight.jeton &&
+      dernierPreflight.scan === dernierScan &&
+      dernierPreflight.signature === signaturePlan(plan) &&
+      Date.now() - dernierPreflight.date < DUREE_JETON_PREFLIGHT &&
+      dernierPreflight.controle.ok;
+    const controle = reutilisable
+      ? dernierPreflight.controle
+      : await deploy.preflight(plan, { concurrence: actuels.options.lecturesSimultanees });
     if (!controle.ok) {
       return Object.assign(
         echec(
@@ -1206,9 +1363,15 @@ function handlersDeploiement() {
         extensionsTexte: actuels.extensionsTexte,
         ignorerEspaces: actuels.options.ignorerEspaces,
         invaliderCache: (chemin) => cacheHash.invalider(chemin),
-        surProgression: (avancement) => emettre('deploiement:progression', avancement)
+        surProgression: (avancement) => emettre('deploiement:progression', avancement),
+        // Les empreintes relevées par le préflight servent au manifeste : pas de
+        // troisième lecture complète de chaque destination.
+        etatsProd: controle.etatsProd || null,
+        dossierSecours: path.join(app.getPath('userData'), 'manifestes-secours')
       });
       cacheHash.enregistrer();
+      dernierPreflight = null;
+      if (!plan.simulation) invaliderManifestes();
 
       const r = resultat.rapport;
       carnet.ecrire(
@@ -1218,6 +1381,14 @@ function handlersDeploiement() {
           `${r.echecs} échec(s)` +
           (resultat.chemins.manifeste ? ` - manifeste ${resultat.chemins.manifeste}` : '')
       );
+      const appOffline = resultat.manifeste.appOffline;
+      if (appOffline && appOffline.erreurDepot) {
+        carnet.ecrire('ALERTE', `app_offline.htm non déposé, le site est resté en ligne pendant la copie : ${appOffline.erreurDepot}`);
+      }
+      if (appOffline && appOffline.erreurRetrait) {
+        carnet.ecrire('ERREUR', `app_offline.htm NON RETIRÉ, le site est resté hors service : ${appOffline.erreurRetrait} - retirez-le à la main dans ${plan.racineProd}`);
+      }
+      journaliserTraces(resultat.chemins);
 
       // L'arborescence se remet à jour toute seule : les fichiers partis
       // passent en « identique », les orphelins supprimés disparaissent.
@@ -1233,9 +1404,10 @@ function handlersDeploiement() {
     } finally {
       operationEnCours = null;
     }
-  });
+  }));
 
   gerer('deploiement:annuler', () => {
+    if (preflightEnCours) preflightEnCours.annuler();
     if (operationEnCours) operationEnCours.annuler();
     return succes({});
   });
@@ -1273,15 +1445,15 @@ function resumePlan(plan) {
 // ---------------------------------------------------------------------------
 
 function handlersHistorique() {
-  gerer('historique:lister', async () => {
+  gerer('historique:lister', async (parametres = {}) => {
     const actuels = reglages();
-    const { manifestes, erreurs } = await deploy.listerManifestes(actuels.racines.avmdf);
+    const { manifestes, erreurs } = await listerManifestesEnCache(actuels, Boolean(parametres.rafraichir));
     return succes({ manifestes, erreurs, racine: actuels.racines.avmdf });
   });
 
-  gerer('statistiques:calculer', async () => {
+  gerer('statistiques:calculer', async (parametres = {}) => {
     const actuels = reglages();
-    const { manifestes, erreurs } = await deploy.listerManifestes(actuels.racines.avmdf);
+    const { manifestes, erreurs } = await listerManifestesEnCache(actuels, Boolean(parametres.rafraichir));
     return succes({
       stats: stats.calculer(manifestes),
       erreurs,
@@ -1365,6 +1537,13 @@ function handlersHistorique() {
     const actuels = reglages();
     const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);
     if (manifeste.erreur) return manifeste.erreur;
+    const horsPerimetre = perimetreManifeste(manifeste.contenu, actuels);
+    if (horsPerimetre.length) {
+      return echec(
+        'Retour arrière refusé : ' + horsPerimetre.join(' ; ') + '.',
+        'Les racines configurées ont changé depuis ce passage, ou le manifeste a été modifié : rien ne sera écrit hors du périmètre actuel.'
+      );
+    }
 
     const preparation = await deploy.preparerRestauration(manifeste.contenu, {
       concurrence: actuels.options.lecturesSimultanees
@@ -1380,10 +1559,17 @@ function handlersHistorique() {
     });
   });
 
-  gerer('historique:restaurer', async (parametres) => {
+  gerer('historique:restaurer', (parametres) => exclusif('un retour arrière', async () => {
     const actuels = reglages();
     const manifeste = await lireManifesteSur(parametres.cheminManifeste, actuels);
     if (manifeste.erreur) return manifeste.erreur;
+    const horsPerimetre = perimetreManifeste(manifeste.contenu, actuels);
+    if (horsPerimetre.length) {
+      return echec(
+        'Retour arrière refusé : ' + horsPerimetre.join(' ; ') + '.',
+        'Les racines configurées ont changé depuis ce passage, ou le manifeste a été modifié : rien ne sera écrit hors du périmètre actuel.'
+      );
+    }
 
     const preparation = await deploy.preparerRestauration(manifeste.contenu, {
       concurrence: actuels.options.lecturesSimultanees
@@ -1407,18 +1593,21 @@ function handlersHistorique() {
         auteur: actuels.options.auteur,
         signal,
         invaliderCache: (chemin) => cacheHash.invalider(chemin),
-        surProgression: (avancement) => emettre('deploiement:progression', avancement)
+        surProgression: (avancement) => emettre('deploiement:progression', avancement),
+        dossierSecours: path.join(app.getPath('userData'), 'manifestes-secours')
       });
       cacheHash.enregistrer();
+      if (!parametres.simulation) invaliderManifestes();
       carnet.ecrire(
         resultat.rapport.echecs ? 'ERREUR' : 'INFO',
         `retour arrière terminé - ${resultat.rapport.total} fichier(s), ${resultat.rapport.echecs} échec(s)`
       );
+      journaliserTraces(resultat.chemins);
       return succes({ manifeste: resultat.manifeste, chemins: resultat.chemins, rapport: resultat.rapport });
     } finally {
       operationEnCours = null;
     }
-  });
+  }));
 }
 
 /** Relit un manifeste depuis le disque en vérifiant qu'il est bien sous la racine d'archives. */
@@ -1631,8 +1820,9 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => {
     if (analyseEnCours) analyseEnCours.annuler();
+    if (preflightEnCours) preflightEnCours.annuler();
     if (operationEnCours) operationEnCours.annuler();
-    if (cacheHash) cacheHash.enregistrer();
+    if (cacheHash) cacheHash.enregistrerSync();
     if (carnet) carnet.ecrire('INFO', 'application fermée');
   });
 

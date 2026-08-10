@@ -68,6 +68,31 @@ export function RapportDeploiement({ resultat, onFermer, onOuvrir, onReveler }) 
               </div>`
             : null}
 
+          ${manifeste.appOffline && manifeste.appOffline.erreurRetrait
+            ? html`<div class="encart encart-danger" style="margin-bottom:12px">
+                <strong>Le fichier app_offline.htm n'a pas pu être retiré : le site est resté hors service.</strong>
+                Supprimez-le à la main à la racine de la production (${manifeste.appOffline.erreurRetrait}).
+              </div>`
+            : null}
+
+          ${manifeste.appOffline && manifeste.appOffline.erreurDepot
+            ? html`<div class="encart encart-alerte" style="margin-bottom:12px">
+                <strong>Le fichier app_offline.htm n'a pas pu être déposé.</strong>
+                Le site est resté en ligne pendant la copie (${manifeste.appOffline.erreurDepot}).
+              </div>`
+            : null}
+
+          ${chemins && chemins.erreurEcriture
+            ? html`<div class="encart encart-danger" style="margin-bottom:12px">
+                <strong>Les traces du passage n'ont pas toutes été écrites dans le sprint.</strong>
+                ${' ' + chemins.erreurEcriture + '.'}
+                ${chemins.manifesteSecours
+                  ? html` Une copie de secours du manifeste a été gardée sur ce poste :
+                      <span class="mono">${chemins.manifesteSecours}</span>`
+                  : null}
+              </div>`
+            : null}
+
           ${manifeste.archivage === false && !simulation
             ? html`<div class="encart encart-alerte" style="margin-bottom:12px">
                 <strong>Passage effectué sans archivage AVMDF.</strong>
