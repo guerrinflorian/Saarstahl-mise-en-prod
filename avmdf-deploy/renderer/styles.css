@@ -2397,7 +2397,9 @@ select.marque {
   position: fixed;
   z-index: 50;
   min-width: 230px;
+  max-height: calc(100vh - 20px);
   padding: 4px;
+  overflow-y: auto;
   background: var(--panneau-releve);
   border: 1px solid var(--separateur-clair);
   border-radius: var(--rayon);
