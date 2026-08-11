@@ -513,6 +513,9 @@ consigné dans le journal (ALERTE dès qu'un fichier n'est plus intact).
 
 ## Petites attentions
 
+- L'application s'ouvre sur une courte vidéo d'introduction - le laminoir en pleine coulée -
+  pendant qu'elle se charge derrière. La vidéo s'efface en fondu à la fin ; Échap ou « Passer »
+  l'écartent tout de suite, et toute erreur de lecture l'efface au lieu de bloquer l'outil.
 - Une notification survolée ne disparaît pas : le minuteur s'arrête sous la souris et repart de
   zéro à son départ, jauge comprise.
 - Les contrôles préalables affichent une vraie jauge de progression.

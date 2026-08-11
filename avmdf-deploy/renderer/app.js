@@ -20,6 +20,7 @@ import { FriseFichier } from './components/FriseFichier.js';
 import { ReferencesFichier } from './components/ReferencesFichier.js';
 import { EditeurFichier } from './components/EditeurFichier.js';
 import { PaletteFichiers } from './components/PaletteFichiers.js';
+import { IntroVideo } from './components/IntroVideo.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { appliquerTheme, lireTheme } from './components/theme.js';
 import { joindreChemin } from './components/chemins.js';
@@ -1193,4 +1194,6 @@ function App() {
   `;
 }
 
-render(html`<${App} />`, document.getElementById('racine'));
+// L'intro joue par-dessus l'application, qui se charge pendant ce temps :
+// au fondu, l'écran d'accueil ou l'outil est déjà là, prêt.
+render(html`<${App} /><${IntroVideo} />`, document.getElementById('racine'));
