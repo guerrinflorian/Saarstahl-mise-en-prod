@@ -1660,12 +1660,22 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ['lignes de code', 'Ajoutées et supprimées, sur les seuls fichiers texte.'],
               ['retours arrière', 'Et, en dessous, le nombre de suppressions d\'orphelins.'],
               ['fichiers en échec', 'Se teinte en rouge dès le premier. Renvoie vers l\'historique.'],
-              ['dernière mise en production', 'La demande, le sprint, quand, par qui, sur quel projet.'],
+              ['volume écrit en production', 'Le poids réellement copié vers le serveur, tous passages confondus.'],
+              [
+                'dernière mise en production',
+                'La demande, le sprint, quand, par qui, sur quel projet. Et la question qui va avec : « La production est-elle toujours conforme ? » re-hashe chaque fichier de ce passage et le confronte au manifeste, sans rien écrire.'
+              ],
               ['Activité des douze derniers mois', 'Une barre par mois. Le survol donne le détail.'],
               ['Par projet, par auteur', 'Répartition des passages et des fichiers.'],
+              ['Le rythme de la semaine', 'À quels jours partent les mises en production.'],
+              ['Par type de fichier', 'Ce qui part le plus : aspx, cs, js, css…'],
+              [
+                'Demandes revisitées',
+                'Les numéros passés plusieurs fois en production : les interventions qui ont demandé plusieurs allers.'
+              ],
               [
                 'Fichiers les plus déployés',
-                'Les points chauds : ce qui repart le plus souvent en production, avec la dernière demande et la dernière date.'
+                'Les points chauds : ce qui repart le plus souvent en production, avec la dernière demande, la dernière date et les lignes changées. Un clic ouvre la frise chronologique du fichier.'
               ],
               ['Activité récente', 'Le fil des derniers passages, toutes natures confondues.']
             ]}
@@ -1792,7 +1802,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [html`<${T}>Ctrl<//> + <${T}>F<//>`, 'Chercher dans la comparaison affichée', 'Comparateur'],
               [html`<${T}>Ctrl<//> + <${T}>S<//>`, 'Enregistrer le fichier', 'Éditeur intégré'],
               [html`<${T}>Tab<//>`, 'Insérer une tabulation', 'Éditeur intégré'],
-              [html`<${T}>Échap<//>`, 'Fermer la recherche, une confirmation, ou l\'écran ouvert', 'Partout'],
+              [html`<${T}>Échap<//>`, 'Passer la vidéo d\'introduction ; fermer la recherche, une confirmation, ou l\'écran ouvert', 'Partout'],
               ['Double-clic sur la poignée', 'Rétablir la largeur d\'origine du panneau de gauche', 'Onglet Analyse']
             ]}
           />
