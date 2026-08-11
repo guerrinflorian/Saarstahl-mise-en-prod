@@ -491,6 +491,7 @@ export function ArbreFichiers({
 
       ${menu
         ? html`<${MenuContextuel}
+            key=${menu.noeud.cle + '@' + menu.x + 'x' + menu.y}
             menu=${menu}
             onFermer=${() => setMenu(null)}
             onAction=${(action) => {
@@ -838,24 +839,29 @@ function entreesDossier(dossier) {
 
 function MenuContextuel({ menu, onFermer, onAction }) {
   const boite = useRef(null);
-  const [position, setPosition] = useState({ x: menu.x, y: menu.y });
+
+  // Tant que la boîte n'est pas mesurée, elle se rend invisible en 0,0 :
+  // pleine place, donc taille naturelle - collée à un bord, le viewport la
+  // comprimerait et fausserait sa largeur. Le parent pose une clé par clic
+  // droit, le composant est donc monté à neuf et mesuré à chaque ouverture.
+  // Jamais de position écrite à la main dans le DOM : Preact compare les
+  // styles entre rendus, pas avec le DOM réel, et une retouche manuelle
+  // survit à un rendu dont la chaîne de style n'a pas changé - c'est ce qui
+  // laissait le menu parqué en haut après un clic au milieu de l'écran.
+  const [position, setPosition] = useState(null);
 
   // Un clic près du bord bas ou droit poserait le menu à cheval hors de la
-  // fenêtre, entrées du bas inaccessibles. On mesure la boîte une fois rendue
-  // et on la recale avant peinture pour qu'elle tienne entière à l'écran.
-  // La mesure se fait boîte ramenée en 0,0 : collée à un bord, elle serait
-  // comprimée par le viewport et rendrait une largeur faussée.
+  // fenêtre, entrées du bas inaccessibles : la taille une fois connue, la
+  // boîte est recalée avant peinture pour tenir entière, à 8 px des bords.
   useLayoutEffect(() => {
     const element = boite.current;
     if (!element) return;
-    element.style.left = '0px';
-    element.style.top = '0px';
     const cadre = element.getBoundingClientRect();
     setPosition({
       x: Math.max(MARGE_FENETRE, Math.min(menu.x, window.innerWidth - cadre.width - MARGE_FENETRE)),
       y: Math.max(MARGE_FENETRE, Math.min(menu.y, window.innerHeight - cadre.height - MARGE_FENETRE))
     });
-  }, [menu.x, menu.y, menu.noeud]);
+  }, []);
 
   useEffect(() => {
     const surClic = (evenement) => {
@@ -876,7 +882,12 @@ function MenuContextuel({ menu, onFermer, onAction }) {
   const entrees = noeud.type === 'dossier' ? entreesDossier(noeud) : entreesFichier(noeud);
 
   return html`
-    <div class="menu" ref=${boite} style=${`left:${position.x}px;top:${position.y}px`} role="menu">
+    <div
+      class="menu"
+      ref=${boite}
+      style=${position ? `left:${position.x}px;top:${position.y}px` : 'left:0px;top:0px;visibility:hidden'}
+      role="menu"
+    >
       <div class="menu-titre mono">${noeud.chemin}</div>
       ${entrees.map((entree, index) =>
         entree.separateur
