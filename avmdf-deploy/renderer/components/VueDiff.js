@@ -10,6 +10,24 @@ const html = htm.bind(h);
 
 const MAX_LIGNES_AFFICHEES = 6000;
 
+const ENSEMBLE_VIDE = new Set();
+
+/**
+ * Identité stable d'un rang, pour les clés de rendu : un repli garde l'indice
+ * de son groupe, une ligne garde ses numéros des deux côtés - uniques dans un
+ * fichier. Déplier un repli devient une pure insertion : aucun rang existant
+ * ne change de clé, Preact n'a jamais à réordonner des nœuds conservés.
+ * Les clés par indice d'affichage, elles, glissaient toutes à chaque
+ * dépliage : le réordonnancement géant qui s'ensuivait est la zone où un
+ * pointeur DOM périmé fait échouer insertBefore (crash vu en production sur
+ * le deuxième dépliage).
+ */
+function cleDuRang(rang) {
+  if (rang.genre === 'repli') return 'r' + rang.index;
+  const ligne = rang.ligne;
+  return 'l' + (ligne.gauche ? ligne.gauche.numero : '') + '-' + (ligne.droite ? ligne.droite.numero : '');
+}
+
 /** Corps de texte du comparateur : police et interligne vont ensemble. */
 const TAILLES = [
   { police: 11, ligne: 16 },
@@ -167,7 +185,10 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onF
   const [taille, setTaille] = useState(() =>
     Number.isInteger(prefs.taille) && TAILLES[prefs.taille] ? prefs.taille : TAILLE_NORMALE
   );
-  const [replisOuverts, setReplisOuverts] = useState(() => new Set());
+  // Les replis ouverts sont liés au fichier qui les a ouverts : au changement
+  // de fichier, les indices de l'ancien ne s'appliquent jamais au nouveau,
+  // même le temps d'un rendu (l'effet de remise à zéro court après le rendu).
+  const [replisOuverts, setReplisOuverts] = useState(() => ({ cle: null, indices: ENSEMBLE_VIDE }));
   const [recherche, setRecherche] = useState('');
   const [rechercheVisible, setRechercheVisible] = useState(false);
   const [apercuVisible, setApercuVisible] = useState(false);
@@ -201,7 +222,7 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onF
   }, [unifie, synchronise, espacesVisibles, couleur, guidesVisibles, localAGauche, taille]);
 
   useEffect(() => {
-    setReplisOuverts(new Set());
+    setReplisOuverts({ cle: null, indices: ENSEMBLE_VIDE });
     setChangementCourant(-1);
     setPositionTrouvee(0);
     setApercuVisible(false);
@@ -229,9 +250,10 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onF
   // Lignes réellement affichées, replis dépliés compris.
   const rangs = useMemo(() => {
     if (!donnees || donnees.type !== 'texte') return [];
+    const indicesOuverts = replisOuverts.cle === donnees.cle ? replisOuverts.indices : ENSEMBLE_VIDE;
     const sortie = [];
     donnees.groupes.forEach((groupe, index) => {
-      if (groupe.type === 'repli' && !replisOuverts.has(index)) {
+      if (groupe.type === 'repli' && !indicesOuverts.has(index)) {
         sortie.push({ genre: 'repli', groupe, index });
         return;
       }
@@ -341,10 +363,14 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onF
   }
 
   function basculerRepli(index) {
-    const suivants = new Set(replisOuverts);
-    if (suivants.has(index)) suivants.delete(index);
-    else suivants.add(index);
-    setReplisOuverts(suivants);
+    // Forme fonctionnelle : deux clics rapprochés dans le même rendu ne
+    // travaillent jamais sur un instantané périmé de l'ensemble.
+    setReplisOuverts((precedents) => {
+      const indices = new Set(precedents.cle === donnees.cle ? precedents.indices : []);
+      if (indices.has(index)) indices.delete(index);
+      else indices.add(index);
+      return { cle: donnees.cle, indices };
+    });
   }
 
   // --- États autres que « texte » -------------------------------------------
@@ -727,9 +753,9 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onF
                             ${rangsAffiches.map(
                               (rang, index) =>
                                 rang.genre === 'repli'
-                                  ? html`<${Repli} key=${'r' + index} rang=${rang} onOuvrir=${basculerRepli} />`
+                                  ? html`<${Repli} key=${cleDuRang(rang)} rang=${rang} onOuvrir=${basculerRepli} />`
                                   : html`<${LignesUnifiees}
-                                      key=${'u' + index}
+                                      key=${cleDuRang(rang)}
                                       ligne=${rang.ligne}
                                       espaces=${espacesVisibles}
                                       cartes=${jetons}
@@ -756,14 +782,14 @@ export function VueDiff({ diff, onOuvrirExterne, onNotifier, onVoirVersions, onF
                               ${rangsAffiches.map((rang, index) => {
                                 if (rang.genre === 'repli') {
                                   return html`<${Repli}
-                                    key=${colonne.cote + 'r' + index}
+                                    key=${cleDuRang(rang)}
                                     rang=${rang}
                                     onOuvrir=${basculerRepli}
                                   />`;
                                 }
                                 const cote = rang.ligne[colonne.cote];
                                 return html`<${LigneCote}
-                                  key=${colonne.cote + index}
+                                  key=${cleDuRang(rang)}
                                   cote=${cote}
                                   type=${rang.ligne.type}
                                   espaces=${espacesVisibles}
@@ -872,9 +898,9 @@ function CarteChangements({ rangs, reperes, onAller }) {
       }}
     >
       ${blocs.map(
-        (bloc, index) => html`
+        (bloc) => html`
           <span
-            key=${index}
+            key=${bloc.debut + '.' + bloc.type}
             class=${'diff-carte-trait carte-' + bloc.type}
             style=${'top:' +
             ((bloc.debut / total) * 100).toFixed(3) +

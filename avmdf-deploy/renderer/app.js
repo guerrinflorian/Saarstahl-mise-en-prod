@@ -21,6 +21,7 @@ import { ReferencesFichier } from './components/ReferencesFichier.js';
 import { EditeurFichier } from './components/EditeurFichier.js';
 import { PaletteFichiers } from './components/PaletteFichiers.js';
 import { IntroVideo } from './components/IntroVideo.js';
+import { GardeRendu } from './components/GardeRendu.js';
 import { Notifications, useNotifications } from './components/Notifications.js';
 import { appliquerTheme, lireTheme } from './components/theme.js';
 import { joindreChemin } from './components/chemins.js';
@@ -967,6 +968,7 @@ function App() {
           onDblClick=${() => setLargeurPanneau(380)}
         ></div>
 
+        <${GardeRendu}>
         <${VueDiff}
           diff=${diff}
           onOuvrirExterne=${ouvrirExterne}
@@ -988,6 +990,7 @@ function App() {
           }
           onRecomparer=${rechargerDiff}
         />
+        <//>
       </div>
       `}
 
