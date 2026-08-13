@@ -162,6 +162,7 @@ export function BandeauDeploiement({
         <span class=${'bandeau-etat ' + (reel ? 'reel' : 'simulation')}>
           ${reel ? 'Écriture réelle' : 'Simulation'}
         </span>
+        <span class="bandeau-separation" aria-hidden="true"></span>
         <${Interrupteur}
           libelle="Archiver"
           coche=${archiver}

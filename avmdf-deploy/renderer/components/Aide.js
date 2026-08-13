@@ -1802,7 +1802,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               [html`<${T}>Ctrl<//> + <${T}>F<//>`, 'Chercher dans la comparaison affichée', 'Comparateur'],
               [html`<${T}>Ctrl<//> + <${T}>S<//>`, 'Enregistrer le fichier', 'Éditeur intégré'],
               [html`<${T}>Tab<//>`, 'Insérer une tabulation', 'Éditeur intégré'],
-              [html`<${T}>Échap<//>`, 'Passer la vidéo d\'introduction ; fermer la recherche, une confirmation, ou l\'écran ouvert', 'Partout'],
+              [html`<${T}>Échap<//>`, 'Fermer la recherche, une confirmation, ou l\'écran ouvert', 'Partout'],
               ['Double-clic sur la poignée', 'Rétablir la largeur d\'origine du panneau de gauche', 'Onglet Analyse']
             ]}
           />
