@@ -61,13 +61,13 @@ export function BandeauDeploiement({
   const mixte = operation === 'mixte';
   const suppression = operation === 'suppression';
 
-  // La case « Archiver » gouverne tout le versant AVMDF. Décochée, il n'y a
-  // plus rien à ranger : la destination n'est ni exigée ni utilisée, et un
-  // choix fait auparavant est simplement mis de côté. Personne ne devrait
-  // avoir à ouvrir une demande pour pousser une feuille de style, ni pour
-  // supprimer de vieux fichiers morts. Pour une suppression, le renoncement
-  // pèse plus lourd (l'orphelin n'existe qu'en production) : l'avertissement
-  // et la confirmation le disent en rouge.
+  // La case « Archiver » gouverne le versant demande de travaux. Décochée, le
+  // passage est dit mineur : personne ne devrait avoir à ouvrir une demande
+  // pour pousser une feuille de style ou supprimer de vieux fichiers morts.
+  // Mais mineur ne veut pas dire sans trace : la version écrasée et le
+  // manifeste partent dans AVMDFMINEUR, sous un sous-dossier horodaté, et le
+  // passage reste réversible, tracé et compté comme les autres. Une
+  // destination choisie auparavant est simplement mise de côté.
   const avecArchivage = archiver;
 
   const raisonBlocage = modeLibre
@@ -122,10 +122,10 @@ export function BandeauDeploiement({
         <span class="fleche">→</span>
         ${!avecArchivage
           ? html`<span
-              class="bandeau-destination attenue"
-              title="« Archiver » est décoché : aucune version ne part dans les archives, et aucune destination n'est utilisée. Recochez la case pour retrouver la demande et le sprint."
+              class="bandeau-destination mono attenue"
+              title="« Archiver » est décoché : passage mineur, sans numéro de demande. La version écrasée et le manifeste partent dans AVMDFMINEUR, sous un sous-dossier horodaté. Recochez la case pour ranger le passage sous une demande."
             >
-              aucun archivage
+              AVMDFMINEUR
             </span>`
           : destination
             ? html`<button
@@ -151,12 +151,10 @@ export function BandeauDeploiement({
         ${raisonBlocage ? html`<span class="attenue bandeau-raison">${raisonBlocage}</span>` : null}
         ${!archiver
           ? html`<span
-              class="bandeau-etat sans-archive"
-              title=${suppression
-                ? 'Aucune copie de sauvegarde : la suppression sera définitive, le contenu ne survivra nulle part'
-                : 'Aucune copie de sauvegarde : ce passage ne pourra pas être annulé'}
+              class="bandeau-etat mineur"
+              title="Passage sans numéro de demande : archivé dans AVMDFMINEUR, réversible et tracé comme les autres"
             >
-              Sans AVMDF
+              Mineur
             </span>`
           : null}
         <span class=${'bandeau-etat ' + (reel ? 'reel' : 'simulation')}>
@@ -168,8 +166,8 @@ export function BandeauDeploiement({
           coche=${archiver}
           attention
           titre=${suppression
-            ? 'Copier le fichier dans le dossier de sprint avant de le supprimer. Décoché, la suppression est définitive : un orphelin n\'existe qu\'en production, son contenu ne sera conservé nulle part.'
-            : 'Copier la version de production dans le dossier de sprint avant de l\'écraser. Décoché, rien n\'est conservé et le retour arrière devient impossible.'}
+            ? 'Ranger la copie du fichier supprimé sous une demande de travaux. Décoché : passage mineur, la copie part dans AVMDFMINEUR, sans numéro de demande - toujours réversible.'
+            : 'Ranger la version écrasée sous une demande de travaux. Décoché : passage mineur, la version et le manifeste partent dans AVMDFMINEUR, sans numéro de demande - toujours réversible.'}
           onChange=${onArchiver}
         />
         <${Interrupteur}

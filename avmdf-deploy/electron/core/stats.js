@@ -157,9 +157,12 @@ function calculer(manifestes, maintenant = new Date()) {
 
   // Les demandes revisitées : plusieurs passages sous le même numéro AVMDF,
   // c'est l'histoire d'une intervention qui a demandé plusieurs allers.
+  // AVMDFMINEUR n'en est pas une : les passages mineurs s'y accumulent par
+  // définition, ils écraseraient toujours ce classement sans rien raconter.
   const parDemande = new Map();
   for (const manifeste of deploiements) {
     if (!manifeste.demande) continue;
+    if (String(manifeste.demande).toUpperCase() === 'AVMDFMINEUR') continue;
     const entree = parDemande.get(manifeste.demande) || {
       demande: manifeste.demande,
       passages: 0,

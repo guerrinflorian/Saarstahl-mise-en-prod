@@ -493,10 +493,11 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               convention déjà en place.
             </p>
             <p class="attenue">
-              Étape facultative si ce passage ne mérite pas d'archive. Une feuille de style ou une
-              retouche sans enjeu : décochez <strong>Archiver</strong> dans le bandeau et vous pouvez
-              partir sans demande du tout. Le passage devient alors définitif et ne laisse de trace
-              que dans le journal.
+              Étape facultative si ce passage ne mérite pas sa demande. Une feuille de style ou une
+              retouche sans enjeu : décochez <strong>Archiver</strong> dans le bandeau et vous partez
+              sans numéro du tout. Le passage est alors dit mineur : la version écrasée et le
+              manifeste partent dans <span class="mono">AVMDFMINEUR</span>, il reste réversible et
+              tracé comme les autres.
             </p>
           </${Etape}>
 
@@ -1278,8 +1279,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               [
                 html`<label class="case"><input type="checkbox" checked readonly tabindex="-1" /><span>Archiver</span></label>`,
-                "La version de production est copiée dans le dossier de sprint avant d'être écrasée. C'est le comportement normal.",
-                html`Rien n'est conservé de l'existant. Le bandeau affiche <span class="bandeau-etat sans-archive">Sans AVMDF</span> et <strong>le retour arrière devient impossible</strong> pour ce passage.`
+                "La version de production est copiée dans le dossier de sprint de la demande avant d'être écrasée. C'est le comportement normal.",
+                html`Passage <strong>mineur</strong>, sans numéro de demande : la version écrasée et le manifeste partent dans <span class="mono">AVMDFMINEUR</span>. Le bandeau affiche <span class="bandeau-etat mineur">Mineur</span>, et le passage reste réversible et tracé.`
               ]
             ]}
           />
@@ -1295,45 +1296,35 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             relecture avant d'appuyer sur le bouton.
           </p>
 
-          <h3>Se passer de l'archivage AVMDF</h3>
+          <h3>Sans numéro de demande : le passage mineur</h3>
           <p>
-            Toutes les mises en production ne méritent pas leur dossier d'archives. Une feuille de
+            Toutes les mises en production ne méritent pas leur demande de travaux. Une feuille de
             style, une correction d'affichage, une retouche sans enjeu : décocher${' '}
-            <strong>Archiver</strong> évite d'encombrer la demande de copies dont personne n'aura
-            jamais besoin.
+            <strong>Archiver</strong> évite d'ouvrir une demande pour rien.
           </p>
           <p>
-            La case vaut aussi pour une <strong>suppression d'orphelins</strong>, et le renoncement y
-            pèse plus lourd : un orphelin n'existe qu'en production, donc sans archive son contenu ne
-            sera conservé <strong>nulle part</strong> et ne pourra jamais être restauré. La
-            confirmation le rappelle en rouge, et la suppression se confirme alors en recopiant le
-            nombre de fichiers.
+            <strong>Mineur ne veut pas dire sans trace.</strong> La version écrasée et le manifeste
+            partent dans <span class="mono">AVMDFMINEUR</span>, à la racine des archives, sous un
+            sous-dossier horodaté propre au passage. L'historique le liste, le tableau de bord le
+            compte, la frise d'un fichier le raconte, et le retour arrière reste possible - on sait
+            toujours ce qu'on a fait, et on a touché à quoi.
           </p>
           <p>
-            <strong>La case gouverne tout le versant AVMDF.</strong> Décochée, la demande n'est plus
-            demandée, plus lue, et plus rien ne s'écrit sous la racine des archives : ni les
-            versions remplacées, ni le manifeste qui les recense. On ne vous demande plus d'ouvrir
-            une demande de travaux pour pousser une feuille de style. Le dossier d'archives n'est
-            même pas consulté, et le lecteur réseau peut être déconnecté sans que cela empêche quoi
-            que ce soit.
+            La case vaut aussi pour une <strong>suppression d'orphelins</strong> : la copie du
+            fichier supprimé part dans <span class="mono">AVMDFMINEUR</span> au lieu du dossier
+            d'une demande, et la suppression reste réversible.
           </p>
           <p class="attenue">
             Une destination choisie avant de décocher est simplement mise de côté : le bandeau
-            affiche « aucun archivage » à sa place, et elle revient si la case est recochée. La
-            confirmation ne parle alors plus de demande du tout et se valide en recopiant le nombre
+            affiche <span class="mono">AVMDFMINEUR</span> à sa place, et elle revient si la case est
+            recochée. La confirmation ne parle plus de numéro et se valide en recopiant le nombre
             de fichiers.
           </p>
-          <div class="encart encart-danger">
-            <strong>Ce qui se perd, se perd.</strong> Sans copie de sauvegarde, il n'y a rien à
-            remettre. Sans manifeste, le passage n'apparaît ni dans l'historique ni dans le tableau
-            de bord : seul le journal en garde la ligne, et le rapport final reste affiché à
-            l'écran. Dans le doute, laissez la case cochée.
-          </div>
           <p class="attenue">
             La case revient d'elle-même à « cochée » après chaque mise en production réelle : le
             choix se refait à chaque passage, il ne se subit pas. Et si un lot mélange des fichiers
-            sans enjeu et des fichiers à conserver, faites deux passages : c'est la seule façon de
-            garder un manifeste dont on sait s'il est réversible ou non.
+            d'une vraie demande et des retouches mineures, faites deux passages : chaque manifeste
+            raconte alors une seule histoire.
           </p>
 
           <h3>Quand le bouton reste grisé</h3>
@@ -1350,7 +1341,7 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               ],
               [
                 'Choisissez d\'abord la demande et le dossier de sprint.',
-                html`Aucune destination d'archivage n'est encore désignée. Ce blocage tombe si vous décochez${' '}<strong>Archiver</strong> : sans archive, la demande devient facultative.`
+                html`Aucune destination d'archivage n'est encore désignée. Ce blocage tombe si vous décochez${' '}<strong>Archiver</strong> : le passage devient mineur et part dans <span class="mono">AVMDFMINEUR</span>, sans numéro de demande.`
               ],
               [
                 'La comparaison libre ne permet pas de mise en production.',
@@ -1449,12 +1440,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 'La chaîne de connexion et les réglages de production vont être écrasés par ceux de votre poste. C\'est presque toujours une erreur.'
               ],
               [
-                'Archivage AVMDF écarté',
-                'Vous avez décoché « Archiver » : les versions de production seront écrasées sans copie de sauvegarde, et ce passage ne pourra pas être annulé. La liste des fichiers concernés est donnée.'
-              ],
-              [
-                'Sans archivage, ni manifeste ni récapitulatif',
-                'Rien ne sera écrit dans les archives : ce passage n\'apparaîtra ni dans l\'historique ni dans le tableau de bord, seul le journal en gardera la ligne. Recochez « Archiver » si vous voulez le retrouver plus tard.'
+                'Le dossier de sprint contient déjà des fichiers',
+                'Des versions archivées y sont déjà : celles d\'un passage précédent y resteront prioritaires, une archive existante n\'est jamais écrasée.'
               ],
               ['Fichier source modifié depuis l\'analyse', 'C\'est la version actuelle qui partira, pas celle que vous avez examinée.'],
               ['Espace disponible non mesurable', 'Le partage n\'a pas répondu à la question. Vérifiez à l\'œil qu\'il reste de la place.']
@@ -1482,9 +1469,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             dans l'historique et sur le tableau de bord.
           </p>
           <p class="attenue">
-            Quand il n'y a pas de demande, parce que le passage se fait sans archivage, c'est le${' '}
-            <strong>nombre de fichiers</strong> qu'on recopie. Le geste reste le même, et il oblige à
-            relire ce qui part.
+            Quand il n'y a pas de numéro, parce que le passage est mineur (destination${' '}
+            <span class="mono">AVMDFMINEUR</span>), c'est le <strong>nombre de fichiers</strong>${' '}
+            qu'on recopie. Le geste reste le même, et il oblige à relire ce qui part.
           </p>
         <//>
 
@@ -1817,9 +1804,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <ul class="aide-liste">
             <li>
               <strong>Rien n'est écrasé sans avoir été archivé d'abord.</strong> Si l'archivage
-              échoue, le fichier de production n'est pas touché. La seule exception est le
-              renoncement explicite : décocher « Archiver » avant un passage, ce qui est alors
-              inscrit dans le manifeste et interdit le retour arrière.
+              échoue, le fichier de production n'est pas touché. Même un passage mineur (case
+              « Archiver » décochée) archive : la copie part alors dans${' '}
+              <span class="mono">AVMDFMINEUR</span> au lieu du dossier d'une demande.
             </li>
             <li>
               <strong>La copie est binaire, octet pour octet.</strong> Aucun ré-encodage, aucune
@@ -1858,8 +1845,8 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             </li>
             <li>
               <strong>Tout est tracé</strong> : un manifeste et un récapitulatif dans le dossier de
-              sprint, un journal quotidien côté application. Un passage fait sans archivage n'écrit
-              rien dans les archives, mais le journal en garde la ligne, marquée ALERTE.
+              sprint - celui de la demande, ou le sous-dossier horodaté d'<span class="mono">AVMDFMINEUR</span>${' '}
+              pour un passage mineur - et un journal quotidien côté application.
             </li>
           </ul>
         <//>
@@ -1960,6 +1947,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 html`Le numéro qui identifie l'intervention. Il donne son nom au dossier <span class="mono">AVMDF&lt;numéro&gt;</span>, et c'est lui qu'on saisit pour confirmer une mise en production.`
               ],
               ['Sprint', 'Le sous-dossier d\'une demande qui reçoit les fichiers d\'un passage. Une demande peut en contenir plusieurs.'],
+              [
+                'Passage mineur',
+                html`Une mise en production sans numéro de demande, case « Archiver » décochée. La version écrasée et le manifeste partent dans <span class="mono">AVMDFMINEUR</span>, sous un sous-dossier horodaté : le passage reste réversible, listé dans l'historique et compté au tableau de bord.`
+              ],
               ['Orphelin', 'Un fichier présent en production et absent en local.'],
               [
                 'Manifeste',

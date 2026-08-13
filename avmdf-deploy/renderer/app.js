@@ -707,11 +707,16 @@ function App() {
 
   const confirmerDeploiement = useCallback(async (commentaire) => {
     const cible = archivageAvmdf ? destination : null;
+    // Pour un passage mineur, le sous-dossier AVMDFMINEUR horodaté résolu au
+    // préflight repart tel quel : la confirmation a montré exactement ce
+    // dossier, l'exécution ne doit pas en fabriquer un autre.
+    const sprintMineur =
+      !archivageAvmdf && deploiement && deploiement.resume ? deploiement.resume.sprint : null;
     setDeploiement((precedent) => ({ ...precedent, occupe: true }));
     const reponse = await window.avmdf.deploiement.executer({
       cles: [...selection],
       demande: cible ? cible.demande : null,
-      sprint: cible ? cible.sprint : null,
+      sprint: cible ? cible.sprint : sprintMineur,
       operation,
       archiver: archivageAvmdf,
       simulation: config.options.simulation,
@@ -758,7 +763,7 @@ function App() {
     // la valeur qu'avait la case au moment où il a été construit. Décocher
     // « Archiver » sans rien toucher d'autre laissait alors partir un plan
     // avec archivage, qui réclamait une demande au dernier moment.
-  }, [selection, destination, archivageAvmdf, operation, config, notifier, notifierEchec]);
+  }, [selection, destination, archivageAvmdf, deploiement, operation, config, notifier, notifierEchec]);
 
   // La largeur du panneau de gauche survit au redémarrage.
   useEffect(() => {

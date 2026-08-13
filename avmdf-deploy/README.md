@@ -31,8 +31,13 @@ npm run dev      # idem, avec les outils de développement ouverts
 npm run build
 ```
 
-Produit `dist\MEPFront.exe` : un fichier unique, sans installeur ni droits
-administrateur. À lancer depuis n'importe quel poste ayant accès à `Z:\`.
+Produit deux exécutables dans `dist\` :
+
+- `MEPFront.exe` : portable, un fichier unique, sans installeur ni droits administrateur ;
+- `MEPFront-Setup.exe` : installeur par utilisateur (un clic, sans droits administrateur), la
+  variante qui sait ensuite **se mettre à jour toute seule**.
+
+À lancer depuis n'importe quel poste ayant accès à `Z:\`.
 
 L'application embarque **Electron 22** (Chromium 108), dernière lignée compatible avec
 **Windows Server 2012 R2**, où tourne le serveur de développement. Ne pas monter la version
@@ -45,6 +50,20 @@ L'exécutable portable s'auto-extrait dans `%TEMP%` au lancement. Sur les serveu
 depuis `%TEMP%` est bloquée (stratégie de groupe, antivirus), utiliser la variante
 `MEPFront-dossier.zip` de la release : décompresser le dossier où l'on veut et
 lancer `AVMDF Mise en production.exe` sur place.
+
+## Mise à jour automatique
+
+L'application **installée** (`MEPFront-Setup.exe`) vérifie au lancement, en arrière-plan, si une
+release plus récente existe sur GitHub (`electron/miseajour.js`, electron-updater). Si oui, elle
+la télécharge et propose de redémarrer ; refuser installe quand même la mise à jour à la
+fermeture. Tout échec est silencieux pour l'utilisateur et tracé au journal : un poste sans accès
+à GitHub démarre exactement comme avant. L'exécutable portable, lui, ne sait pas se remplacer et
+ne vérifie rien.
+
+Deux conditions côté dépôt : chaque release doit embarquer `MEPFront-Setup.exe` et le fichier
+`latest.yml` produits par `npm run build`, et le dépôt doit être lisible par les postes (public,
+ou jeton fourni). Dépôt privé sans jeton : la vérification échoue en silence, ligne ALERTE au
+journal.
 
 ---
 
@@ -192,9 +211,11 @@ bord).
 
 Champs propres à l'outil : `commentaire` porte la phrase saisie à la confirmation (« pourquoi ce
 passage part »), ou `null` ; `operation` vaut `deploiement`, `suppression` ou `restauration` ;
-`archivage` à `false` marque un passage fait sans archivage AVMDF, donc non réversible - les
-versions ≤ 0.6 pouvaient écrire un manifeste dans ce cas, ce n'est plus possible depuis (sans
-archivage, rien n'est écrit du tout), mais ces manifestes-là restent lus et marqués comme tels ;
+`mineur` à `true` (depuis la 2.2.0) marque un passage sans numéro de demande, archivé sous
+`AVMDFMINEUR` et réversible comme les autres ; `archivage` à `false` marque un passage d'époque
+fait sans archivage AVMDF, donc non réversible - les versions ≤ 0.6 pouvaient écrire un manifeste
+dans ce cas, puis plus rien n'était écrit du tout jusqu'à la 2.1, et depuis la 2.2.0 le cas ne se
+produit plus (un passage archive toujours) ; ces manifestes-là restent lus et marqués comme tels ;
 `archiveNonRemplace` signale un fichier archivé dont la copie a échoué ; `sauvegardeConservee`
 signale une archive héritée d'un passage précédent dans le même sprint ; `sansArchive` marque une
 entrée dont la version de production a été écrasée sans copie de sauvegarde.
@@ -700,50 +721,41 @@ soi-même n'aurait aucun intérêt. `F5` reste là pour repartir vraiment du dis
 Une **restauration** est exclue de ce mécanisme : elle remet en production un contenu venu des
 archives, pas des sources locales, donc conclure « identique » serait faux.
 
-## Mise en production sans archivage
+## Mise en production mineure : AVMDFMINEUR
 
-Toutes les mises en production ne méritent pas leur dossier d'archives : une feuille de style, une
+Toutes les mises en production ne méritent pas leur demande de travaux : une feuille de style, une
 correction d'affichage, une retouche sans enjeu. La case **Archiver** du bandeau, cochée par
-défaut, se décoche pour un passage.
+défaut, se décoche pour un passage : il devient **mineur**, sans numéro de demande.
 
-**La case gouverne tout le versant AVMDF.** Décochée, la demande n'est plus exigée, plus lue, et
-plus rien ne s'écrit sous la racine des archives : ni les versions remplacées, ni le manifeste qui
-les recense. Personne ne devrait avoir à ouvrir une demande de travaux pour pousser une feuille de
-style. Le dossier d'archives n'est même pas consulté, et le lecteur réseau peut être déconnecté sans
-que cela empêche quoi que ce soit.
+**Mineur ne veut pas dire sans trace.** Depuis la 2.2.0, la version écrasée et le manifeste
+partent dans le dossier `AVMDFMINEUR`, à la racine des archives, sous un sous-dossier horodaté
+propre au passage (`AVMDFMINEUR\2026-08-13_114233`). Le passage reste donc réversible depuis
+l'historique, compté au tableau de bord, visible dans la frise et les versions archivées de chaque
+fichier : on sait ce qu'on a fait, et on a touché à quoi. Les versions antérieures à la 2.2.0
+écrivaient ces passages sans aucune archive ni manifeste ; leurs manifestes n'existent pas, mais
+ceux marqués `archivage: false` d'époque restent lus et signalés comme non réversibles.
+
+La case vaut aussi pour les **suppressions d'orphelins** : la copie du fichier supprimé part dans
+`AVMDFMINEUR` au lieu du dossier d'une demande, et la suppression reste réversible.
 
 Une destination choisie **avant** de décocher est mise de côté, pas utilisée : le bandeau affiche
-« aucun archivage » à sa place, et elle revient si la case est recochée. C'est le point qui avait
-été mal tranché au départ - la demande était encore transmise, donc la confirmation réclamait
-toujours son numéro et parlait encore d'AVMDF alors que la case était décochée. Un passage à moitié
-archivé est plus difficile à expliquer qu'un passage qui ne l'est pas du tout.
+`AVMDFMINEUR` à sa place, et elle revient si la case est recochée.
 
-Depuis la 1.7.0, la case s'applique aussi aux **suppressions d'orphelins**, et le renoncement y
-pèse plus lourd : un orphelin n'existe qu'en production, donc sans archive son contenu n'est
-conservé **nulle part** et ne pourra jamais être restauré. Les contrôles préalables listent les
-fichiers concernés, la confirmation l'affiche en rouge (« Suppression définitive ») et se fait en
-recopiant le nombre de fichiers, et le journal garde la ligne en ALERTE. Supprimer de vieux
-fichiers morts ne demande plus d'ouvrir une demande de travaux ; en garder une trace reste le
-comportement par défaut, la case se recochant d'elle-même après chaque passage réel.
+Sans numéro, la confirmation se fait en recopiant le **nombre de fichiers** : le geste reste le
+même, et il oblige à relire ce qui part. Le choix se voit à chaque étape : `AVMDFMINEUR` à la
+place de la destination dans le bandeau, un pavé `Mineur` à côté, un encart dans la confirmation
+avec le dossier exact. La case revient d'elle-même à « cochée » après chaque mise en production
+réelle : le choix se refait à chaque passage, il ne se subit pas. Un lot mélangeant fichiers d'une
+vraie demande et retouches mineures se traite en deux passages.
 
-Sans archivage, la confirmation se fait en recopiant le **nombre de fichiers** au lieu du numéro de
-demande : le geste reste le même, et il oblige à relire ce qui part. Ce qu'il ne faut surtout pas,
-c'est un champ vide qui se valide seul.
-
-Le choix se voit à chaque étape : « aucun archivage » à la place de la destination dans le bandeau,
-un pavé `SANS AVMDF` à côté, un avertissement dans les contrôles préalables avec la liste des
-fichiers concernés, un encart rouge dans la confirmation, et une ligne `ALERTE` au journal.
-
-Conséquence assumée : **le passage ne laisse aucune trace écrite dans les archives**. Il n'apparaît
-ni dans l'historique ni dans le tableau de bord, il n'y a rien à restaurer, et seul le journal en
-garde la ligne. La case revient d'elle-même à « cochée » après chaque mise en production réelle :
-le choix se refait à chaque passage, il ne se subit pas. Un lot mélangeant fichiers sans enjeu et
-fichiers à conserver se traite en deux passages.
+Le dossier `AVMDFMINEUR` n'apparaît jamais dans le panneau de destination : on n'y range rien à la
+main, on y arrive en décochant la case. Il est exclu du classement « demandes revisitées » du
+tableau de bord, que les passages mineurs écraseraient sans rien raconter.
 
 ## Ce que l'outil ne fait jamais
 
-- déployer sans avoir archivé la version écrasée, hors renoncement explicite tracé dans le
-  manifeste (voir ci-dessus) ;
+- déployer sans avoir archivé la version écrasée : même un passage mineur archive, dans
+  `AVMDFMINEUR` (voir ci-dessus) ;
 - prendre un partage injoignable pour un fichier absent : seule une vraie absence (`ENOENT`)
   autorise à conclure, toute autre erreur met le fichier en échec - un `Z:\` qui vacille ne peut
   plus faire sauter l'archivage ;

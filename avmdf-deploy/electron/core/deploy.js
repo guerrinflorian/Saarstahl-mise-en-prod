@@ -740,6 +740,9 @@ async function executer(plan, options = {}) {
     racineProd: plan.racineProd,
     dossierSauvegarde: plan.dossierSauvegarde,
     archivage: plan.archiver !== false,
+    // Passage sans numéro de demande, rangé sous AVMDFMINEUR : archivé et
+    // réversible comme les autres, mais dit mineur partout où on le lit.
+    mineur: Boolean(plan.mineur),
     simulation,
     annule: signal.annule,
     appOffline: etatAppOffline,

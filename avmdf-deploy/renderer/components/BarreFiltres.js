@@ -94,14 +94,24 @@ export function BarreFiltres({
   const minuteurSaisie = useRef(0);
   const refCriteres = useRef(criteres);
   refCriteres.current = criteres;
+  // La saisie ne se resynchronise que sur un vrai changement externe
+  // (réinitialisation des filtres). L'écho de sa propre propagation, revenu
+  // après un refiltrage long, écraserait les lettres tapées entre-temps.
+  const dernierePropagation = useRef(criteres.requete);
   useEffect(() => {
-    setSaisie(criteres.requete);
+    if (criteres.requete !== dernierePropagation.current) {
+      dernierePropagation.current = criteres.requete;
+      setSaisie(criteres.requete);
+    }
   }, [criteres.requete]);
   useEffect(() => () => clearTimeout(minuteurSaisie.current), []);
   const surSaisie = (valeur) => {
     setSaisie(valeur);
     clearTimeout(minuteurSaisie.current);
-    minuteurSaisie.current = setTimeout(() => onCriteres({ ...refCriteres.current, requete: valeur }), 150);
+    minuteurSaisie.current = setTimeout(() => {
+      dernierePropagation.current = valeur;
+      onCriteres({ ...refCriteres.current, requete: valeur });
+    }, 300);
   };
 
   const avancesActifs =

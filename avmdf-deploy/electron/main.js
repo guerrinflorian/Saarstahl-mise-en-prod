@@ -26,6 +26,7 @@ const deploy = require('./core/deploy');
 const journal = require('./core/journal');
 const stats = require('./core/stats');
 const references = require('./core/references');
+const { verifierMiseAJour } = require('./miseajour');
 
 const MODE_DEV = process.argv.includes('--dev');
 
@@ -1341,7 +1342,9 @@ function handlersAvmdf() {
     if (erreur) {
       return echec(erreur, 'Vérifiez la racine des archives dans les réglages.');
     }
-    return succes({ demandes, racine: actuels.racines.avmdf });
+    // AVMDFMINEUR n'est pas une demande à choisir : on y arrive en décochant
+    // « Archiver », jamais par le panneau de destination.
+    return succes({ demandes: demandes.filter((d) => !d.mineure), racine: actuels.racines.avmdf });
   });
 
   gerer('avmdf:inspecter', async (parametres) => {
@@ -1446,30 +1449,41 @@ function construirePlan(parametres) {
     };
   }
 
-  // L'archivage se fait, sauf renoncement explicite : le défaut n'est jamais
-  // la perte de l'état antérieur.
+  // L'archivage se fait toujours : le défaut n'est jamais la perte de l'état
+  // antérieur, et depuis la 2.2.0 le renoncement à la demande n'y change rien.
   //
-  // Le renoncement vaut aussi pour une suppression d'orphelins, et il y pèse
-  // plus lourd : un orphelin n'existe qu'en production, sans archive son
-  // contenu ne survit nulle part. La confirmation et les contrôles préalables
-  // le disent en toutes lettres.
-  const archiver = parametres.archiver !== false;
+  // La case décochée signifie « sans numéro de demande », pas « sans trace » :
+  // le passage est dit mineur, la version écrasée et le manifeste partent dans
+  // AVMDFMINEUR sous un sous-dossier horodaté. Il reste donc réversible,
+  // visible dans l'historique et compté au tableau de bord.
+  const mineur = parametres.archiver === false;
 
-  // La case gouverne tout le versant AVMDF. Décochée, la demande et le sprint
-  // ne sont ni demandés ni lus, et rien n'est écrit sous la racine des
-  // archives, pas même le manifeste : un passage à moitié archivé serait plus
-  // difficile à expliquer qu'un passage qui ne l'est pas du tout. Le journal,
-  // lui, garde la trace dans tous les cas.
   const demande = avmdf.normaliserDemande(parametres.demande);
 
   let destination = null;
-  if (archiver) {
+  let nomDemande = null;
+  let nomSprint = null;
+  if (!mineur) {
     if (!demande) {
       return { erreur: echec('Aucune demande choisie.', 'Choisissez ou créez une demande AVMDF dans le panneau de destination.') };
     }
-    destination = avmdf.resoudreDestination(actuels.racines.avmdf, demande.nom, parametres.sprint);
+    nomDemande = demande.nom;
+    nomSprint = String(parametres.sprint || '').trim();
+    destination = avmdf.resoudreDestination(actuels.racines.avmdf, nomDemande, nomSprint);
     if (!destination.valide) {
       return { erreur: echec(destination.erreur, 'Corrigez le nom du dossier de sprint.') };
+    }
+  } else {
+    // Le sous-dossier horodaté est figé au préflight : l'exécution renvoie le
+    // même nom pour que la confirmation montre exactement ce qui sera écrit
+    // (et pour que le préflight réutilisé garde sa signature).
+    nomDemande = avmdf.DEMANDE_MINEURE;
+    nomSprint = avmdf.MOTIF_PASSAGE_MINEUR.test(String(parametres.sprint || '').trim())
+      ? String(parametres.sprint).trim()
+      : avmdf.nomPassageMineur(new Date());
+    destination = avmdf.resoudreDestination(actuels.racines.avmdf, nomDemande, nomSprint);
+    if (!destination.valide) {
+      return { erreur: echec(destination.erreur, 'Vérifiez la racine des archives dans les réglages.') };
     }
   }
 
@@ -1479,12 +1493,13 @@ function construirePlan(parametres) {
       racineLocale: dernierScan.cheminLocal,
       racineProd: dernierScan.cheminProd,
       racineAvmdf: actuels.racines.avmdf,
-      demande: destination ? demande.nom : null,
-      sprint: destination ? parametres.sprint.trim() : null,
-      dossierSauvegarde: destination ? destination.chemin : null,
+      demande: nomDemande,
+      sprint: nomSprint,
+      dossierSauvegarde: destination.chemin,
       auteur: actuels.options.auteur,
       simulation: Boolean(parametres.simulation),
-      archiver,
+      archiver: true,
+      mineur,
       operation,
       // Une phrase au plus : le commentaire explique le passage, il ne raconte
       // pas le sprint.
@@ -1569,12 +1584,11 @@ function handlersDeploiement() {
     const signal = fsindex.creerSignal();
     operationEnCours = signal;
     carnet.ecrire(
-      plan.archiver ? 'INFO' : 'ALERTE',
+      'INFO',
       `${plan.simulation ? 'simulation' : 'mise en production'} : ${plan.fichiers.length} fichier(s) ` +
         `vers ${plan.racineProd} (${plan.operation})` +
         (plan.dossierSauvegarde ? ` - archives ${plan.dossierSauvegarde}` : '') +
-        (plan.archiver ? '' : ' - SANS archivage AVMDF, passage non réversible') +
-        (!plan.archiver && !plan.dossierSauvegarde ? ' et sans manifeste' : '')
+        (plan.mineur ? ' - passage mineur, sans numéro de demande' : '')
     );
 
     try {
@@ -1654,6 +1668,7 @@ function resumePlan(plan) {
     operation: plan.operation,
     simulation: plan.simulation,
     archiver: plan.archiver,
+    mineur: Boolean(plan.mineur),
     parStatut,
     octets,
     fichiers: plan.fichiers.map((fichier) => ({
@@ -2047,6 +2062,10 @@ if (!app.requestSingleInstanceLock()) {
     handlersHistorique();
     handlersSysteme();
     creerFenetre();
+
+    // Après la fenêtre, jamais avant elle : la vérification ne retarde pas
+    // le démarrage, et son échec éventuel ne se voit qu'au journal.
+    verifierMiseAJour({ laFenetre: () => fenetre, carnet });
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) creerFenetre();

@@ -59,7 +59,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
   const libelleSaisie = numeroDemande ? 'le numéro de la demande' : 'le nombre de fichiers';
   const saisieCorrecte = saisie.trim() === aRecopier;
   const suppression = resume.operation === 'suppression';
-  const sansArchive = resume.archiver === false;
+  const mineur = Boolean(resume.mineur);
   const peutPartir = controle.ok && saisieCorrecte && !occupe;
 
   const nombre = resume.fichiers.length;
@@ -73,9 +73,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
     ? { titre: 'Production', nom: resume.projet, chemin: resume.racineProd }
     : { titre: 'Vos sources', nom: resume.projet, chemin: resume.racineLocale };
   const borneArrivee = suppression
-    ? sansArchive
-      ? { titre: 'Nulle part', nom: 'aucune copie conservée', chemin: '', danger: true }
-      : { titre: 'Archives AVMDF', nom: resume.sprint || resume.demande, chemin: resume.dossierSauvegarde }
+    ? { titre: 'Archives AVMDF', nom: resume.sprint || resume.demande, chemin: resume.dossierSauvegarde }
     : { titre: 'Production', nom: resume.projet, chemin: resume.racineProd };
 
   return html`
@@ -167,7 +165,7 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
                 <div class="mission-fleche-chiffres mono">${chiffres}</div>
                 <div class="mission-fleche-trait"><span class="mission-fleche-pointe"></span></div>
                 <div class="mission-fleche-verbe">
-                  ${suppression ? (sansArchive ? 'suppression définitive' : 'retrait, copie conservée') : 'copie, octet pour octet'}
+                  ${suppression ? 'retrait, copie conservée' : 'copie, octet pour octet'}
                 </div>
               </div>
               <div class=${'mission-borne' + (borneArrivee.danger ? ' danger' : '')}>
@@ -198,11 +196,9 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             </div>
 
             ${!suppression
-              ? html`<div class=${'mission-archives' + (sansArchive ? ' ecarte' : '')}>
-                  ${sansArchive
-                    ? html`<strong>Archivage écarté :</strong> les versions écrasées ne seront conservées nulle part.`
-                    : html`Les versions remplacées partent d'abord vers${' '}
-                        <span class="mono" title=${resume.dossierSauvegarde}>${resume.dossierSauvegarde}</span>`}
+              ? html`<div class="mission-archives">
+                  Les versions remplacées partent d'abord vers${' '}
+                  <span class="mono" title=${resume.dossierSauvegarde}>${resume.dossierSauvegarde}</span>
                 </div>`
               : null}
           </div>
@@ -245,22 +241,13 @@ export function ConfirmationDeploiement({ etape, controle, resume, occupe, progr
             </div>
           </div>
 
-          ${sansArchive
-            ? suppression
-              ? html`<div class="encart encart-danger" style="margin-top:14px">
-                  <strong>Suppression définitive.</strong> Un orphelin n'existe qu'en production : sans
-                  archivage AVMDF, les fichiers supprimés ne seront <strong>conservés nulle part</strong> et ne
-                  pourront jamais être restaurés. Aucune demande n'est utilisée et aucun manifeste n'est
-                  écrit : seul le journal gardera la ligne. Recochez « Archiver » dans le bandeau du bas
-                  pour garder une copie et rester réversible.
-                </div>`
-              : html`<div class="encart encart-danger" style="margin-top:14px">
-                  <strong>Archivage AVMDF écarté.</strong> Les versions actuellement en production seront
-                  écrasées sans être conservées, et <strong>ce passage ne pourra pas être annulé</strong>. Aucune
-                  demande n'est utilisée et aucun manifeste n'est écrit : le passage n'apparaîtra ni dans
-                  l'historique ni dans le tableau de bord, seul le journal en gardera la ligne. Recochez
-                  « Archiver » dans le bandeau du bas pour revenir au comportement normal.
-                </div>`
+          ${mineur
+            ? html`<div class="encart" style="margin-top:14px">
+                <strong>Passage mineur, sans numéro de demande.</strong> Les versions écrasées et le
+                manifeste partent dans <span class="mono" title=${resume.dossierSauvegarde}>${resume.dossierSauvegarde}</span> :
+                le passage reste réversible, tracé dans l'historique et compté au tableau de bord.
+                Recochez « Archiver » dans le bandeau du bas pour le ranger sous une demande.
+              </div>`
             : null}
 
           ${resume.simulation

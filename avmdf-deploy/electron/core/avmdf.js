@@ -28,6 +28,26 @@ const MOTIF_DEMANDE = /^AVMDF(\d+)$/i;
 const MOTIF_SPRINT = /^Sprint\s*(\d+)$/i;
 
 /**
+ * Dossier des mises en production sans numéro de demande : les passages
+ * mineurs y sont archivés dans un sous-dossier horodaté chacun, avec leur
+ * manifeste. Ils restent donc réversibles, lisibles dans l'historique et
+ * comptés au tableau de bord, exactement comme les autres.
+ */
+const DEMANDE_MINEURE = 'AVMDFMINEUR';
+
+/** Nom du sous-dossier d'un passage mineur : lisible et triable. */
+function nomPassageMineur(date) {
+  const d = date instanceof Date ? date : new Date();
+  const deux = (n) => String(n).padStart(2, '0');
+  return (
+    d.getFullYear() + '-' + deux(d.getMonth() + 1) + '-' + deux(d.getDate()) +
+    '_' + deux(d.getHours()) + deux(d.getMinutes()) + deux(d.getSeconds())
+  );
+}
+
+const MOTIF_PASSAGE_MINEUR = /^\d{4}-\d{2}-\d{2}_\d{6}$/;
+
+/**
  * Sous-dossier où l'outil range SES fichiers dans un dossier de sprint :
  * manifestes, récapitulatif, LISEZMOI. Le nom dit ce qu'il est, pour que
  * quiconque parcourt les archives comprenne d'un coup d'œil que rien ici
@@ -89,6 +109,17 @@ async function listerDemandes(racineAvmdf) {
   const demandes = [];
   for (const element of contenu) {
     if (!element.isDirectory()) continue;
+    // Le dossier des passages mineurs compte comme une demande : ses versions
+    // archivées doivent ressortir partout (frise, versions d'un fichier).
+    if (element.name.toUpperCase() === DEMANDE_MINEURE) {
+      demandes.push({
+        nom: element.name,
+        numero: 0,
+        mineure: true,
+        chemin: path.join(racineAvmdf, element.name)
+      });
+      continue;
+    }
     const trouve = element.name.match(MOTIF_DEMANDE);
     if (!trouve) continue;
     demandes.push({
@@ -456,6 +487,9 @@ module.exports = {
   DOSSIER_OUTIL,
   MOTIF_FICHIER_OUTIL,
   LIBELLES_CONVENTION,
+  DEMANDE_MINEURE,
+  MOTIF_PASSAGE_MINEUR,
+  nomPassageMineur,
   normaliserDemande,
   listerDemandes,
   inspecterDemande,

@@ -1166,6 +1166,14 @@ label {
   font-weight: 600;
 }
 
+/* Passage mineur : sans numéro de demande, mais archivé et tracé. Une
+   exception qui se voit, sans alarmer - rien d'irréversible ici. */
+.bandeau-etat.mineur {
+  border: 1px dashed var(--separateur-clair);
+  color: var(--texte-attenue);
+  font-weight: 600;
+}
+
 /* Le compteur du bandeau s'ouvre : c'est lui qui porte le plan de vol. */
 .bandeau-vol {
   display: flex;

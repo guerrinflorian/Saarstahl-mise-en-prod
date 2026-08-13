@@ -219,6 +219,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                           ${manifeste.archivage === false
                             ? html`<span class="etiquette etiquette-danger">sans AVMDF</span>`
                             : null}
+                          ${manifeste.mineur ? html`<span class="etiquette">mineur</span>` : null}
                           ${manifeste.simulation ? html`<span class="etiquette">simulation</span>` : null}
                         </div>
                         <div class="historique-ligne2 attenue">
