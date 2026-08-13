@@ -1,6 +1,6 @@
 {
   "name": "avmdf-deploy",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "Comparaison des sources locales et de la production IIS, archivage AVMDF et mise en production assistée.",
   "author": "GUERRIN Florian",
@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "diff": "^9.0.0",
-    "electron-updater": "^6.8.9",
     "iconv-lite": "^0.7.3",
     "prismjs": "^1.30.0"
   },
@@ -23,7 +22,7 @@
   },
   "build": {
     "appId": "fr.process.avmdf-deploy",
-    "productName": "AVMDF Mise en production",
+    "productName": "MEPFront",
     "directories": {
       "output": "dist"
     },
@@ -57,11 +56,6 @@
       "artifactName": "MEPFront-Setup.exe",
       "oneClick": true,
       "perMachine": false
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "guerrinflorian",
-      "repo": "Saarstahl-mise-en-prod"
     }
   }
 }

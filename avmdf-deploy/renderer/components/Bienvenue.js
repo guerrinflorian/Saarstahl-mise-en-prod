@@ -117,7 +117,7 @@ export function Bienvenue({ config, defauts, onEnregistrer, onOuvrirReglages }) 
       <div class="bienvenue-boite">
         <div class="bienvenue-titre">
           <img class="demarrage-logo" src="assets/logo.png" alt="Saarstahl Rail" />
-          <h1><span class="demarrage-marque">AVMDF</span> Mise en production</h1>
+          <h1><span class="demarrage-marque">MEPFront</span> Mise en production</h1>
           <div class="rail" aria-hidden="true"></div>
         </div>
 

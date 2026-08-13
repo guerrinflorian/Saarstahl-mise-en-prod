@@ -45,7 +45,7 @@ export function EnTete({
     <header class="entete">
       <div class="entete-titre">
         <img class="entete-logo" src="assets/marque.png" alt="Saarstahl Rail" />
-        <span class="entete-marque">AVMDF<small>Mise en production</small></span>
+        <span class="entete-marque">MEPFront<small>Mise en production</small></span>
       </div>
 
       <nav class="onglets" aria-label="Vues principales">

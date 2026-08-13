@@ -264,7 +264,7 @@ function App() {
   // Le titre de la fenêtre suit le travail : projet et sélection se lisent
   // depuis la barre des tâches, sans revenir à l'application.
   useEffect(() => {
-    const morceaux = ['AVMDF - Mise en production'];
+    const morceaux = ['MEPFront - Mise en production'];
     if (projet && !modeLibre) morceaux.push(projet.nom);
     if (selection.size) morceaux.push(selection.size + ' sélectionné' + (selection.size > 1 ? 's' : ''));
     document.title = morceaux.join(' · ');

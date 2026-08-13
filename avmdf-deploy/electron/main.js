@@ -26,7 +26,6 @@ const deploy = require('./core/deploy');
 const journal = require('./core/journal');
 const stats = require('./core/stats');
 const references = require('./core/references');
-const { verifierMiseAJour } = require('./miseajour');
 
 const MODE_DEV = process.argv.includes('--dev');
 
@@ -1995,7 +1994,7 @@ function creerFenetre() {
     show: false,
     backgroundColor: '#16191d',
     autoHideMenuBar: true,
-    title: 'AVMDF - Mise en production',
+    title: 'MEPFront - Mise en production',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -2062,10 +2061,6 @@ if (!app.requestSingleInstanceLock()) {
     handlersHistorique();
     handlersSysteme();
     creerFenetre();
-
-    // Après la fenêtre, jamais avant elle : la vérification ne retarde pas
-    // le démarrage, et son échec éventuel ne se voit qu'au journal.
-    verifierMiseAJour({ laFenetre: () => fenetre, carnet });
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) creerFenetre();

@@ -1,4 +1,4 @@
-# AVMDF - Mise en production
+# MEPFront - Mise en production
 
 Outil de bureau qui compare les sources locales et le site de production IIS, archive la version
 écrasée dans `AvMdf\AVMDF<numéro>\<sprint>` avant toute copie, et permet de revenir en arrière.
@@ -34,8 +34,7 @@ npm run build
 Produit deux exécutables dans `dist\` :
 
 - `MEPFront.exe` : portable, un fichier unique, sans installeur ni droits administrateur ;
-- `MEPFront-Setup.exe` : installeur par utilisateur (un clic, sans droits administrateur), la
-  variante qui sait ensuite **se mettre à jour toute seule**.
+- `MEPFront-Setup.exe` : installeur par utilisateur (un clic, sans droits administrateur).
 
 À lancer depuis n'importe quel poste ayant accès à `Z:\`.
 
@@ -49,21 +48,11 @@ depuis la palette).
 L'exécutable portable s'auto-extrait dans `%TEMP%` au lancement. Sur les serveurs où l'exécution
 depuis `%TEMP%` est bloquée (stratégie de groupe, antivirus), utiliser la variante
 `MEPFront-dossier.zip` de la release : décompresser le dossier où l'on veut et
-lancer `AVMDF Mise en production.exe` sur place.
+lancer `MEPFront.exe` sur place.
 
-## Mise à jour automatique
-
-L'application **installée** (`MEPFront-Setup.exe`) vérifie au lancement, en arrière-plan, si une
-release plus récente existe sur GitHub (`electron/miseajour.js`, electron-updater). Si oui, elle
-la télécharge et propose de redémarrer ; refuser installe quand même la mise à jour à la
-fermeture. Tout échec est silencieux pour l'utilisateur et tracé au journal : un poste sans accès
-à GitHub démarre exactement comme avant. L'exécutable portable, lui, ne sait pas se remplacer et
-ne vérifie rien.
-
-Deux conditions côté dépôt : chaque release doit embarquer `MEPFront-Setup.exe` et le fichier
-`latest.yml` produits par `npm run build`, et le dépôt doit être lisible par les postes (public,
-ou jeton fourni). Dépôt privé sans jeton : la vérification échoue en silence, ligne ALERTE au
-journal.
+La mise à jour se fait en récupérant la nouvelle version depuis la page des releases : le dépôt
+étant privé, l'application n'interroge pas GitHub d'elle-même (la vérification automatique,
+introduite en 2.2.0, a été retirée en 2.2.1).
 
 ---
 
@@ -539,7 +528,7 @@ consigné dans le journal (ALERTE dès qu'un fichier n'est plus intact).
 - Les contrôles préalables affichent une vraie jauge de progression.
 - Les états vides (aucune analyse, aucun fichier sélectionné, historique vide) portent leur icône
   au trait et le motif du rail : un écran vide dit quand même où l'on est.
-- Le titre de la fenêtre suit le travail : `AVMDF - Mise en production · GPNet · 23 sélectionnés`
+- Le titre de la fenêtre suit le travail : `MEPFront - Mise en production · GPNet · 23 sélectionnés`
   se lit depuis la barre des tâches.
 
 ## Thèmes

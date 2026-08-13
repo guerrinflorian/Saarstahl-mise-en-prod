@@ -765,7 +765,7 @@ async function executer(plan, options = {}) {
  * n'est pas.
  */
 const CONTENU_LISEZMOI = [
-  'Ce dossier appartient à l\'outil « AVMDF Mise en production ».',
+  'Ce dossier appartient à l\'outil « MEPFront ».',
   '',
   'Il ne contient AUCUN fichier de la demande de travaux : uniquement les',
   'données de l\'outil, c\'est-à-dire les manifestes de chaque passage',
