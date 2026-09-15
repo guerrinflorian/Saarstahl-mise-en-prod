@@ -1401,6 +1401,22 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             Le chemin résolu s'affiche en bas de l'écran avant validation. C'est exactement là que
             les fichiers seront rangés, avec leur arborescence relative reconstituée.
           </p>
+
+          <h3>Elle ne sert qu'une fois</h3>
+          <p>
+            Dès qu'une mise en production <strong>réelle</strong> est terminée, la destination est
+            oubliée. Le bandeau réaffiche <strong>Choisir la destination…</strong> et le bouton
+            reste barré tant que la demande et le sprint du passage suivant ne sont pas désignés.
+            C'est le pendant de la case <strong>Archiver</strong>, qui revient d'elle-même à
+            « cochée » : ce qui décide d'où part un passage se rechoisit, il ne se subit pas. Un
+            sprint reconduit sans y penser ne se voit qu'une fois les archives rangées au mauvais
+            endroit.
+          </p>
+          <p>
+            Une simulation ne rince rien : elle n'a rien écrit, la destination reste en place pour
+            enchaîner sur le passage réel. Une remise en production depuis les versions archivées
+            d'un fichier suit la même règle qu'un passage ordinaire.
+          </p>
         <//>
 
         <!-- ================================================= Contrôles -->

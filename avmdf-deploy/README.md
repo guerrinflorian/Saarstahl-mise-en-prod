@@ -710,6 +710,21 @@ soi-même n'aurait aucun intérêt. `F5` reste là pour repartir vraiment du dis
 Une **restauration** est exclue de ce mécanisme : elle remet en production un contenu venu des
 archives, pas des sources locales, donc conclure « identique » serait faux.
 
+## La destination ne sert qu'une fois
+
+Après chaque mise en production **réelle**, la demande et le dossier de sprint choisis sont
+oubliés, comme la sélection de fichiers. Le bandeau réaffiche **Choisir la destination…** et le
+bouton reste barré tant qu'une nouvelle destination n'est pas désignée. Une remise en production
+depuis les versions archivées d'un fichier suit la même règle.
+
+C'est le pendant de la case **Archiver**, qui revient d'elle-même à « cochée » : ce qui décide
+d'où part un passage se rechoisit à chaque fois, il ne se subit pas. Un sprint reconduit sans y
+penser est une erreur silencieuse, elle ne se voit qu'une fois les archives rangées au mauvais
+endroit.
+
+Une simulation ne rince rien : elle n'a écrit aucun octet, la destination reste en place pour
+enchaîner sur le passage réel.
+
 ## Mise en production mineure : AVMDFMINEUR
 
 Toutes les mises en production ne méritent pas leur demande de travaux : une feuille de style, une

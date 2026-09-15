@@ -95,6 +95,9 @@ function App() {
   const [references, setReferences] = useState({ etat: 'aucune', compteurs: null, avancement: null });
   const [referencesDe, setReferencesDe] = useState(null);
 
+  // La destination ne survit pas à un passage réel : demande et sprint sont
+  // rechoisis à chaque fois, pour qu'un passage ne se range jamais par
+  // inadvertance dans le sprint du précédent.
   const [destination, setDestination] = useState(null);
   // L'archivage AVMDF est le comportement normal. Le décocher est un choix
   // explicite, refait à chaque passage : il ne survit pas à un déploiement.
@@ -735,8 +738,13 @@ function App() {
     setDeploiement(null);
     setRapport(reponse);
     if (!reponse.manifeste.simulation) {
+      const destinationRincee = Boolean(destination);
       setSelection(new Set());
       setArchiver(true);
+      // La destination part avec le passage qu'elle a servi. Sans ce rinçage,
+      // le bouton reste armé sur la demande et le sprint d'avant, et le
+      // passage suivant s'y range sans que personne ne l'ait voulu.
+      setDestination(null);
 
       // L'arborescence suit sans relire le partage : ce qui est parti passe en
       // « identique » et sort donc de la liste, ce qui a échoué y reste. La
@@ -752,11 +760,13 @@ function App() {
         titre: reponse.rapport.echecs
           ? `Mise en production terminée avec ${reponse.rapport.echecs} échec(s).`
           : 'Mise en production terminée.',
-        texte: reponse.analyse
-          ? reponse.rapport.echecs
-            ? 'L\'arborescence est à jour : seuls les fichiers en échec y restent.'
-            : 'L\'arborescence est à jour.'
-          : 'Relancez une analyse pour repartir de l\'état réel.'
+        texte:
+          (reponse.analyse
+            ? reponse.rapport.echecs
+              ? 'L\'arborescence est à jour : seuls les fichiers en échec y restent.'
+              : 'L\'arborescence est à jour.'
+            : 'Relancez une analyse pour repartir de l\'état réel.') +
+          (destinationRincee ? ' Destination remise à zéro : rechoisissez-la pour le prochain passage.' : '')
       });
     }
     // `archivageAvmdf` fait partie des dépendances : sans lui, ce rappel garde
@@ -1105,10 +1115,16 @@ function App() {
               setVersionsDe(null);
               setRapport(resultat);
               if (!resultat.manifeste.simulation) {
+                // Même règle que pour un passage ordinaire : la destination qui
+                // vient de recevoir l'archive est rendue, pas reconduite.
+                const destinationRincee = Boolean(destination);
+                setDestination(null);
                 notifier({
                   type: 'succes',
                   titre: 'Version remise en production.',
-                  texte: 'Relancez une analyse pour repartir de l\'état réel.'
+                  texte:
+                    'Relancez une analyse pour repartir de l\'état réel.' +
+                    (destinationRincee ? ' Destination remise à zéro pour le prochain passage.' : '')
                 });
               }
             }}
