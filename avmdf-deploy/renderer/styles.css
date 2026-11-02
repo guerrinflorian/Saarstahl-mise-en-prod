@@ -5826,3 +5826,22 @@ video.apercu-media {
 .ws-carte .liste-fichiers > div {
   align-items: center;
 }
+
+.ws-infos {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ws-commentaire {
+  font-style: italic;
+}
+
+.ws-passages {
+  margin-top: 4px;
+}
+
+.ws-version-dll {
+  white-space: nowrap;
+  font-size: 11.5px;
+}

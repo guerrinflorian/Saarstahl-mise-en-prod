@@ -221,15 +221,17 @@ export function Reglages({
           <section class="section">
             <h2>WebServices</h2>
             <p class="section-aide">
-              Dossier qui contient les projets WebService, de chaque côté. Relatif aux racines ci-dessus
-              (<span class="mono">WebService</span>), ou chemin complet. Chaque WS porte le même nom en local et en
-              production : <span class="mono">WSChargement</span> ↔ <span class="mono">WSChargement</span>.
+              Dossier qui contient les projets WebService, de chaque côté. Un nom seul
+              (<span class="mono">WebService</span>) est cherché dans la racine ci-dessus, puis à côté d'elle : une racine
+              locale <span class="mono">…\Process\GPNET</span> trouve donc <span class="mono">…\Process\WebService</span>.
+              Un chemin complet est pris tel quel. Chaque WS porte le même nom en local et en production :
+              <span class="mono">WSChargement</span> ↔ <span class="mono">WSChargement</span>.
             </p>
             <div class="champs">
               <${Champ}
                 libelle="Dossier local"
                 pour="ws-local"
-                aide=${'→ ' + cheminWs(brouillon.racines.locale, brouillon.webservices.dossierLocal)}
+                aide=${'→ ' + cheminWs(brouillon.racines.locale, brouillon.webservices.dossierLocal) + ' (sinon cherché à côté de la racine)'}
               >
                 <input
                   type="text"
@@ -242,7 +244,7 @@ export function Reglages({
               <${Champ}
                 libelle="Dossier production"
                 pour="ws-prod"
-                aide=${'→ ' + cheminWs(brouillon.racines.prod, brouillon.webservices.dossierProd)}
+                aide=${'→ ' + cheminWs(brouillon.racines.prod, brouillon.webservices.dossierProd) + ' (sinon cherché à côté de la racine)'}
               >
                 <input
                   type="text"

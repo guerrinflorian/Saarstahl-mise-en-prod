@@ -1672,6 +1672,19 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               production : si elle n'est pas plus récente, le WebService ne se coche pas. Après
               l'avoir changée, cliquez sur <strong>Recharger</strong>.
             </p>
+            <p>
+            Pour juger un WebService avant de le compiler, l'étape Version dit aussi : la date de la DLL en
+            production (à peu près celle de la dernière mise en production), le dernier passage par
+            MEPFront (date, auteur, demande, versions, commentaire) et la liste des fichiers source modifiés
+            depuis cette date. Cette liste se fie à la date des fichiers : une récupération TFS peut rajeunir
+            un fichier inchangé.
+          </p>
+          <p>
+            <strong>Clic droit sur un WebService</strong> : compiler, l'ajouter ou le retirer du passage,
+            ouvrir AssemblyInfo pour changer le numéro, montrer le projet, le dossier de production ou la
+            dernière archive dans l'explorateur, ouvrir l'historique, copier « nom version prod -> version
+            locale » pour un message.
+          </p>
           <//>
           <${Etape} numero="2" titre="Cocher et compiler">
             <p>
@@ -1684,7 +1697,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
           <//>
           <${Etape} numero="3" titre="Vérifier les fichiers">
             <p>
-              Le résultat est comparé à la production, fichier par fichier. Les DLL externes
+              Le résultat est comparé à la production, fichier par fichier. La colonne Version donne, pour
+              chaque DLL, le numéro en production et le numéro compilé : un numéro grisé veut dire même
+              version, simplement recompilée. Les DLL externes
               identiques (Newtonsoft, Syncfusion…) sont ignorées : seul ce qui change part.${' '}
               <strong>Web.config</strong> et <strong>Global.asax</strong> sont décochés d'office : ils
               portent la configuration de production. Regardez l'écart avant de les cocher. Un fichier
@@ -1706,6 +1721,10 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               DLL changent. Le fichier est retiré à la fin, même en cas d'erreur.
             </p>
           <//>
+          <p>
+            Le <strong>tableau de bord</strong> suit l'espace choisi en haut à gauche : en WebServices, il
+            ne compte que les passages des WebServices ; en Front, que ceux du front.
+          </p>
         <//>
 
         <!-- ==================================================== Bord -->

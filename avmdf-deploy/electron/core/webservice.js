@@ -391,10 +391,18 @@ async function listerWebServices({ racineLocale, racineProd, concurrence = 6 }) 
       return;
     }
 
-    const [locale, prod] = await Promise.all([
+    const dllProd = path.join(dossierProd, 'bin', infos.assemblyName + '.dll');
+    const [locale, prod, etatDllProd] = await Promise.all([
       lireVersionLocale(dossierProjet),
-      lireVersionDll(path.join(dossierProd, 'bin', infos.assemblyName + '.dll'))
+      lireVersionDll(dllProd),
+      fsp.stat(cheminLong(dllProd)).catch(() => null)
     ]);
+    // Date de la DLL en production : à peu de chose près, celle de la
+    // dernière mise en production. Tout source plus récent n'y est pas encore.
+    entree.dateProd = etatDllProd ? etatDllProd.mtimeMs : null;
+    entree.sourcesModifiees = entree.dateProd
+      ? await sourcesModifieesDepuis(dossierProjet, entree.dateProd)
+      : { fichiers: [], total: 0 };
     entree.versionLocale = versionDe(locale);
     entree.versionLocaleFichier = locale.fichier;
     entree.versionLocaleDetail = locale;
@@ -411,6 +419,79 @@ async function listerWebServices({ racineLocale, racineProd, concurrence = 6 }) 
   webservices.sort(parNom);
   bibliotheques.sort(parNom);
   return { webservices, bibliotheques, erreurs };
+}
+
+// ---------------------------------------------------------------------------
+// Ce qui a changé depuis la mise en production
+// ---------------------------------------------------------------------------
+
+/** Ce qui n'est pas du code du projet : sorties de compilation, outillage. */
+const DOSSIERS_HORS_SOURCES = ['bin', 'obj', '.vs', '$tf', 'packages', 'node_modules', 'TestResults', 'App_Data'];
+const FICHIERS_HORS_SOURCES = ['*.user', '*.suo', '*.vspscc', '*.vssscc', '*.cache', 'Thumbs.db', 'desktop.ini', '*.tmp'];
+
+/**
+ * Sources du projet dont la date est plus récente que la DLL en production :
+ * ce qui n'est probablement pas encore parti. C'est un indice, pas une
+ * preuve - une récupération TFS peut rajeunir la date d'un fichier inchangé -
+ * mais il dit d'un coup d'œil sur quoi porte la nouvelle version.
+ *
+ * @param {string} dossierProjet
+ * @param {number} depuisMs date de la DLL en production
+ * @returns {Promise<{ fichiers: Array<{chemin:string, mtimeMs:number}>, total:number }>}
+ */
+async function sourcesModifieesDepuis(dossierProjet, depuisMs, maximum = 200) {
+  const { entrees } = await parcourir(dossierProjet, {
+    dossiersExclus: DOSSIERS_HORS_SOURCES,
+    fichiersExclus: FICHIERS_HORS_SOURCES,
+    concurrence: 4
+  });
+  const recents = [];
+  for (const entree of entrees.values()) {
+    // Deux secondes de marge : la copie vers le partage arrondit les dates.
+    if (entree.mtimeMs > depuisMs + 2000) recents.push({ chemin: entree.chemin, mtimeMs: entree.mtimeMs });
+  }
+  recents.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return { fichiers: recents.slice(0, maximum), total: recents.length };
+}
+
+// ---------------------------------------------------------------------------
+// Emplacement des dossiers WebService
+// ---------------------------------------------------------------------------
+
+function styleWindows(chemin) {
+  return /^[a-z]:/i.test(chemin) || chemin.startsWith('\\\\') || chemin.includes('\\');
+}
+
+/**
+ * Trouve le dossier des WebServices à partir d'une racine et d'un nom
+ * relatif. La racine locale est souvent celle du front
+ * (`E:\…\Process\GPNET`) alors que les WebServices sont à côté
+ * (`E:\…\Process\WebService`) : le dossier est cherché dans la racine,
+ * puis à côté d'elle, puis un cran plus haut. Un chemin complet est pris tel
+ * quel.
+ *
+ * @returns {Promise<{ chemin:string, trouve:boolean, essais:string[] }>}
+ */
+async function resoudreDossierWs(racine, dossier) {
+  const nom = String(dossier || '').trim();
+  const base = String(racine || '').trim().replace(/[\\/]+$/, '');
+  if (/^([a-z]:|\\\\)/i.test(nom) || nom.startsWith('/')) {
+    return { chemin: nom, trouve: await existeDossier(nom), essais: [nom] };
+  }
+  const p = styleWindows(base) ? path.win32 : path.posix;
+  const essais = [];
+  let courant = base;
+  for (let niveau = 0; niveau < 3 && courant; niveau += 1) {
+    const candidat = p.join(courant, nom);
+    if (!essais.includes(candidat)) essais.push(candidat);
+    const parent = p.dirname(courant);
+    if (parent === courant) break;
+    courant = parent;
+  }
+  for (const candidat of essais) {
+    if (await existeDossier(candidat)) return { chemin: candidat, trouve: true, essais };
+  }
+  return { chemin: essais[0] || nom, trouve: false, essais };
 }
 
 // ---------------------------------------------------------------------------
@@ -814,9 +895,12 @@ async function comparerSortie({ sortie, prod, concurrence = 6, signal = { annule
         prod: null
       };
       entree.local.hash = await hashFichier(local.absolu);
+      const assembly = local.extension === '.dll' || local.extension === '.exe';
+      if (assembly) entree.local.version = versionDe(await lireVersionDll(local.absolu));
       if (enProd) {
         entree.prod = { absolu: enProd.absolu, taille: enProd.taille, mtimeMs: enProd.mtimeMs, hash: null };
         entree.prod.hash = await hashFichier(enProd.absolu);
+        if (assembly) entree.prod.version = versionDe(await lireVersionDll(enProd.absolu));
         entree.statut = entree.prod.hash === entree.local.hash ? STATUT_IDENTIQUE : STATUT_MODIFIE;
       }
       fichiers.push(entree);
@@ -944,6 +1028,8 @@ module.exports = {
   lireProjet,
   trouverProjet,
   listerWebServices,
+  sourcesModifieesDepuis,
+  resoudreDossierWs,
   verifierPaquets,
   localiserMsbuild,
   emplacementsConnus,

@@ -46,7 +46,7 @@ function ilYA(iso) {
  * des mises en production. Les simulations sont comptées à part et n'entrent
  * dans aucun total.
  */
-export function TableauDeBord({ onEchec, onOuvrirHistorique, onFrise }) {
+export function TableauDeBord({ espace = 'front', onEchec, onOuvrirHistorique, onFrise }) {
   const [etat, setEtat] = useState('chargement');
   const [stats, setStats] = useState(null);
   const [racine, setRacine] = useState('');
@@ -55,7 +55,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique, onFrise }) {
   async function charger() {
     setEtat('chargement');
     setConformite(null);
-    const reponse = await window.avmdf.statistiques.calculer();
+    const reponse = await window.avmdf.statistiques.calculer(espace);
     if (!reponse.ok) {
       setEtat('erreur');
       onEchec(reponse);
@@ -80,7 +80,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique, onFrise }) {
 
   useEffect(() => {
     charger();
-  }, []);
+  }, [espace]);
 
   if (etat === 'chargement') {
     return html`
@@ -112,7 +112,9 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique, onFrise }) {
     return html`
       <div class="bord">
         <div class="etat-vide">
-          <div class="etat-vide-titre">Aucune mise en production enregistrée</div>
+          <div class="etat-vide-titre">
+            Aucune mise en production ${espace === 'ws' ? 'de WebService' : 'du front'} enregistrée
+          </div>
           <div class="etat-vide-texte">
             Le tableau de bord se remplit tout seul à partir des manifestes écrits dans
             <span class="mono"> ${racine}</span>. Dès votre première mise en production réelle,
@@ -133,7 +135,7 @@ export function TableauDeBord({ onEchec, onOuvrirHistorique, onFrise }) {
     <div class="bord">
       <div class="bord-entete">
         <div>
-          <h1>Tableau de bord</h1>
+          <h1>Tableau de bord · ${espace === 'ws' ? 'WebServices' : 'Front'}</h1>
           <span class="attenue">
             Établi depuis les manifestes de <span class="mono">${racine}</span>
             ${t.simulations

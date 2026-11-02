@@ -63,6 +63,8 @@ function App() {
   const [cible, setCible] = useState({ mode: 'projet' });
   const [ecran, setEcran] = useState(null);
   const [vue, setVue] = useState('analyse');
+  // Dossiers WebService réellement trouvés (dans la racine, ou à côté).
+  const [cheminsWsTrouves, setCheminsWsTrouves] = useState(null);
   // Ce que l'on met en production : le front (sources copiées telles quelles)
   // ou les WebServices (compilés, dossier complet archivé). Retenu d'une
   // session à l'autre : chacun revient là où il travaille d'habitude.
@@ -939,7 +941,7 @@ function App() {
       <${EnTete}
         espace=${espace}
         onEspace=${changerEspace}
-        cheminsWs=${cheminsWs}
+        cheminsWs=${cheminsWsTrouves || cheminsWs}
         config=${config}
         projet=${projet}
         cible=${cible}
@@ -968,6 +970,7 @@ function App() {
 
       ${vue === 'bord'
         ? html`<${TableauDeBord}
+            espace=${espace}
             onEchec=${(reponse) => notifierEchec(reponse, 'Statistiques indisponibles.')}
             onOuvrirHistorique=${() => setEcran('historique')}
             onFrise=${(chemin) => setFriseDe({ cle: null, chemin })}
@@ -987,6 +990,7 @@ function App() {
             notifierEchec=${notifierEchec}
             onOuvrirReglages=${() => setEcran('reglages')}
             onOuvrirHistorique=${() => setEcran('historique')}
+            onRacines=${setCheminsWsTrouves}
           />`
         : html`
       <div class="corps" style=${'grid-template-columns:' + largeurPanneau + 'px 5px minmax(0, 1fr)'}>

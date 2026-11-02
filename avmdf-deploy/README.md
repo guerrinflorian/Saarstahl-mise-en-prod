@@ -774,6 +774,10 @@ un sous-dossier du même nom) et qui a un dossier **du même nom** en production
 Les autres projets (OutilsWebService, OutilCryptage…) sont listés à part : ils ne partent jamais
 seuls, ils sont recompilés avec chaque WS qui les référence et leur DLL part dans son bin.
 
+Un nom seul (`WebService`) est cherché dans la racine, puis à côté d'elle, puis un cran plus haut
+(2.3.1) : une racine locale `E:\…\Process\GPNET`, celle du front, trouve donc
+`E:\…\Process\WebService` sans réglage. L'en-tête affiche le dossier réellement retenu.
+
 ### Version
 
 La version locale est lue dans `My Project\AssemblyInfo.vb` (`Properties\AssemblyInfo.cs` en C#),
@@ -782,6 +786,24 @@ production est lue dans la ressource de version de `bin\<AssemblyName>.dll` (cel
 Détails de l'explorateur). Une version locale identique ou plus ancienne empêche de cocher le WS.
 Une version illisible est signalée mais ne bloque pas. La version est relue au moment de compiler,
 puis celle de la DLL compilée est revérifiée au contrôle préalable.
+
+### Ce que l'on sait d'un WS avant de le compiler (2.3.1)
+
+- la date de la DLL en production, à peu près celle de la dernière mise en production ;
+- le dernier passage par MEPFront, lu dans les manifestes : date, auteur, demande, sprint,
+  versions avant / après, commentaire ; les dix derniers sont dépliables ;
+- les fichiers source du projet plus récents que la DLL en production (hors `bin`, `obj`,
+  `packages`…) : ce qui n'est probablement pas encore parti. C'est un indice fondé sur les dates,
+  une récupération TFS peut rajeunir un fichier inchangé ;
+- pour chaque DLL du bin, la version en production et la version compilée (grisée quand le numéro
+  ne change pas : même version, recompilée).
+
+Clic droit sur un WebService : compiler, l'ajouter au passage ou l'en retirer, ouvrir AssemblyInfo,
+montrer le projet, le dossier de production ou la dernière archive dans l'explorateur, ouvrir
+l'historique, copier « nom version prod -> version locale ».
+
+Le tableau de bord suit l'espace choisi : en WebServices, seuls les manifestes `type: "webservice"`
+sont comptés ; en Front, tous les autres.
 
 ### Compilation
 

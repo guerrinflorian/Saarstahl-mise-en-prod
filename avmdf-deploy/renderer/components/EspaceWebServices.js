@@ -1,12 +1,12 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
-import { useCallback, useEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from '../vendor/hooks.module.js';
 import { Interrupteur } from './Champs.js';
 import { EnTeteModale } from './Modale.js';
 import { PanneauDestination } from './PanneauDestination.js';
 import { VueDiff } from './VueDiff.js';
 import { GardeRendu } from './GardeRendu.js';
-import { LIBELLES, MARQUEURS, formaterNombre, formaterOctets } from './arborescence.js';
+import { LIBELLES, MARQUEURS, formaterDate, formaterNombre, formaterOctets } from './arborescence.js';
 import {
   IconeAlerte,
   IconeArchiveBoite,
@@ -74,7 +74,7 @@ function preparerEnvoi(cochesListe, compilations, selections) {
   return { prets, manquants };
 }
 
-export function EspaceWebServices({ simulation, onSimulation, notifier, notifierEchec, onOuvrirReglages, onOuvrirHistorique }) {
+export function EspaceWebServices({ simulation, onSimulation, notifier, notifierEchec, onOuvrirReglages, onOuvrirHistorique, onRacines }) {
   const [inventaire, setInventaire] = useState({ etat: 'chargement', donnees: null });
   const [coches, setCoches] = useState(() => new Set());
   const [actif, setActif] = useState(null);
@@ -91,6 +91,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
   const [rapport, setRapport] = useState(null);
   const [diff, setDiff] = useState(null);
   const [bibliothequesOuvertes, setBibliothequesOuvertes] = useState(false);
+  const [menu, setMenu] = useState(null);
   const arretDemande = useRef(false);
 
   // -- Inventaire -------------------------------------------------------------
@@ -103,6 +104,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
         return;
       }
       setInventaire({ etat: 'pret', donnees: reponse });
+      if (onRacines) onRacines(reponse.racines);
       // Les compilations encore en mémoire côté processus principal sont
       // reprises : changer d'onglet ne fait rien perdre.
       const reprises = {};
@@ -272,6 +274,30 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
     }
   }
 
+  async function actionMenu(action, ws) {
+    const dernier = ws.passages && ws.passages[0];
+    let reponse = { ok: true };
+    if (action === 'compiler') compilerListe([ws.nom]);
+    else if (action === 'cocher' || action === 'decocher') {
+      setCoches((precedentes) => {
+        const suivantes = new Set(precedentes);
+        if (action === 'cocher') suivantes.add(ws.nom);
+        else suivantes.delete(ws.nom);
+        return suivantes;
+      });
+    } else if (action === 'assemblyinfo') reponse = await window.avmdf.systeme.ouvrir(ws.versionLocaleFichier);
+    else if (action === 'projet') reponse = await window.avmdf.systeme.reveler(ws.projet);
+    else if (action === 'prod') reponse = await window.avmdf.systeme.reveler(ws.dossierProd);
+    else if (action === 'archive' && dernier) reponse = await window.avmdf.systeme.reveler(dernier.dossierSauvegarde);
+    else if (action === 'historique') onOuvrirHistorique();
+    else if (action === 'copier') {
+      const texte = `${ws.nom} ${ws.versionProd || '?'} -> ${ws.versionLocale || '?'}`;
+      reponse = await window.avmdf.systeme.copier(texte);
+      if (reponse.ok) notifier({ type: 'succes', titre: 'Copié.', texte, duree: 2500 });
+    }
+    if (!reponse.ok) notifierEchec(reponse, 'Action impossible.');
+  }
+
   async function ouvrirDiff(nom, fichier) {
     const reponse = await window.avmdf.webservices.diff(nom, fichier.cle);
     if (!reponse.ok) {
@@ -365,6 +391,12 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
                             key=${ws.nom}
                             class=${'ws-ligne' + (actif === ws.nom ? ' actif' : '') + (ws.selectionnable ? '' : ' bloque')}
                             onClick=${() => setActif(ws.nom)}
+                            onContextMenu=${(e) => {
+                              e.preventDefault();
+                              setActif(ws.nom);
+                              setMenu({ ws, x: e.clientX, y: e.clientY });
+                            }}
+                            title="Clic droit : ouvrir, montrer, compiler…"
                           >
                             <input
                               type="checkbox"
@@ -531,6 +563,21 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
       </div>
     </footer>
 
+    ${menu
+      ? html`<${MenuWebService}
+          key=${menu.ws.nom + '@' + menu.x + 'x' + menu.y}
+          menu=${menu}
+          coche=${coches.has(menu.ws.nom)}
+          occupe=${Boolean(enCompilation)}
+          onFermer=${() => setMenu(null)}
+          onAction=${(action) => {
+            const ws = menu.ws;
+            setMenu(null);
+            actionMenu(action, ws);
+          }}
+        />`
+      : null}
+
     ${destinationOuverte
       ? html`<${PanneauDestination}
           destination=${destination}
@@ -606,6 +653,9 @@ function DetailWebService({
   onReveler
 }) {
   const [journalOuvert, setJournalOuvert] = useState(false);
+  const [passagesOuverts, setPassagesOuverts] = useState(false);
+  const [sourcesOuvertes, setSourcesOuvertes] = useState(false);
+  const dernierPassage = ws.passages && ws.passages.length ? ws.passages[0] : null;
   const [identiquesOuverts, setIdentiquesOuverts] = useState(false);
   const [conservesOuverts, setConservesOuverts] = useState(false);
   const boiteJournal = useRef(null);
@@ -681,6 +731,73 @@ function DetailWebService({
                 <span class=${'mono ws-version' + (ws.etat === 'pret' ? ' ws-version-neuve' : '')}>${ws.versionLocale || '?'}</span>
               </div>
             </div>
+            <div class="ws-infos attenue">
+              ${ws.dateProd
+                ? html`<div>DLL en production datée du <span class="mono">${formaterDate(ws.dateProd)}</span></div>`
+                : null}
+              ${dernierPassage
+                ? html`<div>
+                    Dernier passage par MEPFront : <span class="mono">${formaterDate(new Date(dernierPassage.date).getTime())}</span>
+                    ${dernierPassage.auteur ? html` par <strong>${dernierPassage.auteur}</strong>` : null}
+                    · <span class="mono">${dernierPassage.demande}</span>
+                    ${dernierPassage.versionApres
+                      ? html` · version <span class="mono">${dernierPassage.versionAvant || '?'} → ${dernierPassage.versionApres}</span>`
+                      : null}
+                    ${dernierPassage.operation === 'restauration' ? html` · <span class="etiquette">retour arrière</span>` : null}
+                    ${dernierPassage.commentaire ? html`<div class="ws-commentaire">« ${dernierPassage.commentaire} »</div>` : null}
+                  </div>`
+                : html`<div>Aucun passage par MEPFront pour ce WebService : les mises en production précédentes ont été faites à la main.</div>`}
+            </div>
+
+            ${ws.passages && ws.passages.length > 1
+              ? html`<div style="margin-top:4px">
+                  <button type="button" class="btn btn-mini btn-plat" onClick=${() => setPassagesOuverts(!passagesOuverts)}>
+                    ${passagesOuverts ? '▾' : '▸'} ${formaterNombre(ws.passages.length)} derniers passages
+                  </button>
+                  ${passagesOuverts
+                    ? html`<table class="tableau ws-passages">
+                        <tbody>
+                          ${ws.passages.map(
+                            (p) => html`<tr key=${p.chemin}>
+                              <td class="mono">${formaterDate(new Date(p.date).getTime())}</td>
+                              <td>${p.auteur || '-'}</td>
+                              <td class="mono">${p.demande} / ${p.sprint}</td>
+                              <td class="mono">${p.versionApres ? `${p.versionAvant || '?'} → ${p.versionApres}` : '-'}</td>
+                              <td>${p.operation === 'restauration' ? 'retour arrière' : `${p.fichiers} fichier(s)`}</td>
+                            </tr>`
+                          )}
+                        </tbody>
+                      </table>`
+                    : null}
+                </div>`
+              : null}
+
+            ${ws.dateProd
+              ? html`<div style="margin-top:4px">
+                  ${ws.sourcesModifiees.total
+                    ? html`<button type="button" class="btn btn-mini btn-plat" onClick=${() => setSourcesOuvertes(!sourcesOuvertes)}>
+                        ${sourcesOuvertes ? '▾' : '▸'} ${formaterNombre(ws.sourcesModifiees.total)} fichier(s) source modifié(s) depuis la mise en production
+                      </button>`
+                    : html`<span class="attenue">Aucun fichier source modifié depuis la date de la DLL en production.</span>`}
+                  ${sourcesOuvertes && ws.sourcesModifiees.total
+                    ? html`<div class="liste-fichiers mono">
+                        <div class="attenue" style="font-family:inherit">
+                          D'après la date des fichiers : une récupération TFS peut aussi rajeunir un fichier inchangé.
+                        </div>
+                        ${ws.sourcesModifiees.fichiers.map(
+                          (f) => html`<div key=${f.chemin}>
+                            <span style="flex:1">${f.chemin}</span>
+                            <span class="attenue">${formaterDate(f.mtimeMs)}</span>
+                          </div>`
+                        )}
+                        ${ws.sourcesModifiees.total > ws.sourcesModifiees.fichiers.length
+                          ? html`<div class="attenue">… et ${ws.sourcesModifiees.total - ws.sourcesModifiees.fichiers.length} autres</div>`
+                          : null}
+                      </div>`
+                    : null}
+                </div>`
+              : null}
+
             ${ws.raison
               ? html`<div class=${'encart ' + (etapeVersion === 'echec' ? 'encart-danger' : 'encart-alerte')} style="margin-top:8px">
                   ${ws.raison}
@@ -805,6 +922,7 @@ function DetailWebService({
                               </th>
                               <th>Fichier</th>
                               <th>État</th>
+                              <th>Version</th>
                               <th style="text-align:right">Production</th>
                               <th style="text-align:right">Compilé</th>
                               <th></th>
@@ -833,7 +951,18 @@ function DetailWebService({
                                   <td>
                                     <span class=${'compteur compteur-' + f.statut}>${MARQUEURS[f.statut]} ${LIBELLES[f.statut]}</span>
                                   </td>
-                                  <td class="mono attenue" style="text-align:right">${f.tailleProd === null ? '-' : formaterOctets(f.tailleProd)}</td>
+                                  <td class="mono ws-version-dll">
+                                    ${f.versionLocale || f.versionProd
+                                      ? f.versionProd === f.versionLocale
+                                        ? html`<span class="attenue" title="Même numéro, contenu recompilé">${f.versionLocale}</span>`
+                                        : html`<span title="Version en production → version compilée">
+                                            ${f.versionProd || '-'} → <span class="ws-version-neuve">${f.versionLocale || '-'}</span>
+                                          </span>`
+                                      : html`<span class="attenue">-</span>`}
+                                  </td>
+                                  <td class="mono attenue" style="text-align:right" title=${f.dateProd ? 'En production depuis le ' + formaterDate(f.dateProd) : ''}>
+                                    ${f.tailleProd === null ? '-' : formaterOctets(f.tailleProd)}
+                                  </td>
                                   <td class="mono" style="text-align:right">${formaterOctets(f.tailleLocale)}</td>
                                   <td style="text-align:right">
                                     <button type="button" class="btn btn-mini" onClick=${() => onDiff(f)}>
@@ -1162,6 +1291,92 @@ function RapportWebServices({ rapport, onFermer, onReveler, onOuvrirHistorique }
           <button type="button" class="btn btn-accent" onClick=${onFermer}>Fermer</button>
         </div>
       </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Menu clic droit d'un WebService
+// ---------------------------------------------------------------------------
+
+const MARGE_MENU = 8;
+
+function MenuWebService({ menu, coche, occupe, onFermer, onAction }) {
+  const boite = useRef(null);
+  const [position, setPosition] = useState(null);
+  const ws = menu.ws;
+  const dernier = ws.passages && ws.passages[0];
+
+  // Mesuré invisible, puis recalé pour tenir entier dans la fenêtre : même
+  // mécanique que le menu de l'arborescence du front.
+  useLayoutEffect(() => {
+    const element = boite.current;
+    if (!element) return;
+    const cadre = element.getBoundingClientRect();
+    setPosition({
+      x: Math.max(MARGE_MENU, Math.min(menu.x, window.innerWidth - cadre.width - MARGE_MENU)),
+      y: Math.max(MARGE_MENU, Math.min(menu.y, window.innerHeight - cadre.height - MARGE_MENU))
+    });
+  }, []);
+
+  useEffect(() => {
+    const surClic = (e) => {
+      if (boite.current && !boite.current.contains(e.target)) onFermer();
+    };
+    const surTouche = (e) => {
+      if (e.key === 'Escape') onFermer();
+    };
+    document.addEventListener('mousedown', surClic);
+    document.addEventListener('keydown', surTouche);
+    return () => {
+      document.removeEventListener('mousedown', surClic);
+      document.removeEventListener('keydown', surTouche);
+    };
+  }, [onFermer]);
+
+  const entrees = [
+    { action: 'compiler', libelle: 'Compiler', actif: ws.selectionnable && !occupe, titre: ws.selectionnable ? '' : ws.raison },
+    coche
+      ? { action: 'decocher', libelle: 'Retirer du passage', actif: !occupe }
+      : { action: 'cocher', libelle: 'Ajouter au passage', actif: ws.selectionnable && !occupe, titre: ws.selectionnable ? '' : ws.raison },
+    { separateur: true },
+    { action: 'assemblyinfo', libelle: 'Ouvrir AssemblyInfo (numéro de version)', actif: Boolean(ws.versionLocaleFichier) },
+    { action: 'projet', libelle: 'Montrer le projet dans l\'explorateur', actif: true },
+    { action: 'prod', libelle: 'Montrer le dossier de production', actif: true },
+    {
+      action: 'archive',
+      libelle: 'Montrer la dernière archive AVMDF',
+      actif: Boolean(dernier && dernier.dossierSauvegarde),
+      titre: dernier ? dernier.dossierSauvegarde : 'Aucun passage par MEPFront pour ce WebService'
+    },
+    { separateur: true },
+    { action: 'historique', libelle: 'Ouvrir l\'historique', actif: true },
+    { action: 'copier', libelle: 'Copier « nom version prod -> version locale »', actif: true }
+  ];
+
+  return html`
+    <div
+      class="menu"
+      ref=${boite}
+      style=${position ? `left:${position.x}px;top:${position.y}px` : 'left:0px;top:0px;visibility:hidden'}
+      role="menu"
+    >
+      <div class="menu-titre mono">${ws.nom}</div>
+      ${entrees.map((entree, index) =>
+        entree.separateur
+          ? html`<div class="menu-separateur" key=${'s' + index} role="separator"></div>`
+          : html`<button
+              type="button"
+              class="menu-entree"
+              key=${entree.action}
+              disabled=${!entree.actif}
+              title=${entree.titre || ''}
+              role="menuitem"
+              onClick=${() => onAction(entree.action)}
+            >
+              ${entree.libelle}
+            </button>`
+      )}
     </div>
   `;
 }

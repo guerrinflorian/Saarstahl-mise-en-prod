@@ -202,7 +202,9 @@ function perimetreManifeste(contenu, actuels) {
   const sousProd =
     contenu.racineProd &&
     (avmdf.estSousRacine(contenu.racineProd, actuels.racines.prod) ||
-      (contenu.type === 'webservice' && racineWs && avmdf.estSousRacine(contenu.racineProd, racineWs)));
+      (contenu.type === 'webservice' &&
+        ((racineWs && avmdf.estSousRacine(contenu.racineProd, racineWs)) ||
+          (racinesWsTrouvees && avmdf.estSousRacine(contenu.racineProd, racinesWsTrouvees.prod)))));
   if (!sousProd) {
     problemes.push(
       `la racine de production du manifeste sort du périmètre configuré (${contenu.racineProd || 'absente'})`
@@ -1698,8 +1700,17 @@ function handlersHistorique() {
   gerer('statistiques:calculer', async (parametres = {}) => {
     const actuels = reglages();
     const { manifestes, erreurs } = await listerManifestesEnCache(actuels, Boolean(parametres.rafraichir));
+    // Le tableau de bord suit l'espace choisi : les passages du front d'un
+    // côté, ceux des WebServices de l'autre.
+    const retenus =
+      parametres.espace === 'ws'
+        ? manifestes.filter((m) => m.type === 'webservice')
+        : parametres.espace === 'front'
+          ? manifestes.filter((m) => m.type !== 'webservice')
+          : manifestes;
     return succes({
-      stats: stats.calculer(manifestes),
+      espace: parametres.espace || null,
+      stats: stats.calculer(retenus),
       erreurs,
       racine: actuels.racines.avmdf
     });
@@ -1877,6 +1888,8 @@ const compilationsWs = new Map();
 let inventaireWs = null;
 let msbuildConnu = null;
 let compilationWsEnCours = null;
+/** Dossiers WebService réellement trouvés au dernier inventaire. */
+let racinesWsTrouvees = null;
 
 function dossierTravailWs() {
   return path.join(app.getPath('temp'), 'MEPFront-WS');
@@ -1897,7 +1910,10 @@ function fichierWsPourRenderer(fichier) {
     sensible: fichier.sensible,
     texte: fichier.texte,
     tailleLocale: fichier.local ? fichier.local.taille : null,
-    tailleProd: fichier.prod ? fichier.prod.taille : null
+    tailleProd: fichier.prod ? fichier.prod.taille : null,
+    versionLocale: fichier.local ? fichier.local.version || null : null,
+    versionProd: fichier.prod ? fichier.prod.version || null : null,
+    dateProd: fichier.prod ? fichier.prod.mtimeMs : null
   };
 }
 
@@ -2126,10 +2142,17 @@ async function preflightWs(plans, actuels) {
 function handlersWebServices() {
   gerer('ws:lister', async (parametres = {}) => {
     const actuels = reglages();
-    const racines = config.resoudreWebServices(actuels);
-    if (!racines.locale || !racines.prod) {
+    if (!actuels.racines.locale || !actuels.racines.prod) {
       return echec('Racines des WebServices non configurées.', 'Renseignez les racines locale et production dans les réglages.');
     }
+    // La racine locale est souvent celle du front (…\Process\GPNET) : le
+    // dossier WebService est cherché dedans, puis à côté.
+    const [trouveLocal, trouveProd] = await Promise.all([
+      webservice.resoudreDossierWs(actuels.racines.locale, actuels.webservices.dossierLocal),
+      webservice.resoudreDossierWs(actuels.racines.prod, actuels.webservices.dossierProd)
+    ]);
+    const racines = { locale: trouveLocal.chemin, prod: trouveProd.chemin };
+    racinesWsTrouvees = racines;
     if (parametres.rafraichirMsbuild || !msbuildConnu || msbuildConnu.cheminForce !== actuels.webservices.msbuild) {
       msbuildConnu = {
         ...(await webservice.localiserMsbuild({ cheminForce: actuels.webservices.msbuild })),
@@ -2142,6 +2165,38 @@ function handlersWebServices() {
       concurrence: actuels.options.lecturesSimultanees
     });
     inventaireWs = inventaire;
+    if (!trouveLocal.trouve) {
+      inventaire.erreurs.unshift(`Cherché aussi dans : ${trouveLocal.essais.join(' ; ')}. Indiquez le chemin complet dans Réglages → WebServices.`);
+    }
+
+    // Dernier passage de chaque WS par l'outil, lu dans les manifestes. Un
+    // partage d'archives injoignable ne doit pas empêcher la liste.
+    const passages = new Map();
+    try {
+      const { manifestes } = await listerManifestesEnCache(actuels);
+      for (const m of manifestes) {
+        if (m.type !== 'webservice' || m.simulation) continue;
+        const cle = String(m.projet || '').toLowerCase();
+        const liste = passages.get(cle) || [];
+        liste.push({
+          date: m.date,
+          auteur: m.auteur || null,
+          demande: m.demande,
+          sprint: m.sprint,
+          operation: m.operation,
+          commentaire: m.commentaire || null,
+          versionAvant: m.webservice ? m.webservice.versionAvant : null,
+          versionApres: m.webservice ? m.webservice.versionApres : null,
+          dossierSauvegarde: m.dossierSauvegarde || null,
+          chemin: m.chemin,
+          fichiers: Array.isArray(m.fichiers) ? m.fichiers.length : 0
+        });
+        passages.set(cle, liste);
+      }
+    } catch (err) {
+      /* historique illisible : la liste reste utile sans lui */
+    }
+
     return succes({
       racines,
       configuration: actuels.webservices.configuration,
@@ -2157,6 +2212,9 @@ function handlersWebServices() {
         etat: ws.etat,
         raison: ws.raison,
         selectionnable: ws.selectionnable,
+        dateProd: ws.dateProd || null,
+        sourcesModifiees: ws.sourcesModifiees || { fichiers: [], total: 0 },
+        passages: (passages.get(ws.nom.toLowerCase()) || []).slice(0, 10),
         compilation: compilationPourRenderer(ws.nom)
       })),
       bibliotheques: inventaire.bibliotheques.map((b) => ({ nom: b.nom, projet: b.projet, web: b.web, raison: b.raison })),
@@ -2523,6 +2581,7 @@ function cheminAutorise(chemin) {
   if (dernierScan) racines.push(dernierScan.cheminLocal, dernierScan.cheminProd);
   const racinesWs = config.resoudreWebServices(actuels);
   racines.push(racinesWs.locale, racinesWs.prod, dossierTravailWs());
+  if (racinesWsTrouvees) racines.push(racinesWsTrouvees.locale, racinesWsTrouvees.prod);
   return racines.some((racine) => racine && avmdf.estSousRacine(cible, racine)) ? cible : null;
 }
 

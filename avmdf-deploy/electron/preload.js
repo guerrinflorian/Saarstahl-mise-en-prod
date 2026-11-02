@@ -136,7 +136,8 @@ contextBridge.exposeInMainWorld('avmdf', {
 
   statistiques: {
     /** Agrège tous les manifestes du dossier d'archives pour le tableau de bord. */
-    calculer: () => ipcRenderer.invoke('statistiques:calculer')
+    /** `espace` : 'front' ou 'ws' ; omis, tous les passages. */
+    calculer: (espace) => ipcRenderer.invoke('statistiques:calculer', { espace })
   },
 
   historique: {
