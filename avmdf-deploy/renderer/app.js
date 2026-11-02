@@ -3,6 +3,7 @@ import htm from './vendor/htm.module.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from './vendor/hooks.module.js';
 
 import { EnTete } from './components/EnTete.js';
+import { EspaceWebServices } from './components/EspaceWebServices.js';
 import { ArbreFichiers } from './components/ArbreFichiers.js';
 import { VueDiff } from './components/VueDiff.js';
 import { BandeauDeploiement, operationDe, resumerSelection } from './components/BandeauDeploiement.js';
@@ -62,6 +63,16 @@ function App() {
   const [cible, setCible] = useState({ mode: 'projet' });
   const [ecran, setEcran] = useState(null);
   const [vue, setVue] = useState('analyse');
+  // Ce que l'on met en production : le front (sources copiées telles quelles)
+  // ou les WebServices (compilés, dossier complet archivé). Retenu d'une
+  // session à l'autre : chacun revient là où il travaille d'habitude.
+  const [espace, setEspace] = useState(() => {
+    try {
+      return localStorage.getItem('avmdf.espace') === 'ws' ? 'ws' : 'front';
+    } catch (err) {
+      return 'front';
+    }
+  });
   // Le thème est déjà posé sur la page par `theme-initial.js` ; cet état ne
   // fait que le suivre, et l'effet plus bas rejoue l'application complète
   // (mémorisation, fond de la fenêtre).
@@ -818,7 +829,17 @@ function App() {
   // L'écouteur est posé une seule fois ; il lit l'état du moment dans une ref,
   // au lieu d'être décroché puis raccroché à chaque rendu de l'application.
   const refRaccourcis = useRef(null);
-  refRaccourcis.current = { vue, analyse, ecran, editeurDe, deploiement, resumeSelection, analyser, lancerPreflight };
+  // Les raccourcis de l'analyse ne valent que dans l'espace Front.
+  refRaccourcis.current = {
+    vue: espace === 'ws' ? 'ws' : vue,
+    analyse,
+    ecran,
+    editeurDe,
+    deploiement,
+    resumeSelection,
+    analyser,
+    lancerPreflight
+  };
   useEffect(() => {
     function surTouche(evenement) {
       const r = refRaccourcis.current;
@@ -892,10 +913,33 @@ function App() {
   }
 
   const compteursAffichage = analyse.resultat ? analyse.resultat.compteurs : {};
+  const espaceWs = espace === 'ws';
+  const cheminsWs = config.webservices
+    ? {
+        locale: /^([a-z]:|\\\\)/i.test(config.webservices.dossierLocal)
+          ? config.webservices.dossierLocal
+          : joindreChemin(config.racines.locale, config.webservices.dossierLocal),
+        prod: /^([a-z]:|\\\\)/i.test(config.webservices.dossierProd)
+          ? config.webservices.dossierProd
+          : joindreChemin(config.racines.prod, config.webservices.dossierProd)
+      }
+    : null;
+  const changerEspace = (suivant) => {
+    setEspace(suivant);
+    setVue('analyse');
+    try {
+      localStorage.setItem('avmdf.espace', suivant);
+    } catch (err) {
+      /* stockage local indisponible */
+    }
+  };
 
   return html`
     <div class="application">
       <${EnTete}
+        espace=${espace}
+        onEspace=${changerEspace}
+        cheminsWs=${cheminsWs}
         config=${config}
         projet=${projet}
         cible=${cible}
@@ -934,6 +978,15 @@ function App() {
             onOuvrirReglages=${() => setEcran('reglages')}
             onOuvrirHistorique=${() => setEcran('historique')}
             onOuvrirJournal=${() => setEcran('journal')}
+          />`
+        : espaceWs
+        ? html`<${EspaceWebServices}
+            simulation=${config.options.simulation}
+            onSimulation=${changerSimulation}
+            notifier=${notifier}
+            notifierEchec=${notifierEchec}
+            onOuvrirReglages=${() => setEcran('reglages')}
+            onOuvrirHistorique=${() => setEcran('historique')}
           />`
         : html`
       <div class="corps" style=${'grid-template-columns:' + largeurPanneau + 'px 5px minmax(0, 1fr)'}>
@@ -1008,7 +1061,7 @@ function App() {
       </div>
       `}
 
-      ${vue === 'analyse'
+      ${vue === 'analyse' && !espaceWs
         ? html`<${BandeauDeploiement}
             simulation=${config.options.simulation}
             onSimulation=${changerSimulation}

@@ -421,3 +421,26 @@ export function IconeCrayon({ classe }) {
     `
   );
 }
+
+/** Serveur en baie : les WebServices. */
+export function IconeServeur({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M2.8 2.8h10.4v4.2H2.8zM2.8 9h10.4v4.2H2.8z" />
+      <path d="M5 4.9h.2M5 11.1h.2M8.2 4.9h3M8.2 11.1h3" />
+    `
+  );
+}
+
+/** Écran et accolades : le front. */
+export function IconeFront({ classe }) {
+  return svg(
+    classe,
+    html`
+      <path d="M2.4 3.2h11.2v8H2.4z" />
+      <path d="M6 13.4h4M8 11.2v2.2" />
+      <path d="M6.4 5.6 5 7.2l1.4 1.6M9.6 5.6 11 7.2 9.6 8.8" />
+    `
+  );
+}

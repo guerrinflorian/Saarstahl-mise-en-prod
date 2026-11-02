@@ -72,6 +72,8 @@ electron/
     textdiff.js encodage (BOM → UTF-8 strict → Windows-1252) et diff ligne à ligne
     avmdf.js    demandes, conventions de sprint, résolution de destination
     deploy.js   préflight, archivage, copie, manifeste, récapitulatif, retour arrière
+    webservice.js  WebServices : découverte, versions, MSBuild, comparaison du site
+                compilé, archivage du dossier complet
     journal.js  journal quotidien en texte
 renderer/
   index.html    page unique
@@ -755,6 +757,79 @@ vraie demande et retouches mineures se traite en deux passages.
 Le dossier `AVMDFMINEUR` n'apparaît jamais dans le panneau de destination : on n'y range rien à la
 main, on y arrive en décochant la case. Il est exclu du classement « demandes revisitées » du
 tableau de bord, que les passages mineurs écraseraient sans rien raconter.
+
+## WebServices (2.3.0)
+
+Le sélecteur **Front | WebServices**, en haut à gauche, choisit ce que l'on met en production.
+L'espace Front est celui d'avant, inchangé. L'espace WebServices remplace le déroulé fait à la
+main dans Visual Studio : publier en Release, recompiler en Debug pour remettre le poste de
+développement d'aplomb, copier le dossier du WS dans `AvMdf\AVMDF…\AVMDF…_N`, puis copier le bin.
+
+### Découverte
+
+Réglages → WebServices : un dossier local et un dossier production, relatifs aux racines
+(`WebService` des deux côtés par défaut, soit `E:\…\Process\WebService` et `Z:\WebService`), ou
+chemins complets. Chaque dossier local qui contient un `.vbproj` / `.csproj` (directement, ou dans
+un sous-dossier du même nom) et qui a un dossier **du même nom** en production est un WebService.
+Les autres projets (OutilsWebService, OutilCryptage…) sont listés à part : ils ne partent jamais
+seuls, ils sont recompilés avec chaque WS qui les référence et leur DLL part dans son bin.
+
+### Version
+
+La version locale est lue dans `My Project\AssemblyInfo.vb` (`Properties\AssemblyInfo.cs` en C#),
+lignes en commentaire ignorées : `AssemblyVersion`, à défaut `AssemblyFileVersion`. La version en
+production est lue dans la ressource de version de `bin\<AssemblyName>.dll` (celle de l'onglet
+Détails de l'explorateur). Une version locale identique ou plus ancienne empêche de cocher le WS.
+Une version illisible est signalée mais ne bloque pas. La version est relue au moment de compiler,
+puis celle de la DLL compilée est revérifiée au contrôle préalable.
+
+### Compilation
+
+MSBuild est trouvé par `vswhere` (Visual Studio 2017 et suivants), puis aux emplacements connus de
+2022, 2019, 2017 et de MSBuild 14 (2015). Un chemin forcé se met dans les réglages.
+
+```
+MSBuild.exe <projet> /t:Build /p:Configuration=Release /p:OutDir=<temp>\MEPFront-WS\<WS>\compilation\
+            /p:UseWPP_CopyWebApplication=true /p:PipelineDependsOnBuild=false /nologo /nr:false /v:minimal
+```
+
+`OutDir` envoie tout, bibliothèques référencées comprises, dans le dossier temporaire : aucun bin du
+poste de développement n'est touché, il reste en Debug. L'outil le vérifie (empreinte du bin du
+projet avant / après) et le dit si jamais ce n'est pas le cas. Le site prêt à copier est
+`_PublishedWebsites\<projet>` - le même résultat qu'une publication vers un dossier, `Web.config`
+transformé compris. La sortie de MSBuild s'affiche au fil de l'eau, décodée en UTF-8 ou en page de
+code OEM 850. Les paquets NuGet de `packages.config` absents du dossier `packages` de la solution
+sont signalés (MSBuild ne les restaure pas tout seul).
+
+### Comparaison et sélection
+
+Le site compilé est comparé au dossier de production à l'empreinte SHA-256. Identique : ignoré
+(Newtonsoft, Syncfusion…). Modifié ou nouveau : coché d'office, **sauf `Web.config` et
+`Global.asax`**, montrés sur fond rouge avec leur écart ligne à ligne, à cocher à la main. Un fichier
+présent seulement en production n'est jamais supprimé. Ne partent jamais : `Web.Debug.config`,
+`Web.Release.config`, fichiers projet, `packages.config`.
+
+### Mise en production
+
+Plusieurs WS partent dans le même passage, sous la même demande et le même sprint. Tous les
+contrôles (ceux du front, plus version, fichiers sensibles, archive déjà présente) sont faits pour
+tous les WS avant la première écriture. Puis, WS par WS :
+
+1. le **dossier complet** de production est copié dans `<sprint>\<WS>`, dates conservées. Un
+   fichier déjà présent dans l'archive (second passage dans le même sprint) est gardé : c'est l'état
+   d'origine de la demande. Une seule erreur d'archivage arrête ce WS et les suivants, rien n'est
+   copié en production ;
+2. les fichiers cochés sont copiés par le moteur du front (`deploy.executer`), avec
+   `app_offline.htm` si **Pause du WS** est coché ;
+3. le manifeste part dans `<sprint>\_donnees-outil`, à côté de ceux du front : le passage apparaît
+   dans l'historique (étiquette WebService, version avant → après) et se défait en un clic.
+
+Le manifeste d'un WS porte en plus `type: "webservice"`, `dossierTraces` (le sprint) et un bloc
+`webservice` : nom, assembly, `versionAvant`, `versionApres`, configuration, MSBuild, chemin de
+l'archive complète et bilan de l'archivage.
+
+La version 5 des réglages ajoute le bloc `webservices` (`dossierLocal`, `dossierProd`, `msbuild`,
+`configuration`), rempli avec les valeurs par défaut au premier chargement.
 
 ## Ce que l'outil ne fait jamais
 

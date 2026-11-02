@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION_CONFIG = 4;
+const VERSION_CONFIG = 5;
 
 /**
  * Motifs ajoutés aux exclusions par la version 2 : l'application compare du
@@ -82,6 +82,24 @@ const FICHIER_SENSIBLE = 'web.config';
 
 /** Racine des archives « avant modification », identique sur tous les postes. */
 const RACINE_AVMDF_DEFAUT = 'Z:\\AvMdf';
+
+/**
+ * Réglages de l'espace WebServices (version 5).
+ *
+ * Les WebServices ne se déploient pas comme le front : on ne copie pas des
+ * sources, on copie le résultat d'une compilation Release. Les deux dossiers
+ * sont relatifs aux racines globales - `E:\…\Process` + `WebService` en
+ * local, `Z:\` + `WebService` en production - et chaque WS porte le même nom
+ * des deux côtés. Un chemin complet est accepté aussi.
+ */
+const WEBSERVICES_DEFAUT = {
+  dossierLocal: 'WebService',
+  dossierProd: 'WebService',
+  // Vide : MSBuild est cherché tout seul (vswhere, puis les emplacements
+  // connus de Visual Studio 2022, 2019, 2017 et 2015).
+  msbuild: '',
+  configuration: 'Release'
+};
 
 // ---------------------------------------------------------------------------
 // Valeurs par défaut
@@ -164,7 +182,8 @@ function reglagesParDefaut(contexte = {}) {
     comparaisonLibre: {
       dossierA: '',
       dossierB: ''
-    }
+    },
+    webservices: { ...WEBSERVICES_DEFAUT }
   };
 }
 
@@ -248,6 +267,7 @@ function normaliser(brut, contexte = {}) {
   const options = source.options && typeof source.options === 'object' ? source.options : {};
   const appOffline = options.appOffline && typeof options.appOffline === 'object' ? options.appOffline : {};
   const libre = source.comparaisonLibre && typeof source.comparaisonLibre === 'object' ? source.comparaisonLibre : {};
+  const ws = source.webservices && typeof source.webservices === 'object' ? source.webservices : {};
 
   const versionSource = Number.isInteger(source.version) ? source.version : 1;
 
@@ -304,6 +324,12 @@ function normaliser(brut, contexte = {}) {
     comparaisonLibre: {
       dossierA: texte(libre.dossierA),
       dossierB: texte(libre.dossierB)
+    },
+    webservices: {
+      dossierLocal: texte(ws.dossierLocal) || WEBSERVICES_DEFAUT.dossierLocal,
+      dossierProd: texte(ws.dossierProd) || WEBSERVICES_DEFAUT.dossierProd,
+      msbuild: texte(ws.msbuild),
+      configuration: texte(ws.configuration) || WEBSERVICES_DEFAUT.configuration
     }
   };
 }
@@ -448,6 +474,20 @@ function verifier(config) {
     );
   }
 
+  const ws = config.webservices || {};
+  if (texte(ws.msbuild) && !/msbuild\.exe$/i.test(texte(ws.msbuild))) {
+    ajouterAvertissement(
+      'webservices.msbuild',
+      'Le chemin de MSBuild doit désigner le fichier MSBuild.exe lui-même. Laissez vide pour la détection automatique.'
+    );
+  }
+  if (/\bdebug\b/i.test(texte(ws.configuration))) {
+    ajouterAvertissement(
+      'webservices.configuration',
+      'Les WebServices partent en production compilés en Debug : c\'est rarement voulu.'
+    );
+  }
+
   const options = config.options || {};
   if (!texte(options.auteur)) {
     ajouterAvertissement('options.auteur', 'Sans auteur, les manifestes de déploiement ne seront pas nominatifs.');
@@ -503,6 +543,26 @@ function joindreWin(racine, relatif) {
 /** La racine est-elle exprimée à la mode Windows ? */
 function styleWindows(chemin) {
   return /^[a-z]:/i.test(chemin) || chemin.startsWith('\\\\') || chemin.includes('\\');
+}
+
+/**
+ * Racines locale et production des WebServices. Un dossier relatif est joint à
+ * la racine globale ; un chemin complet est pris tel quel.
+ * @param {object} config
+ * @returns {{ locale:string, prod:string }}
+ */
+function resoudreWebServices(config) {
+  const ws = (config && config.webservices) || WEBSERVICES_DEFAUT;
+  const resoudre = (racine, dossier) => {
+    const propre = texte(dossier);
+    if (path.win32.isAbsolute(propre) && /^([a-z]:|\\\\)/i.test(propre)) return propre;
+    if (propre.startsWith('/')) return propre;
+    return joindreWin(racine, propre);
+  };
+  return {
+    locale: resoudre(config.racines.locale, ws.dossierLocal),
+    prod: resoudre(config.racines.prod, ws.dossierProd)
+  };
 }
 
 /** Retrouve un projet par identifiant, ou le premier projet actif. */
@@ -626,6 +686,7 @@ module.exports = {
   VERSION_CONFIG,
   FICHIER_SENSIBLE,
   RACINE_AVMDF_DEFAUT,
+  WEBSERVICES_DEFAUT,
   CONTENU_APP_OFFLINE_DEFAUT,
   reglagesParDefaut,
   creerProjet,
@@ -635,6 +696,7 @@ module.exports = {
   motifEnRegex,
   fichierSensibleExclu,
   resoudreProjet,
+  resoudreWebServices,
   joindreWin,
   projetParDefaut,
   creerDepot

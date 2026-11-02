@@ -5427,3 +5427,402 @@ video.apercu-media {
   font-size: 12px;
   margin-top: 8px;
 }
+
+/* ==========================================================================
+   Espace WebServices
+   ========================================================================== */
+
+/* Sélecteur d'espace, à côté de la marque : Front ou WebServices. */
+.espaces {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  background: var(--champ);
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+}
+
+.espace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--rayon);
+  color: var(--texte-attenue);
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.espace:hover:not(.actif) {
+  color: var(--texte);
+  background: var(--survol);
+}
+
+.espace.actif {
+  background: var(--accent-fond);
+  border-color: var(--accent-sourd);
+  color: var(--accent-texte);
+}
+
+.ws-corps {
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+}
+
+.ws-msbuild {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+}
+
+.ws-msbuild-chemin {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--texte-faible);
+  min-width: 0;
+}
+
+.ws-liste {
+  padding: 6px 0;
+}
+
+.ws-ligne {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+
+.ws-ligne:hover {
+  background: var(--survol);
+}
+
+.ws-ligne.actif {
+  background: var(--survol-fort);
+  border-left-color: var(--accent);
+}
+
+.ws-ligne.bloque .ws-ligne-nom {
+  color: var(--texte-attenue);
+}
+
+.ws-ligne-corps {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-ligne-nom {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-ligne-versions {
+  font-size: 11.5px;
+  color: var(--texte-attenue);
+}
+
+.ws-ligne-etats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex: none;
+}
+
+.ws-etat,
+.ws-compil {
+  padding: 0 6px;
+  border: 1px solid var(--separateur-clair);
+  border-radius: 8px;
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--texte-attenue);
+}
+
+.ws-etat-pret {
+  border-color: var(--accent-sourd);
+  color: var(--accent-texte);
+}
+
+.ws-etat-version-identique,
+.ws-etat-version-ancienne,
+.ws-compil-echec {
+  border-color: var(--danger-bord);
+  color: var(--danger);
+}
+
+.ws-etat-version-inconnue {
+  border-color: var(--alerte-bord);
+  color: var(--alerte);
+}
+
+.ws-compil-ok {
+  border-color: var(--accent-sourd);
+  background: var(--accent-fond);
+  color: var(--accent-texte);
+}
+
+.ws-compil-encours {
+  border-color: var(--alerte-bord);
+  color: var(--alerte);
+  animation: battre 1.6s ease-in-out infinite;
+}
+
+.ws-version-neuve {
+  color: var(--accent-texte);
+  font-weight: 600;
+}
+
+.ws-bibliotheques {
+  padding: 6px 8px 12px;
+  border-top: 1px solid var(--separateur);
+}
+
+.ws-bibliotheques-liste p {
+  margin: 4px 4px 8px;
+  font-size: 12px;
+}
+
+.ws-bibliotheque {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+/* Détail ------------------------------------------------------------------ */
+
+.ws-detail-entete {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--separateur);
+  background: var(--panneau);
+}
+
+.ws-detail-titre {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+
+.ws-detail-titre h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ws-detail-chemins {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--texte-attenue);
+}
+
+.ws-detail-chemins span:not(.fleche) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.ws-detail-corps {
+  padding: 14px 18px 24px;
+}
+
+.ws-etapes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ws-etape {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 18px;
+  position: relative;
+}
+
+/* Le fil qui relie les étapes. */
+.ws-etape:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 26px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--separateur-clair);
+}
+
+.ws-etape-corps {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-etape-titre {
+  margin: 2px 0 6px;
+  font-weight: 600;
+}
+
+.ws-puce {
+  flex: none;
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-content: center;
+  border: 1px solid var(--separateur-clair);
+  border-radius: 50%;
+  background: var(--panneau);
+  color: var(--texte-attenue);
+  font-family: var(--police-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ws-puce .icone {
+  width: 13px;
+  height: 13px;
+}
+
+.ws-puce.ok {
+  border-color: var(--accent-sourd);
+  background: var(--accent-fond);
+  color: var(--accent-texte);
+}
+
+.ws-puce.echec {
+  border-color: var(--danger-bord);
+  background: var(--danger-fond);
+  color: var(--danger);
+}
+
+.ws-puce.alerte {
+  border-color: var(--alerte-bord);
+  background: var(--alerte-fond);
+  color: var(--alerte);
+}
+
+.ws-puce.encours {
+  border-color: var(--alerte);
+  color: var(--alerte);
+  animation: battre 1.6s ease-in-out infinite;
+}
+
+.ws-versions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ws-versions > div {
+  display: flex;
+  flex-direction: column;
+  font-size: 11.5px;
+}
+
+.ws-version {
+  font-size: 15px;
+}
+
+.ws-journal {
+  max-height: 320px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--champ);
+  border: 1px solid var(--separateur);
+  border-radius: var(--rayon);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--texte-attenue);
+}
+
+.ws-journal-erreur {
+  color: var(--danger);
+}
+
+.ws-journal-avertissement {
+  color: var(--alerte);
+}
+
+.ws-fichiers td {
+  vertical-align: middle;
+}
+
+.ws-fichiers tbody tr:hover {
+  background: var(--survol-fort);
+}
+
+.ws-sensible td {
+  background: var(--danger-fond);
+}
+
+.ws-sensible-note {
+  font-family: var(--police-ui);
+  font-size: 11px;
+  color: var(--danger-texte-doux);
+}
+
+/* Cartes de confirmation et de rapport : un WS par carte. */
+.ws-carte {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--panneau-releve);
+  border: 1px solid var(--separateur);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--rayon);
+}
+
+.ws-carte.en-echec {
+  border-left-color: var(--danger);
+}
+
+.ws-carte-entete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ws-carte-nom {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ws-carte-trajet {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.ws-carte-trajet > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ws-carte .liste-fichiers {
+  max-height: 160px;
+}
+
+.ws-carte .liste-fichiers > div {
+  align-items: center;
+}

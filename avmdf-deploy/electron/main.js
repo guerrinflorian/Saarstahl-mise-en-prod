@@ -26,6 +26,7 @@ const deploy = require('./core/deploy');
 const journal = require('./core/journal');
 const stats = require('./core/stats');
 const references = require('./core/references');
+const webservice = require('./core/webservice');
 
 const MODE_DEV = process.argv.includes('--dev');
 
@@ -197,7 +198,12 @@ function invaliderManifestes() {
  */
 function perimetreManifeste(contenu, actuels) {
   const problemes = [];
-  if (!contenu.racineProd || !avmdf.estSousRacine(contenu.racineProd, actuels.racines.prod)) {
+  const racineWs = config.resoudreWebServices(actuels).prod;
+  const sousProd =
+    contenu.racineProd &&
+    (avmdf.estSousRacine(contenu.racineProd, actuels.racines.prod) ||
+      (contenu.type === 'webservice' && racineWs && avmdf.estSousRacine(contenu.racineProd, racineWs)));
+  if (!sousProd) {
     problemes.push(
       `la racine de production du manifeste sort du périmètre configuré (${contenu.racineProd || 'absente'})`
     );
@@ -1857,6 +1863,543 @@ function handlersHistorique() {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// WebServices
+// ---------------------------------------------------------------------------
+
+/**
+ * Compilations en mémoire, par WebService : le résultat de MSBuild (dossier
+ * publié dans le temporaire) et sa comparaison avec la production. C'est ce
+ * qui fait autorité au moment de la mise en production : le renderer ne
+ * désigne que des noms et des clés.
+ */
+const compilationsWs = new Map();
+let inventaireWs = null;
+let msbuildConnu = null;
+let compilationWsEnCours = null;
+
+function dossierTravailWs() {
+  return path.join(app.getPath('temp'), 'MEPFront-WS');
+}
+
+function annulerCompilationWs() {
+  if (!compilationWsEnCours) return;
+  compilationWsEnCours.annule = true;
+  if (typeof compilationWsEnCours.surAnnulation === 'function') compilationWsEnCours.surAnnulation();
+}
+
+/** Ce que l'interface reçoit d'un fichier comparé : jamais de chemin absolu à réutiliser. */
+function fichierWsPourRenderer(fichier) {
+  return {
+    cle: fichier.cle,
+    chemin: fichier.chemin,
+    statut: fichier.statut,
+    sensible: fichier.sensible,
+    texte: fichier.texte,
+    tailleLocale: fichier.local ? fichier.local.taille : null,
+    tailleProd: fichier.prod ? fichier.prod.taille : null
+  };
+}
+
+function compilationPourRenderer(nom) {
+  const entree = compilationsWs.get(nom);
+  if (!entree) return null;
+  const { resultat, comparaison, paquets, ws, date } = entree;
+  return {
+    nom,
+    date,
+    ok: resultat.ok,
+    annule: resultat.annule,
+    erreur: resultat.erreur,
+    erreurs: resultat.erreurs,
+    avertissements: resultat.avertissements,
+    duree: resultat.duree,
+    commande: resultat.commande,
+    lignes: resultat.lignes,
+    sortie: resultat.sortie,
+    versionCompilee: resultat.versionCompilee,
+    versionProd: ws.versionProd,
+    binLocalModifie: resultat.binLocalModifie,
+    paquets,
+    comparaison: comparaison
+      ? {
+          fichiers: comparaison.fichiers.map(fichierWsPourRenderer),
+          conserves: comparaison.conserves,
+          selection: webservice.selectionParDefaut(comparaison.fichiers),
+          erreur: comparaison.erreur || null
+        }
+      : null
+  };
+}
+
+/**
+ * Demande et sprint d'un passage : la même règle que pour le front. Sans
+ * numéro de demande, le passage est dit mineur et part dans AVMDFMINEUR.
+ */
+function destinationDuPassage(parametres, actuels) {
+  const mineur = parametres.archiver === false;
+  if (!mineur) {
+    const demande = avmdf.normaliserDemande(parametres.demande);
+    if (!demande) {
+      return { erreur: echec('Aucune demande choisie.', 'Choisissez ou créez une demande AVMDF dans le panneau de destination.') };
+    }
+    const nomSprint = String(parametres.sprint || '').trim();
+    const destination = avmdf.resoudreDestination(actuels.racines.avmdf, demande.nom, nomSprint);
+    if (!destination.valide) return { erreur: echec(destination.erreur, 'Corrigez le nom du dossier de sprint.') };
+    return { mineur, nomDemande: demande.nom, nomSprint, chemin: destination.chemin };
+  }
+  const nomSprint = avmdf.MOTIF_PASSAGE_MINEUR.test(String(parametres.sprint || '').trim())
+    ? String(parametres.sprint).trim()
+    : avmdf.nomPassageMineur(new Date());
+  const destination = avmdf.resoudreDestination(actuels.racines.avmdf, avmdf.DEMANDE_MINEURE, nomSprint);
+  if (!destination.valide) return { erreur: echec(destination.erreur, 'Vérifiez la racine des archives dans les réglages.') };
+  return { mineur, nomDemande: avmdf.DEMANDE_MINEURE, nomSprint, chemin: destination.chemin };
+}
+
+/**
+ * Un plan de mise en production par WebService coché. Chaque plan est un plan
+ * ordinaire de deploy.js : la source est le site compilé, la destination le
+ * dossier du WS en production, la sauvegarde `<sprint>\<WS>`.
+ */
+async function construirePlansWs(parametres) {
+  const actuels = reglages();
+  const demandes = Array.isArray(parametres.webservices) ? parametres.webservices : [];
+  if (!demandes.length) {
+    return { erreur: echec('Aucun WebService à mettre en production.', 'Compilez puis cochez au moins un WebService.') };
+  }
+  const destination = destinationDuPassage(parametres, actuels);
+  if (destination.erreur) return { erreur: destination.erreur };
+
+  const plans = [];
+  for (const demande of demandes) {
+    const nom = String(demande.nom || '');
+    const entree = compilationsWs.get(nom);
+    if (!entree || !entree.resultat.ok || !entree.comparaison) {
+      return { erreur: echec(`${nom} n'a pas de compilation réussie en mémoire.`, 'Recompilez ce WebService avant de le mettre en production.') };
+    }
+    const cles = new Set(Array.isArray(demande.cles) ? demande.cles : []);
+    const fichiers = entree.comparaison.fichiers.filter(
+      (f) => cles.has(f.cle) && f.statut !== webservice.STATUT_IDENTIQUE
+    );
+    if (!fichiers.length) {
+      return { erreur: echec(`${nom} : aucun fichier coché.`, 'Cochez au moins un fichier qui diffère de la production, ou décochez ce WebService.') };
+    }
+
+    // La version de production est relue maintenant : quelqu'un a pu passer
+    // depuis la compilation.
+    const versionProd = webservice.versionDe(
+      await webservice.lireVersionDll(path.join(entree.ws.dossierProd, 'bin', entree.ws.assemblyName + '.dll'))
+    );
+    const dossierSauvegarde = path.join(destination.chemin, nom);
+    plans.push({
+      nom,
+      versionProd,
+      versionCompilee: entree.resultat.versionCompilee,
+      plan: {
+        projet: nom,
+        racineLocale: entree.resultat.sortie,
+        racineProd: entree.ws.dossierProd,
+        racineAvmdf: actuels.racines.avmdf,
+        demande: destination.nomDemande,
+        sprint: destination.nomSprint,
+        dossierSauvegarde,
+        dossierTraces: destination.chemin,
+        auteur: actuels.options.auteur,
+        simulation: Boolean(parametres.simulation),
+        archiver: true,
+        mineur: destination.mineur,
+        operation: deploy.OPERATION_DEPLOIEMENT,
+        commentaire: String(parametres.commentaire || '').trim().slice(0, 600) || null,
+        appOffline: { actif: Boolean(parametres.appOffline), contenu: actuels.options.appOffline.contenu },
+        fichiers,
+        complements: {
+          type: 'webservice',
+          webservice: {
+            nom,
+            assembly: entree.ws.assemblyName,
+            versionAvant: versionProd,
+            versionApres: entree.resultat.versionCompilee,
+            configuration: actuels.webservices.configuration,
+            msbuild: msbuildConnu ? msbuildConnu.chemin : null,
+            archiveComplete: dossierSauvegarde
+          }
+        }
+      }
+    });
+  }
+  return { plans, destination, actuels };
+}
+
+/** Contrôles propres aux WebServices, en plus du préflight ordinaire. */
+async function controlesWs(entree) {
+  const problemes = [];
+  const ecart = webservice.comparerVersions(entree.versionCompilee, entree.versionProd);
+  if (entree.versionProd && ecart !== null && ecart <= 0) {
+    problemes.push({
+      niveau: deploy.BLOQUANT,
+      code: 'version',
+      message:
+        ecart === 0
+          ? `${entree.nom} : la version compilée (${entree.versionCompilee}) est celle déjà en production.`
+          : `${entree.nom} : la version compilée (${entree.versionCompilee}) est plus ancienne que celle en production (${entree.versionProd}).`,
+      conseil: 'Changez le numéro d\'assembly dans My Project\\AssemblyInfo.vb, puis recompilez.',
+      fichiers: []
+    });
+  } else if (!entree.versionProd || ecart === null) {
+    problemes.push({
+      niveau: deploy.AVERTISSEMENT,
+      code: 'version-inconnue',
+      message: `${entree.nom} : la version en production n'a pas pu être lue, l'outil ne peut pas vérifier que la vôtre est plus récente.`,
+      conseil: 'Vérifiez à l\'œil le numéro d\'assembly avant de confirmer.',
+      fichiers: []
+    });
+  }
+  const sensibles = entree.plan.fichiers.filter((f) => f.sensible);
+  if (sensibles.length) {
+    problemes.push({
+      niveau: deploy.AVERTISSEMENT,
+      code: 'sensible',
+      message: `${entree.nom} : ${sensibles.map((f) => f.chemin).join(', ')} ${sensibles.length > 1 ? 'seront remplacés' : 'sera remplacé'}.`,
+      conseil: 'Ces fichiers portent la configuration de production (chaînes de connexion, clés). Vérifiez l\'écart avant de confirmer.',
+      fichiers: sensibles.map((f) => f.chemin)
+    });
+  }
+  try {
+    const contenu = await fsp.readdir(fsindex.cheminLong(entree.plan.dossierSauvegarde));
+    if (contenu.length) {
+      problemes.push({
+        niveau: deploy.AVERTISSEMENT,
+        code: 'archive-anterieure',
+        message: `${entree.nom} : un dossier ${entree.nom} existe déjà dans ce sprint.`,
+        conseil: 'Les fichiers déjà archivés sont gardés tels quels (c\'est l\'état d\'avant le premier passage) ; seuls les manquants sont ajoutés.',
+        fichiers: []
+      });
+    }
+  } catch (err) {
+    /* pas encore d'archive : cas normal */
+  }
+  return problemes;
+}
+
+function resumePlanWs(entree) {
+  const parStatut = { modifie: 0, nouveau: 0 };
+  let octets = 0;
+  for (const fichier of entree.plan.fichiers) {
+    if (parStatut[fichier.statut] !== undefined) parStatut[fichier.statut] += 1;
+    octets += fichier.local ? fichier.local.taille : 0;
+  }
+  return {
+    nom: entree.nom,
+    versionProd: entree.versionProd,
+    versionCompilee: entree.versionCompilee,
+    racineProd: entree.plan.racineProd,
+    dossierSauvegarde: entree.plan.dossierSauvegarde,
+    parStatut,
+    octets,
+    fichiers: entree.plan.fichiers.map((f) => ({
+      chemin: f.chemin,
+      statut: f.statut,
+      sensible: f.sensible,
+      taille: f.local ? f.local.taille : 0
+    }))
+  };
+}
+
+async function preflightWs(plans, actuels) {
+  const resultats = [];
+  for (const entree of plans) {
+    const controle = await deploy.preflight(entree.plan, { concurrence: actuels.options.lecturesSimultanees });
+    const supplements = await controlesWs(entree);
+    const problemes = controle.problemes.concat(supplements);
+    resultats.push({
+      nom: entree.nom,
+      ok: !problemes.some((p) => p.niveau === deploy.BLOQUANT),
+      bloquants: problemes.filter((p) => p.niveau === deploy.BLOQUANT),
+      avertissements: problemes.filter((p) => p.niveau === deploy.AVERTISSEMENT),
+      etatsProd: controle.etatsProd,
+      resume: resumePlanWs(entree)
+    });
+  }
+  return resultats;
+}
+
+function handlersWebServices() {
+  gerer('ws:lister', async (parametres = {}) => {
+    const actuels = reglages();
+    const racines = config.resoudreWebServices(actuels);
+    if (!racines.locale || !racines.prod) {
+      return echec('Racines des WebServices non configurées.', 'Renseignez les racines locale et production dans les réglages.');
+    }
+    if (parametres.rafraichirMsbuild || !msbuildConnu || msbuildConnu.cheminForce !== actuels.webservices.msbuild) {
+      msbuildConnu = {
+        ...(await webservice.localiserMsbuild({ cheminForce: actuels.webservices.msbuild })),
+        cheminForce: actuels.webservices.msbuild
+      };
+    }
+    const inventaire = await webservice.listerWebServices({
+      racineLocale: racines.locale,
+      racineProd: racines.prod,
+      concurrence: actuels.options.lecturesSimultanees
+    });
+    inventaireWs = inventaire;
+    return succes({
+      racines,
+      configuration: actuels.webservices.configuration,
+      msbuild: { chemin: msbuildConnu.chemin, source: msbuildConnu.source, version: msbuildConnu.version, erreur: msbuildConnu.erreur },
+      webservices: inventaire.webservices.map((ws) => ({
+        nom: ws.nom,
+        projet: ws.projet,
+        dossierProd: ws.dossierProd,
+        assemblyName: ws.assemblyName,
+        versionLocale: ws.versionLocale,
+        versionLocaleFichier: ws.versionLocaleFichier,
+        versionProd: ws.versionProd,
+        etat: ws.etat,
+        raison: ws.raison,
+        selectionnable: ws.selectionnable,
+        compilation: compilationPourRenderer(ws.nom)
+      })),
+      bibliotheques: inventaire.bibliotheques.map((b) => ({ nom: b.nom, projet: b.projet, web: b.web, raison: b.raison })),
+      erreurs: inventaire.erreurs
+    });
+  });
+
+  gerer('ws:compiler', (parametres = {}) => exclusif('une compilation', async () => {
+    const actuels = reglages();
+    const nom = String(parametres.nom || '');
+    if (!inventaireWs) return echec('Liste des WebServices non chargée.', 'Rechargez la liste.');
+    const ws = inventaireWs.webservices.find((w) => w.nom === nom);
+    if (!ws) return echec(`WebService inconnu : ${nom}`, 'Rechargez la liste des WebServices.');
+
+    // La version locale est relue au moment de compiler : c'est souvent juste
+    // avant que l'on vient de la changer dans Visual Studio.
+    const locale = await webservice.lireVersionLocale(ws.dossierProjet);
+    ws.versionLocale = webservice.versionDe(locale);
+    const etat = webservice.etatVersions(ws.versionLocale, ws.versionProd);
+    ws.etat = etat.etat;
+    ws.raison = etat.raison;
+    if (etat.etat === webservice.ETAT_VERSION_IDENTIQUE || etat.etat === webservice.ETAT_VERSION_ANCIENNE) {
+      return echec(etat.raison, 'Changez le numéro d\'assembly dans My Project, enregistrez, puis rechargez la liste.');
+    }
+
+    if (!msbuildConnu || !msbuildConnu.chemin) {
+      msbuildConnu = {
+        ...(await webservice.localiserMsbuild({ cheminForce: actuels.webservices.msbuild })),
+        cheminForce: actuels.webservices.msbuild
+      };
+    }
+    if (!msbuildConnu.chemin) return echec(msbuildConnu.erreur, 'Indiquez le chemin de MSBuild.exe dans Réglages → WebServices.');
+
+    const paquets = await webservice.verifierPaquets(ws.dossierProjet);
+    const signal = { annule: false };
+    compilationWsEnCours = signal;
+    carnet.ecrire('INFO', `compilation ${actuels.webservices.configuration} de ${nom} (${ws.projet})`);
+    let resultat;
+    try {
+      resultat = await webservice.compiler({
+        msbuild: msbuildConnu.chemin,
+        ws,
+        dossierTravail: path.join(dossierTravailWs(), webservice.nomDeTravail(nom)),
+        configuration: actuels.webservices.configuration,
+        surLignes: (lignes) => emettre('ws:journal', { nom, lignes }),
+        signal
+      });
+    } finally {
+      compilationWsEnCours = null;
+    }
+
+    let comparaison = null;
+    if (resultat.ok) {
+      try {
+        comparaison = await webservice.comparerSortie({
+          sortie: resultat.sortie,
+          prod: ws.dossierProd,
+          concurrence: actuels.options.lecturesSimultanees
+        });
+      } catch (err) {
+        comparaison = { fichiers: [], conserves: [], erreur: `Comparaison impossible : ${fsindex.raisonLisible(err)} - ${err.message}` };
+      }
+    }
+
+    compilationsWs.set(nom, { ws, resultat, comparaison, paquets, date: new Date().toISOString() });
+    carnet.ecrire(
+      resultat.ok ? 'INFO' : 'ERREUR',
+      `compilation de ${nom} ${resultat.ok ? 'réussie' : 'en échec'} en ${Math.round(resultat.duree / 1000)} s` +
+        (resultat.ok ? ` - version ${resultat.versionCompilee || '?'}` : ` - ${resultat.erreur}`) +
+        (resultat.binLocalModifie.length ? ` - ATTENTION, bin local modifié (${resultat.binLocalModifie.length} fichier(s))` : '')
+    );
+    return succes({ compilation: compilationPourRenderer(nom) });
+  }));
+
+  gerer('ws:annulerCompilation', () => {
+    annulerCompilationWs();
+    return succes({});
+  });
+
+  gerer('ws:oublier', (parametres = {}) => {
+    compilationsWs.delete(String(parametres.nom || ''));
+    return succes({});
+  });
+
+  gerer('ws:diff', async (parametres = {}) => {
+    const actuels = reglages();
+    const entree = compilationsWs.get(String(parametres.nom || ''));
+    if (!entree || !entree.comparaison) return echec('Aucune compilation en mémoire pour ce WebService.', 'Recompilez-le.');
+    const fichier = entree.comparaison.fichiers.find((f) => f.cle === parametres.cle);
+    if (!fichier) return echec('Fichier inconnu dans cette compilation.', 'Recompilez le WebService.');
+
+    const lire = async (chemin) => {
+      if (!chemin) return null;
+      try {
+        return await fsp.readFile(fsindex.cheminLong(chemin));
+      } catch (err) {
+        return null;
+      }
+    };
+    const [prod, compile] = await Promise.all([lire(fichier.prod && fichier.prod.absolu), lire(fichier.local.absolu)]);
+    const extension = path.extname(fichier.chemin).toLowerCase();
+    const resultat = textdiff.comparerTampons(prod, compile, {
+      ignorerEspaces: actuels.options.ignorerEspaces,
+      extensionTexte: fichier.texte || actuels.extensionsTexte.includes(extension)
+    });
+    const enveloppe = {
+      cle: fichier.cle,
+      chemin: fichier.chemin,
+      statut: fichier.statut,
+      titreGauche: 'Production',
+      titreDroite: 'Compilé (' + actuels.webservices.configuration + ')',
+      absent: { sauvegarde: !prod, prod: !compile },
+      ...resultat
+    };
+    if (resultat.type === 'texte') {
+      enveloppe.groupes = textdiff.grouper(resultat.lignes);
+      delete enveloppe.lignes;
+    }
+    completerBinaire(enveloppe, extension, prod, compile, {});
+    return succes({ diff: enveloppe });
+  });
+
+  gerer('ws:preflight', async (parametres = {}) => {
+    const { plans, erreur, actuels, destination } = await construirePlansWs(parametres);
+    if (erreur) return erreur;
+    const controles = await preflightWs(plans, actuels);
+    return succes({
+      destination: { demande: destination.nomDemande, sprint: destination.nomSprint, chemin: destination.chemin, mineur: destination.mineur },
+      simulation: Boolean(parametres.simulation),
+      appOffline: Boolean(parametres.appOffline),
+      controles: controles.map(({ etatsProd, ...reste }) => reste),
+      ok: controles.every((c) => c.ok)
+    });
+  });
+
+  gerer('ws:executer', (parametres = {}) => exclusif('une mise en production', async () => {
+    const { plans, erreur, actuels } = await construirePlansWs(parametres);
+    if (erreur) return erreur;
+
+    // Tout est contrôlé avant le premier octet écrit : un WS bloqué arrête le
+    // passage entier, pas seulement lui.
+    const controles = await preflightWs(plans, actuels);
+    if (!controles.every((c) => c.ok)) {
+      return Object.assign(
+        echec(
+          'Mise en production interrompue : des points bloquants sont apparus depuis le contrôle.',
+          'Relisez les contrôles, corrigez, puis relancez.'
+        ),
+        { controles: controles.map(({ etatsProd, ...reste }) => reste) }
+      );
+    }
+
+    const simulation = Boolean(parametres.simulation);
+    const resultats = [];
+    const signal = fsindex.creerSignal();
+    operationEnCours = signal;
+    try {
+      for (let index = 0; index < plans.length; index += 1) {
+        const entree = plans[index];
+        const controle = controles[index];
+        if (signal.annule) {
+          resultats.push({ nom: entree.nom, nonTraite: true, erreur: 'Passage annulé avant ce WebService.' });
+          continue;
+        }
+        emettre('ws:progression', { nom: entree.nom, phase: 'archivage', index, total: plans.length });
+
+        // 1. Le dossier complet de production, avant tout.
+        const archive = await webservice.archiverDossierComplet({
+          source: entree.plan.racineProd,
+          destination: entree.plan.dossierSauvegarde,
+          racineAvmdf: actuels.racines.avmdf,
+          simulation,
+          concurrence: Math.min(4, actuels.options.lecturesSimultanees)
+        });
+        entree.plan.archivesDuPassage = archive.copiesChemins;
+        entree.plan.complements.webservice.archive = {
+          copies: archive.copies,
+          conserves: archive.conserves,
+          octets: archive.octets,
+          total: archive.total
+        };
+        if (archive.erreurs.length) {
+          // Rien n'est écrasé sans archive : ce WS et les suivants s'arrêtent là.
+          carnet.ecrire('ERREUR', `archivage du dossier ${entree.plan.racineProd} incomplet : ${archive.erreurs.slice(0, 5).join(' ; ')}`);
+          resultats.push({
+            nom: entree.nom,
+            erreur:
+              `Archivage du dossier complet incomplet (${archive.erreurs.length} erreur(s)) : rien n'a été copié en production pour ce WebService. ` +
+              archive.erreurs.slice(0, 3).join(' ; '),
+            archive: { copies: archive.copies, conserves: archive.conserves, octets: archive.octets, total: archive.total }
+          });
+          for (const suivant of plans.slice(index + 1)) {
+            resultats.push({ nom: suivant.nom, nonTraite: true, erreur: 'Non traité : le WebService précédent a échoué à l\'archivage.' });
+          }
+          break;
+        }
+
+        // 2. La copie, le manifeste, le récapitulatif : ceux du front.
+        emettre('ws:progression', { nom: entree.nom, phase: 'copie', index, total: plans.length });
+        carnet.ecrire(
+          'INFO',
+          `${simulation ? 'simulation' : 'mise en production'} WebService ${entree.nom} : ${entree.plan.fichiers.length} fichier(s) ` +
+            `vers ${entree.plan.racineProd} - version ${entree.versionProd || '?'} → ${entree.versionCompilee || '?'} - archive ${entree.plan.dossierSauvegarde}`
+        );
+        const resultat = await deploy.executer(entree.plan, {
+          signal,
+          extensionsTexte: actuels.extensionsTexte,
+          ignorerEspaces: actuels.options.ignorerEspaces,
+          invaliderCache: (chemin) => cacheHash.invalider(chemin),
+          etatsProd: controle.etatsProd,
+          dossierSecours: path.join(app.getPath('userData'), 'manifestes-secours')
+        });
+        journaliserTraces(resultat.chemins);
+        const r = resultat.rapport;
+        carnet.ecrire(
+          r.echecs ? 'ERREUR' : 'INFO',
+          `${entree.nom} terminé - ${r.remplacements} remplacé(s), ${r.creations} créé(s), ${r.echecs} échec(s)` +
+            (resultat.chemins.manifeste ? ` - manifeste ${resultat.chemins.manifeste}` : '')
+        );
+        const appOffline = resultat.manifeste.appOffline;
+        if (appOffline && appOffline.erreurRetrait) {
+          carnet.ecrire('ERREUR', `app_offline.htm NON RETIRÉ de ${entree.plan.racineProd} : ${appOffline.erreurRetrait}`);
+        }
+        resultats.push({
+          nom: entree.nom,
+          manifeste: resultat.manifeste,
+          chemins: resultat.chemins,
+          rapport: r,
+          archive: { copies: archive.copies, conserves: archive.conserves, octets: archive.octets, total: archive.total },
+          avertissements: controle.avertissements
+        });
+        if (!simulation) compilationsWs.delete(entree.nom);
+      }
+    } finally {
+      operationEnCours = null;
+    }
+
+    if (!simulation) invaliderManifestes();
+    cacheHash.enregistrer();
+    return succes({ simulation, resultats });
+  }));
+}
+
 /** Relit un manifeste depuis le disque en vérifiant qu'il est bien sous la racine d'archives. */
 async function lireManifesteSur(chemin, actuels) {
   const cible = String(chemin || '');
@@ -1978,6 +2521,8 @@ function cheminAutorise(chemin) {
   const actuels = reglages();
   const racines = [actuels.racines.locale, actuels.racines.prod, actuels.racines.avmdf];
   if (dernierScan) racines.push(dernierScan.cheminLocal, dernierScan.cheminProd);
+  const racinesWs = config.resoudreWebServices(actuels);
+  racines.push(racinesWs.locale, racinesWs.prod, dossierTravailWs());
   return racines.some((racine) => racine && avmdf.estSousRacine(cible, racine)) ? cible : null;
 }
 
@@ -2059,6 +2604,7 @@ if (!app.requestSingleInstanceLock()) {
     handlersAvmdf();
     handlersDeploiement();
     handlersHistorique();
+    handlersWebServices();
     handlersSysteme();
     creerFenetre();
 
@@ -2071,6 +2617,7 @@ if (!app.requestSingleInstanceLock()) {
     if (analyseEnCours) analyseEnCours.annuler();
     if (preflightEnCours) preflightEnCours.annuler();
     if (operationEnCours) operationEnCours.annuler();
+    annulerCompilationWs();
     if (cacheHash) cacheHash.enregistrerSync();
     if (carnet) carnet.ecrire('INFO', 'application fermée');
   });

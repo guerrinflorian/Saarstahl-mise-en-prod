@@ -1,16 +1,20 @@
 import { h } from '../vendor/preact.module.js';
 import htm from '../vendor/htm.module.js';
 import { joindreChemin } from './chemins.js';
-import { IconeEngrenage, IconeHistorique, IconeJournal, IconeLune, IconeSoleil } from './icones.js';
+import { IconeEngrenage, IconeFront, IconeHistorique, IconeJournal, IconeLune, IconeServeur, IconeSoleil } from './icones.js';
 import { themeOppose } from './theme.js';
 
 const html = htm.bind(h);
 
 /**
- * Barre du haut : navigation entre l'analyse et le tableau de bord, cible de
- * la comparaison, lancement de l'analyse, accès aux écrans annexes.
+ * Barre du haut : choix de l'espace (Front ou WebServices), navigation entre
+ * l'espace de travail et le tableau de bord, cible de la comparaison,
+ * lancement de l'analyse, accès aux écrans annexes.
  */
 export function EnTete({
+  espace = 'front',
+  onEspace,
+  cheminsWs,
   config,
   projet,
   cible,
@@ -29,6 +33,7 @@ export function EnTete({
 }) {
   const projetsActifs = config.projets.filter((p) => p.actif);
   const modeLibre = cible.mode === 'libre';
+  const ws = espace === 'ws';
 
   const gauche = modeLibre
     ? cible.dossierB
@@ -48,6 +53,29 @@ export function EnTete({
         <span class="entete-marque">MEPFront<small>Mise en production</small></span>
       </div>
 
+      <div class="espaces" role="tablist" aria-label="Ce que l'on met en production">
+        <button
+          type="button"
+          role="tab"
+          class=${'espace' + (!ws ? ' actif' : '')}
+          aria-selected=${!ws ? 'true' : 'false'}
+          title="Front : les sources (aspx, js, css…) copiées telles quelles"
+          onClick=${() => onEspace && onEspace('front')}
+        >
+          <${IconeFront} /> Front
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class=${'espace' + (ws ? ' actif' : '')}
+          aria-selected=${ws ? 'true' : 'false'}
+          title="WebServices : compilés en Release, dossier complet archivé, bin copié"
+          onClick=${() => onEspace && onEspace('ws')}
+        >
+          <${IconeServeur} /> WebServices
+        </button>
+      </div>
+
       <nav class="onglets" aria-label="Vues principales">
         <button
           type="button"
@@ -55,7 +83,7 @@ export function EnTete({
           aria-current=${vue === 'analyse' ? 'page' : 'false'}
           onClick=${() => onVue('analyse')}
         >
-          Analyse
+          ${ws ? 'Mise en production' : 'Analyse'}
         </button>
         <button
           type="button"
@@ -76,7 +104,17 @@ export function EnTete({
         </button>
       </nav>
 
-      ${vue === 'analyse'
+      ${vue === 'analyse' && ws
+        ? html`<div class="entete-chemins mono">
+            ${cheminsWs
+              ? html`
+                  <span class="chemin" title=${cheminsWs.locale}>${cheminsWs.locale}</span>
+                  <span class="fleche">→</span>
+                  <span class="chemin" title=${cheminsWs.prod}>${cheminsWs.prod}</span>
+                `
+              : null}
+          </div>`
+        : vue === 'analyse'
         ? html`
             ${modeLibre
               ? html`
@@ -110,7 +148,7 @@ export function EnTete({
         : html`<div style="flex:1"></div>`}
 
       <div class="entete-actions">
-        ${vue === 'analyse'
+        ${vue === 'analyse' && !ws
           ? analyseEnCours
             ? html`<button type="button" class="btn" onClick=${onAnnuler}>Annuler l'analyse</button>`
             : html`<button

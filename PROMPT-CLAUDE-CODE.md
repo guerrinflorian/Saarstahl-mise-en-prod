@@ -13,7 +13,7 @@ Contenu côté local : GPNET, WebService, Outils, Traçabilité, Stf, .vs Conten
 
 Les noms ne correspondent pas un pour un (GPNET en local ↔ GPNet en prod ; Outils, Traçabilité et Stf ne sont pas déployés ; ClientMobile n'existe pas en local). L'appariement local ↔ prod doit donc être une configuration éditable, pas une comparaison brute des deux racines.
 
-Ce que je déploie : les sources telles quelles. C'est un projet ASP.NET WebForms : GPNET\GPNET.sln avec des sous-dossiers (Principal\, etc.) contenant des .aspx, .ascx, .master, .js, .css, .cs. Les fichiers déployés sont les fichiers sources — pas de résultat de publication.
+Ce que je déploie : les sources telles quelles. C'est un projet ASP.NET WebForms : GPNET\GPNET.sln avec des sous-dossiers (Principal\, etc.) contenant des .aspx, .ascx, .master, .js, .css, .cs. Les fichiers déployés sont les fichiers sources - pas de résultat de publication.
 
 Organisation de Z:\AvMdf : un dossier par demande de travaux informatique, nommé AVMDF + numéro de la demande (AVMDF4611). À l'intérieur, trois conventions coexistent selon l'ancienneté :
 
@@ -75,7 +75,7 @@ avmdf-deploy/
 Chaque module de core/ doit être un module Node pur (aucun require('electron')), pour que je puisse l'appeler depuis un script en ligne de commande si besoin.
 
 5. Fonctionnalités détaillées
-5.1 Configuration — tout doit être modifiable depuis l'interface
+5.1 Configuration - tout doit être modifiable depuis l'interface
 
 Un écran Réglages accessible en permanence, persisté en JSON dans app.getPath('userData')/config.json. Champs :
 
@@ -109,7 +109,7 @@ Ne jamais utiliser la date de modification comme preuve d'égalité. Une copie r
 Cache des hash indexé sur chemin + taille + date, persisté dans userData, pour que le second scan soit rapide.
 Concurrence bornée (≈ 6 lectures simultanées) : Z:\ est un partage SMB, 500 lectures parallèles le mettent à genoux.
 Un dossier illisible ou un fichier verrouillé ne doit jamais interrompre le scan : on l'ignore et on le liste dans un panneau « Éléments ignorés » à la fin.
-Barre de progression avec phase en cours (Analyse locale / Analyse prod / Vérification du contenu — 340 / 1 220) et bouton Annuler réellement fonctionnel.
+Barre de progression avec phase en cours (Analyse locale / Analyse prod / Vérification du contenu - 340 / 1 220) et bouton Annuler réellement fonctionnel.
 5.3 Recherche et filtrage
 
 C'est central : les projets font plusieurs milliers de fichiers, je dois retrouver rapidement ce que je veux mettre en prod.
@@ -125,7 +125,7 @@ Les filtres se combinent (ET logique). Un bandeau affiche 142 fichiers affichés
 5.4 Vue arborescente
 Vraie arborescence pliable/dépliable reflétant la hiérarchie réelle des dossiers, pas une liste plate. Boutons Tout déplier / Tout replier.
 Chaque dossier affiche un compteur agrégé de ses descendants par statut, et hérite du statut le plus « chaud » de ses enfants pour sa pastille.
-Marqueur d'une seule lettre par fichier, dans une colonne dédiée à gauche : M modifié, + nouveau, − orphelin, = identique. Couleur et lettre — je ne veux pas dépendre uniquement de la couleur.
+Marqueur d'une seule lettre par fichier, dans une colonne dédiée à gauche : M modifié, + nouveau, − orphelin, = identique. Couleur et lettre - je ne veux pas dépendre uniquement de la couleur.
 Case à cocher par fichier et par dossier (cocher un dossier coche récursivement tous ses descendants déployables ; état indéterminé si sélection partielle).
 Quand un filtre est actif, seuls les nœuds correspondants sont visibles, mais les dossiers parents restent affichés pour garder le contexte.
 La liste doit rester fluide à 5 000+ fichiers (rendu virtualisé ou rendu par lots).
@@ -148,7 +148,7 @@ Fichier > 4 Mo → proposer d'ouvrir dans l'éditeur externe plutôt que d'affic
 Fichier nouveau → tout le contenu en « ajouté », colonne gauche vide.
 Fichier orphelin → tout en « supprimé », colonne droite vide.
 
-Encodage — critique. Les fichiers d'un projet .NET français mélangent UTF-8 (avec ou sans BOM) et Windows-1252. Détecter par fichier : BOM d'abord, puis tentative de décodage UTF-8 strict, puis repli sur Windows-1252. Sans ça les accents partent en mojibake et le diff devient illisible. Afficher l'encodage détecté de chaque côté et signaler visuellement une différence d'encodage ou de fins de ligne entre local et prod.
+Encodage - critique. Les fichiers d'un projet .NET français mélangent UTF-8 (avec ou sans BOM) et Windows-1252. Détecter par fichier : BOM d'abord, puis tentative de décodage UTF-8 strict, puis repli sur Windows-1252. Sans ça les accents partent en mojibake et le diff devient illisible. Afficher l'encodage détecté de chaque côté et signaler visuellement une différence d'encodage ou de fins de ligne entre local et prod.
 
 Lors de la copie, ne jamais ré-encoder ni normaliser quoi que ce soit : copie binaire octet pour octet. Le décodage sert uniquement à l'affichage.
 
@@ -176,7 +176,7 @@ Contrôles préalables (préflight), avant la moindre écriture. Mieux vaut éch
 Racines locale et prod accessibles.
 Écriture possible dans le dossier de sauvegarde (test réel : créer puis supprimer un fichier témoin).
 Aucun fichier source disparu depuis le scan.
-Aucun fichier de destination verrouillé. Tenter une ouverture en r+ : EBUSY, EPERM ou EACCES signifient qu'IIS tient le fichier. Message explicite : « Fichier verrouillé en production — recyclez le pool IIS ou déposez un app_offline.htm avant de continuer. »
+Aucun fichier de destination verrouillé. Tenter une ouverture en r+ : EBUSY, EPERM ou EACCES signifient qu'IIS tient le fichier. Message explicite : « Fichier verrouillé en production - recyclez le pool IIS ou déposez un app_offline.htm avant de continuer. »
 Détection de modification concurrente : re-hasher chaque fichier de destination et comparer au hash relevé pendant le scan. S'il a changé entre-temps, quelqu'un d'autre est passé par là → bloquer et demander une nouvelle analyse.
 Espace disque suffisant sur la destination.
 
@@ -269,7 +269,7 @@ Aucun tiret cadratin dans l'interface.
 
 Typographie : Segoe UI Variable pour l'interface, Cascadia Mono puis Consolas en repli pour tous les chemins, numéros de ligne et contenus de fichiers. Aucune police web : l'outil doit fonctionner sur un poste sans accès Internet.
 
-Élément signature : le bandeau de mise en production en bas, qui se comporte comme un plan de vol — il affiche en permanence l'état exact de ce qui va partir et où, et change de teinte quand la simulation est désactivée.
+Élément signature : le bandeau de mise en production en bas, qui se comporte comme un plan de vol - il affiche en permanence l'état exact de ce qui va partir et où, et change de teinte quand la simulation est désactivée.
 
 Exigences de qualité : focus clavier visible partout ; raccourcis F5 analyser, Ctrl+F rechercher, F8 changement suivant, Ctrl+Entrée déployer ; prefers-reduced-motion respecté ; état vide utile (« Aucun écart détecté entre local et prod. » plutôt qu'un écran blanc) ; messages d'erreur qui disent ce qui s'est passé et quoi faire, jamais « Une erreur est survenue ».
 
@@ -287,12 +287,12 @@ Le code métier de core/ ne doit dépendre ni d'Electron ni du DOM.
 
 Procède par étapes et arrête-toi après chacune pour que je valide. Ne saute pas d'étape et ne construis pas tout d'un coup.
 
-Squelette — package.json, fenêtre Electron, preload.js, config.js avec l'écran Réglages complet et fonctionnel. Vérifiable : je modifie une racine, je redémarre, elle est conservée.
-Scan et comparaison — fsindex.js, compare.js, arbre affiché avec statuts et compteurs, progression et annulation. Vérifiable sur le vrai E:\ / Z:\.
-Recherche et filtres — search.js et toute la barre de filtres.
-Diff — textdiff.js et la vue côte à côte complète, y compris encodage, repliage et surlignage intra-ligne.
-AVMDF — avmdf.js, détection des demandes et des conventions, panneau de destination.
-Déploiement — deploy.js, préflight, confirmation, simulation, exécution, manifeste, récapitulatif.
+Squelette - package.json, fenêtre Electron, preload.js, config.js avec l'écran Réglages complet et fonctionnel. Vérifiable : je modifie une racine, je redémarre, elle est conservée.
+Scan et comparaison - fsindex.js, compare.js, arbre affiché avec statuts et compteurs, progression et annulation. Vérifiable sur le vrai E:\ / Z:\.
+Recherche et filtres - search.js et toute la barre de filtres.
+Diff - textdiff.js et la vue côte à côte complète, y compris encodage, repliage et surlignage intra-ligne.
+AVMDF - avmdf.js, détection des demandes et des conventions, panneau de destination.
+Déploiement - deploy.js, préflight, confirmation, simulation, exécution, manifeste, récapitulatif.
 Historique et retour arrière.
 Journal, packaging electron-builder, README.
 
@@ -307,7 +307,7 @@ Ne pas interrompre un scan parce qu'un dossier est inaccessible.
 Ne pas mélanger Sprint N et <Demande>_N dans une même demande.
 Ne pas introduire de bundler, d'étape de build ou de dépendance lourde. Le front se limite à Preact + htm vendorisés en ESM (plus Prism vendorisé pour la seule tokenisation de la coloration syntaxique) : pas d'autre framework, pas de transpilation, pas de JSX.
 Ne pas masquer une erreur derrière un catch vide.
-Ne pas écrire de tests unitaires pour l'instant — je veux d'abord quelque chose que je peux lancer et essayer sur mes vrais dossiers.
+Ne pas écrire de tests unitaires pour l'instant - je veux d'abord quelque chose que je peux lancer et essayer sur mes vrais dossiers.
 10. Questions à me poser
 
 Si un point te semble ambigu ou si tu penses qu'une décision aurait un impact important sur l'architecture, pose-moi la question avant de coder plutôt que de deviner. Notamment : le comportement attendu sur les fichiers orphelins, la gestion des pools IIS, et le format exact que doit avoir le récapitulatif de traçabilité.

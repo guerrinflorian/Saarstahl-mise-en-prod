@@ -219,6 +219,7 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                           ${manifeste.archivage === false
                             ? html`<span class="etiquette etiquette-danger">sans AVMDF</span>`
                             : null}
+                          ${manifeste.type === 'webservice' ? html`<span class="etiquette">WebService</span>` : null}
                           ${manifeste.mineur ? html`<span class="etiquette">mineur</span>` : null}
                           ${manifeste.simulation ? html`<span class="etiquette">simulation</span>` : null}
                         </div>
@@ -260,7 +261,13 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                               ${choisi.commentaire
                                 ? html`<tr><th>Commentaire</th><td>« ${choisi.commentaire} »</td></tr>`
                                 : null}
-                              <tr><th>Projet</th><td>${choisi.projet}</td></tr>
+                              <tr><th>Projet</th><td>${choisi.projet}${choisi.type === 'webservice' ? ' (WebService)' : ''}</td></tr>
+                              ${choisi.webservice
+                                ? html`<tr>
+                                    <th>Version</th>
+                                    <td class="mono">${choisi.webservice.versionAvant || '?'} → ${choisi.webservice.versionApres || '?'}</td>
+                                  </tr>`
+                                : null}
                               <tr><th>Production</th><td class="mono">${choisi.racineProd}</td></tr>
                               <tr><th>Sauvegarde</th><td class="mono">${choisi.dossierSauvegarde}</td></tr>
                               <tr><th>Manifeste</th><td class="mono">${choisi.chemin}</td></tr>

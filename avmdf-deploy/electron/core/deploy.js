@@ -689,6 +689,12 @@ async function executer(plan, options = {}) {
     dossierSecours = null
   } = options;
 
+  // Où déposer manifeste et récapitulatif. Par défaut, le dossier de
+  // sauvegarde lui-même. Un WebService archive son dossier complet sous
+  // `<sprint>\<WS>` : ses traces remontent au niveau du sprint, là où
+  // l'historique les cherche, et le manifeste garde la trace de ce choix.
+  const dossierTraces = plan.dossierTraces || plan.dossierSauvegarde;
+
   const simulation = Boolean(plan.simulation);
   const debut = new Date();
   const resultats = [];
@@ -739,6 +745,7 @@ async function executer(plan, options = {}) {
     racineLocale: plan.racineLocale,
     racineProd: plan.racineProd,
     dossierSauvegarde: plan.dossierSauvegarde,
+    dossierTraces: dossierTraces && dossierTraces !== plan.dossierSauvegarde ? dossierTraces : undefined,
     archivage: plan.archiver !== false,
     // Passage sans numéro de demande, rangé sous AVMDFMINEUR : archivé et
     // réversible comme les autres, mais dit mineur partout où on le lit.
@@ -746,12 +753,15 @@ async function executer(plan, options = {}) {
     simulation,
     annule: signal.annule,
     appOffline: etatAppOffline,
+    // Ce que l'appelant ajoute pour son domaine : un WebService y met son type,
+    // ses versions avant / après et la compilation qui l'a produit.
+    ...(plan.complements || {}),
     fichiers: resultats
   };
 
   // Sans dossier de sauvegarde, il n'y a nulle part où déposer le manifeste :
   // le passage ne laisse de trace que dans le journal, et le rapport le dit.
-  const chemins = await deposerTraces(manifeste, plan.dossierSauvegarde, `_deploiement_${horodatageFichier(debut)}.json`, {
+  const chemins = await deposerTraces(manifeste, plan.dossierSauvegarde ? dossierTraces : null, `_deploiement_${horodatageFichier(debut)}.json`, {
     simulation,
     dossierSecours
   });
@@ -915,7 +925,11 @@ async function traiterFichier(fichier, plan, contexte) {
           await copierAvecDate(cheminProd, cheminSauvegarde);
         }
         entree.sauvegarde = fichier.chemin;
-        entree.sauvegardeConservee = dejaArchive;
+        // Un WebService archive son dossier complet juste avant la copie : ces
+        // fichiers-là sont bien la version d'avant ce passage, pas celle d'un
+        // passage précédent.
+        const archiveDuPassage = plan.archivesDuPassage && plan.archivesDuPassage.has(fichier.chemin.toLowerCase());
+        entree.sauvegardeConservee = dejaArchive && !archiveDuPassage;
       } else {
         entree.sansArchive = true;
       }
@@ -1054,6 +1068,14 @@ function redigerRecapitulatif(manifeste) {
   lignes.push(`- **Sprint** : ${manifeste.sprint}`);
   lignes.push(`- **Auteur** : ${manifeste.auteur || '-'}`);
   lignes.push(`- **Opération** : ${libelleOperation(manifeste)}`);
+  if (manifeste.webservice) {
+    const ws = manifeste.webservice;
+    lignes.push(
+      `- **WebService** : ${ws.nom} - version ${ws.versionAvant || '?'} → ${ws.versionApres || '?'}` +
+        (ws.configuration ? ` (compilé en ${ws.configuration})` : '')
+    );
+    if (ws.archiveComplete) lignes.push(`- **Archive du dossier complet** : \`${ws.archiveComplete}\``);
+  }
   if (manifeste.commentaire) lignes.push(`- **Commentaire** : ${manifeste.commentaire}`);
   lignes.push(`- **Source** : \`${manifeste.racineLocale}\``);
   lignes.push(`- **Destination** : \`${manifeste.racineProd}\``);
@@ -1490,6 +1512,11 @@ async function restaurer(manifeste, preparation, options = {}) {
     racineLocale: manifeste.racineLocale,
     racineProd: manifeste.racineProd,
     dossierSauvegarde: manifeste.dossierSauvegarde,
+    dossierTraces: manifeste.dossierTraces,
+    type: manifeste.type,
+    webservice: manifeste.webservice
+      ? { nom: manifeste.webservice.nom, versionAvant: manifeste.webservice.versionApres, versionApres: manifeste.webservice.versionAvant }
+      : undefined,
     simulation,
     annule: signal.annule,
     fichiers: resultats
@@ -1497,7 +1524,7 @@ async function restaurer(manifeste, preparation, options = {}) {
 
   const chemins = await deposerTraces(
     manifesteRestauration,
-    manifeste.dossierSauvegarde,
+    manifeste.dossierTraces || manifeste.dossierSauvegarde,
     `_restauration_${horodatageFichier(debut)}.json`,
     { simulation, dossierSecours }
   );

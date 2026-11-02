@@ -62,6 +62,10 @@ const SOMMAIRE = [
     ]
   },
   {
+    titre: 'WebServices',
+    entrees: [['webservices', 'Mettre un WebService en production']]
+  },
+  {
     titre: 'Le reste',
     entrees: [
       ['bord', 'Le tableau de bord'],
@@ -1647,6 +1651,61 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             choisi <strong>avant</strong> d'être remplacée. Revenir à une version ancienne ne fait
             jamais perdre l'état courant, et l'opération produit son propre manifeste.
           </p>
+        <//>
+
+        <!-- ============================================= WebServices -->
+        <${Section}
+          id="webservices"
+          titre="Mettre un WebService en production"
+          chapeau="L'espace WebServices, en haut à gauche, remplace « Publier » dans Visual Studio, la recompilation en Debug après coup, et les copies à la main vers AvMdf et la production."
+        >
+          <p>
+            Un WebService ne se déploie pas comme le front : on ne copie pas des sources, on copie le
+            résultat d'une compilation. L'outil prend chaque dossier de projet du dossier local
+            (<span class="mono">WebService</span> par défaut, voir les réglages) qui a un dossier du même
+            nom en production.
+          </p>
+          <${Etape} numero="1" titre="Changer le numéro d'assembly">
+            <p>
+              Comme avant, dans Visual Studio : <span class="mono">${'My Project\\AssemblyInfo.vb'}</span>,
+              en général le dernier chiffre. L'outil compare cette version à celle de la DLL en
+              production : si elle n'est pas plus récente, le WebService ne se coche pas. Après
+              l'avoir changée, cliquez sur <strong>Recharger</strong>.
+            </p>
+          <//>
+          <${Etape} numero="2" titre="Cocher et compiler">
+            <p>
+              Cochez un ou plusieurs WebServices, puis <strong>Compiler</strong>. MSBuild (celui de
+              Visual Studio, trouvé tout seul) compile en Release dans un dossier temporaire. Le bin de
+              votre projet n'est jamais touché : il reste en Debug, plus besoin de recompiler après.
+              Les bibliothèques utilisées (OutilsWebService, OutilCryptage…) sont recompilées avec, et
+              leur DLL part dans le bin du WebService.
+            </p>
+          <//>
+          <${Etape} numero="3" titre="Vérifier les fichiers">
+            <p>
+              Le résultat est comparé à la production, fichier par fichier. Les DLL externes
+              identiques (Newtonsoft, Syncfusion…) sont ignorées : seul ce qui change part.${' '}
+              <strong>Web.config</strong> et <strong>Global.asax</strong> sont décochés d'office : ils
+              portent la configuration de production. Regardez l'écart avant de les cocher. Un fichier
+              présent seulement en production n'est jamais supprimé.
+            </p>
+          <//>
+          <${Etape} numero="4" titre="Mettre en production">
+            <p>
+              Choisissez la demande et le sprint, comme pour le front. Pour chaque WebService, le${' '}
+              <strong>dossier complet</strong> de production est d'abord copié dans${' '}
+              <span class="mono">${'AvMdf\\AVMDF6786\\AVMDF6786_1\\WSChargement'}</span>, puis seuls les
+              fichiers cochés sont copiés. Chaque WebService a son manifeste : il apparaît dans
+              l'historique, d'où l'on vérifie la production ou revient en arrière en un clic.
+            </p>
+            <p>
+              <strong>Pause du WS</strong> dépose un <span class="mono">app_offline.htm</span> pendant la
+              copie : le WebService répond « maintenance » quelques secondes au lieu de démarrer avec
+              un mélange d'anciennes et de nouvelles DLL. Utile en pleine journée ou quand beaucoup de
+              DLL changent. Le fichier est retiré à la fin, même en cas d'erreur.
+            </p>
+          <//>
         <//>
 
         <!-- ==================================================== Bord -->

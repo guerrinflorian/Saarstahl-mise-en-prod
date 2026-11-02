@@ -109,6 +109,23 @@ contextBridge.exposeInMainWorld('avmdf', {
     creerDemande: (demande) => ipcRenderer.invoke('avmdf:creerDemande', { demande })
   },
 
+  webservices: {
+    /** WebServices du dossier local appariés à la production, versions comprises. */
+    lister: (options = {}) => ipcRenderer.invoke('ws:lister', options),
+    /** Compile un WebService en Release dans un dossier temporaire, puis le compare à la production. */
+    compiler: (nom) => ipcRenderer.invoke('ws:compiler', { nom }),
+    annulerCompilation: () => ipcRenderer.invoke('ws:annulerCompilation'),
+    /** Oublie la compilation en mémoire d'un WebService. */
+    oublier: (nom) => ipcRenderer.invoke('ws:oublier', { nom }),
+    /** Écart ligne à ligne entre la production et le fichier compilé. */
+    diff: (nom, cle) => ipcRenderer.invoke('ws:diff', { nom, cle }),
+    /** Contrôles préalables : rien n'est écrit. */
+    preflight: (parametres) => ipcRenderer.invoke('ws:preflight', parametres),
+    executer: (parametres) => ipcRenderer.invoke('ws:executer', parametres),
+    surJournal: (rappel) => abonner('ws:journal', rappel),
+    surProgression: (rappel) => abonner('ws:progression', rappel)
+  },
+
   deploiement: {
     /** Contrôles préalables : rien n'est écrit. */
     preflight: (parametres) => ipcRenderer.invoke('deploiement:preflight', parametres),

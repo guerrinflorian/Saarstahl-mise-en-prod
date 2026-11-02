@@ -5,11 +5,19 @@ import { Case, Champ, ChampDossier } from './Champs.js';
 import { ListeMotifs } from './ListeMotifs.js';
 import { TableauProjets } from './TableauProjets.js';
 import { EnTeteModale } from './Modale.js';
+import { joindreChemin } from './chemins.js';
 import { IconeEngrenage } from './icones.js';
 
 const html = htm.bind(h);
 
 const CONTROLE_VIDE = { erreurs: [], avertissements: [] };
+
+/** Chemin résolu d'un dossier WebService : relatif à la racine, ou complet. */
+function cheminWs(racine, dossier) {
+  const valeur = String(dossier || '').trim();
+  if (/^([a-z]:|\\\\)/i.test(valeur)) return valeur;
+  return joindreChemin(racine, valeur) || '(racine non renseignée)';
+}
 
 /**
  * Écran Réglages. Travaille sur un brouillon : rien n'est écrit tant que
@@ -87,6 +95,13 @@ export function Reglages({
         ...precedent.options,
         appOffline: { ...precedent.options.appOffline, [cle]: valeur }
       }
+    }));
+  }
+
+  function majWs(cle, valeur) {
+    setBrouillon((precedent) => ({
+      ...precedent,
+      webservices: { ...precedent.webservices, [cle]: valeur }
     }));
   }
 
@@ -200,6 +215,74 @@ export function Reglages({
               erreurPour=${erreurPour}
               onChange=${(projets) => setBrouillon((precedent) => ({ ...precedent, projets }))}
             />
+          </section>
+
+          <!-- WebServices ------------------------------------------------- -->
+          <section class="section">
+            <h2>WebServices</h2>
+            <p class="section-aide">
+              Dossier qui contient les projets WebService, de chaque côté. Relatif aux racines ci-dessus
+              (<span class="mono">WebService</span>), ou chemin complet. Chaque WS porte le même nom en local et en
+              production : <span class="mono">WSChargement</span> ↔ <span class="mono">WSChargement</span>.
+            </p>
+            <div class="champs">
+              <${Champ}
+                libelle="Dossier local"
+                pour="ws-local"
+                aide=${'→ ' + cheminWs(brouillon.racines.locale, brouillon.webservices.dossierLocal)}
+              >
+                <input
+                  type="text"
+                  id="ws-local"
+                  spellcheck="false"
+                  value=${brouillon.webservices.dossierLocal}
+                  onInput=${(e) => majWs('dossierLocal', e.target.value)}
+                />
+              <//>
+              <${Champ}
+                libelle="Dossier production"
+                pour="ws-prod"
+                aide=${'→ ' + cheminWs(brouillon.racines.prod, brouillon.webservices.dossierProd)}
+              >
+                <input
+                  type="text"
+                  id="ws-prod"
+                  spellcheck="false"
+                  value=${brouillon.webservices.dossierProd}
+                  onInput=${(e) => majWs('dossierProd', e.target.value)}
+                />
+              <//>
+              <${Champ}
+                libelle="MSBuild.exe"
+                pour="ws-msbuild"
+                erreur=${avertissementPour('webservices.msbuild') ? avertissementPour('webservices.msbuild').message : null}
+                aide="Vide : trouvé tout seul (Visual Studio 2022, 2019, 2017, puis 2015). À renseigner seulement si la détection échoue."
+              >
+                <input
+                  type="text"
+                  id="ws-msbuild"
+                  spellcheck="false"
+                  placeholder="détection automatique"
+                  value=${brouillon.webservices.msbuild}
+                  onInput=${(e) => majWs('msbuild', e.target.value)}
+                />
+              <//>
+              <${Champ}
+                libelle="Configuration"
+                pour="ws-configuration"
+                erreur=${avertissementPour('webservices.configuration') ? avertissementPour('webservices.configuration').message : null}
+                aide="Celle de « Publier » dans Visual Studio. Release, sauf besoin particulier."
+              >
+                <input
+                  type="text"
+                  id="ws-configuration"
+                  style="max-width:160px"
+                  spellcheck="false"
+                  value=${brouillon.webservices.configuration}
+                  onInput=${(e) => majWs('configuration', e.target.value)}
+                />
+              <//>
+            </div>
           </section>
 
           <!-- Exclusions --------------------------------------------------- -->
