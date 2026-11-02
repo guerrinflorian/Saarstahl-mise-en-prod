@@ -98,6 +98,13 @@ export function Reglages({
     }));
   }
 
+  function majTfs(cle, valeur) {
+    setBrouillon((precedent) => ({
+      ...precedent,
+      options: { ...precedent.options, tfs: { ...precedent.options.tfs, [cle]: valeur } }
+    }));
+  }
+
   function majWs(cle, valeur) {
     setBrouillon((precedent) => ({
       ...precedent,
@@ -282,6 +289,20 @@ export function Reglages({
                   spellcheck="false"
                   value=${brouillon.webservices.configuration}
                   onInput=${(e) => majWs('configuration', e.target.value)}
+                />
+              <//>
+              <${Champ}
+                libelle="Adresse de test"
+                pour="ws-url"
+                aide="Appelée juste après chaque mise en production réelle, et par le bouton « Tester ». {ws} est remplacé par le nom du WebService. Toute réponse sous 500 veut dire que le WS tourne. Vide : pas de test."
+              >
+                <input
+                  type="text"
+                  id="ws-url"
+                  spellcheck="false"
+                  placeholder="http://VMSVRIIS01/{ws}/"
+                  value=${brouillon.webservices.urlTest}
+                  onInput=${(e) => majWs('urlTest', e.target.value)}
                 />
               <//>
             </div>
@@ -473,12 +494,36 @@ export function Reglages({
                 onChange=${(valeur) => majOption('simulation', valeur)}
               />
               <${Case}
+                libelle="Signaler les fichiers non archivés dans TFS"
+                coche=${brouillon.options.tfs.actif}
+                titre="Avant chaque mise en production (front et WebServices), tf.exe dit quels fichiers sont extraits sans être archivés"
+                onChange=${(valeur) => majTfs('actif', valeur)}
+              />
+              <${Case}
                 libelle="Déposer un app_offline.htm pendant la copie"
                 coche=${brouillon.options.appOffline.actif}
                 titre="Le fichier est déposé à la racine du site avant la copie, puis retiré après"
                 onChange=${(valeur) => majAppOffline('actif', valeur)}
               />
             </div>
+            ${brouillon.options.tfs.actif
+              ? html`<div class="champs" style="margin-top:8px">
+                  <${Champ}
+                    libelle="tf.exe"
+                    pour="tfs-chemin"
+                    aide="Vide : trouvé à côté de Visual Studio. À renseigner seulement si la vérification dit tf.exe introuvable."
+                  >
+                    <input
+                      type="text"
+                      id="tfs-chemin"
+                      spellcheck="false"
+                      placeholder="détection automatique"
+                      value=${brouillon.options.tfs.chemin}
+                      onInput=${(e) => majTfs('chemin', e.target.value)}
+                    />
+                  <//>
+                </div>`
+              : null}
             ${brouillon.options.appOffline.actif
               ? html`
                   <div style="margin-top:8px">

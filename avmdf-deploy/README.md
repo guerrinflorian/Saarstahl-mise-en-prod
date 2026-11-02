@@ -805,6 +805,42 @@ l'historique, copier « nom version prod -> version locale ».
 Le tableau de bord suit l'espace choisi : en WebServices, seuls les manifestes `type: "webservice"`
 sont comptés ; en Front, tous les autres.
 
+### Contrôles du résultat compilé (2.4.0)
+
+- **Web.config** : noms des `appSettings` et des `connectionStrings` comparés (jamais les valeurs).
+  Une clé du compilé absente en production est signalée, à l'écran et dans les contrôles avant la
+  mise en production (sauf si le Web.config compilé part lui-même).
+- **API exposée** : `electron/core/assembly.js` lit les métadonnées .NET de la DLL (en-tête PE, en-tête
+  CLI, tables ECMA-335) sans Windows ni framework. Les méthodes publiques des classes qui héritent
+  d'`ApiController`, `Controller` ou `WebService` (ou dont le nom finit par `Controller`) sont
+  comparées entre la DLL en production et la DLL compilée, sous la forme `Classe.Methode(n)`.
+  Une méthode retirée ou dont le nombre de paramètres change est signalée.
+- **DLL nécessaires** : pour la sélection cochée, chaque DLL du bin qui part voit ses références
+  (table AssemblyRef) cherchées dans le bin de production tel qu'il sera après la copie. Absente,
+  ou présente dans une autre version sans `bindingRedirect` qui la couvre dans le Web.config qui
+  sera en production : signalé. Les assemblies du framework (GAC) ne sont pas attendues dans le bin.
+- **DLL partagées** : tableau des versions de chaque DLL présente dans au moins deux bin de
+  production, hors bibliothèques tierces (System, Microsoft, Newtonsoft, Syncfusion…).
+- **Test après mise en production** : `webservices.urlTest` (`{ws}` remplacé par le nom). Une
+  réponse HTTP sous 500 vaut « répond » ; une erreur 500 ou pas de réponse en 60 s vaut « ne répond
+  pas », dit dans le rapport et le journal.
+
+### TFS (2.4.0)
+
+`electron/core/tfs.js` lance `tf.exe status <dossier> /recursive /format:brief /noprompt` et lit les
+colonnes d'après la ligne de tirets de l'en-tête (la sortie est localisée). tf.exe est cherché à
+côté du MSBuild trouvé, par vswhere, puis aux emplacements connus ; `options.tfs.chemin` le force.
+
+- WebServices : après la compilation, fichiers en attente du projet et des projets qu'il référence
+  (`ProjectReference`), affichés et repris dans les contrôles.
+- Front : au contrôle préalable d'une mise en production réelle, fichiers de la sélection en attente.
+
+C'est un avertissement, jamais un blocage : tf.exe absent ou serveur injoignable, la vérification
+se dit impossible. La version 6 des réglages ajoute `options.tfs` (`actif`, `chemin`) et
+`webservices.urlTest`.
+
+L'historique se filtre entre Front, WebServices et Tout ; le tableau de bord suit l'espace choisi.
+
 ### Compilation
 
 MSBuild est trouvé par `vswhere` (Visual Studio 2017 et suivants), puis aux emplacements connus de

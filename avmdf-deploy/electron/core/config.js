@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION_CONFIG = 5;
+const VERSION_CONFIG = 6;
 
 /**
  * Motifs ajoutés aux exclusions par la version 2 : l'application compare du
@@ -98,7 +98,11 @@ const WEBSERVICES_DEFAUT = {
   // Vide : MSBuild est cherché tout seul (vswhere, puis les emplacements
   // connus de Visual Studio 2022, 2019, 2017 et 2015).
   msbuild: '',
-  configuration: 'Release'
+  configuration: 'Release',
+  // Adresse appelée après la mise en production pour vérifier que le WS
+  // répond. `{ws}` est remplacé par son nom : http://serveur/{ws}/ . Vide :
+  // pas de test.
+  urlTest: ''
 };
 
 // ---------------------------------------------------------------------------
@@ -177,7 +181,11 @@ function reglagesParDefaut(contexte = {}) {
       appOffline: {
         actif: false,
         contenu: CONTENU_APP_OFFLINE_DEFAUT
-      }
+      },
+      // Fichiers en attente d'archivage dans TFS, signalés avant chaque
+      // mise en production (front et WebServices). Chemin de tf.exe vide :
+      // trouvé à côté de Visual Studio.
+      tfs: { actif: true, chemin: '' }
     },
     comparaisonLibre: {
       dossierA: '',
@@ -266,6 +274,7 @@ function normaliser(brut, contexte = {}) {
   const exclusions = source.exclusions && typeof source.exclusions === 'object' ? source.exclusions : {};
   const options = source.options && typeof source.options === 'object' ? source.options : {};
   const appOffline = options.appOffline && typeof options.appOffline === 'object' ? options.appOffline : {};
+  const tfs = options.tfs && typeof options.tfs === 'object' ? options.tfs : {};
   const libre = source.comparaisonLibre && typeof source.comparaisonLibre === 'object' ? source.comparaisonLibre : {};
   const ws = source.webservices && typeof source.webservices === 'object' ? source.webservices : {};
 
@@ -319,7 +328,8 @@ function normaliser(brut, contexte = {}) {
           typeof appOffline.contenu === 'string' && appOffline.contenu.length
             ? appOffline.contenu
             : CONTENU_APP_OFFLINE_DEFAUT
-      }
+      },
+      tfs: { actif: booleen(tfs.actif, true), chemin: texte(tfs.chemin) }
     },
     comparaisonLibre: {
       dossierA: texte(libre.dossierA),
@@ -329,7 +339,8 @@ function normaliser(brut, contexte = {}) {
       dossierLocal: texte(ws.dossierLocal) || WEBSERVICES_DEFAUT.dossierLocal,
       dossierProd: texte(ws.dossierProd) || WEBSERVICES_DEFAUT.dossierProd,
       msbuild: texte(ws.msbuild),
-      configuration: texte(ws.configuration) || WEBSERVICES_DEFAUT.configuration
+      configuration: texte(ws.configuration) || WEBSERVICES_DEFAUT.configuration,
+      urlTest: texte(ws.urlTest)
     }
   };
 }

@@ -27,7 +27,7 @@ function formaterHorodatage(iso) {
  * Écran Historique : tous les manifestes trouvés sous la racine d'archives,
  * du plus récent au plus ancien, avec comparaison et retour arrière.
  */
-export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
+export function Historique({ espace = 'front', onFermer, onEchec, onNotifier, onRapport }) {
   const [etat, setEtat] = useState('chargement');
   const [manifestes, setManifestes] = useState([]);
   const [erreurs, setErreurs] = useState([]);
@@ -37,6 +37,8 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
   const [saisie, setSaisie] = useState('');
   const [occupe, setOccupe] = useState(false);
   const [filtre, setFiltre] = useState('');
+  // Front, WebServices ou tout : on part de l'espace où l'on travaille.
+  const [genre, setGenre] = useState(espace === 'ws' ? 'ws' : 'front');
   const [sansSimulations, setSansSimulations] = useState(false);
   const [verification, setVerification] = useState(null);
   const [verificationEnCours, setVerificationEnCours] = useState(false);
@@ -133,6 +135,8 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
   const aiguille = filtre.trim().toLowerCase();
   const affiches = manifestes.filter((manifeste) => {
     if (sansSimulations && manifeste.simulation) return false;
+    if (genre === 'ws' && manifeste.type !== 'webservice') return false;
+    if (genre === 'front' && manifeste.type === 'webservice') return false;
     if (!aiguille) return true;
     const champs = [
       manifeste.demande,
@@ -170,6 +174,27 @@ export function Historique({ onFermer, onEchec, onNotifier, onRapport }) {
                       value=${filtre}
                       onInput=${(e) => setFiltre(e.target.value)}
                     />
+                    <div class="espaces espaces-mini" role="tablist" aria-label="Type de passage">
+                      ${[['front', 'Front'], ['ws', 'WebServices'], ['tout', 'Tout']].map(
+                        ([valeur, libelle]) => html`<button
+                          type="button"
+                          role="tab"
+                          key=${valeur}
+                          class=${'espace' + (genre === valeur ? ' actif' : '')}
+                          aria-selected=${genre === valeur ? 'true' : 'false'}
+                          onClick=${() => setGenre(valeur)}
+                        >
+                          ${libelle}
+                          <span class="attenue">
+                            ${formaterNombre(
+                              manifestes.filter((m) =>
+                                valeur === 'tout' ? true : valeur === 'ws' ? m.type === 'webservice' : m.type !== 'webservice'
+                              ).length
+                            )}
+                          </span>
+                        </button>`
+                      )}
+                    </div>
                     <label class="case" title="Ne montrer que les passages qui ont réellement écrit">
                       <input
                         type="checkbox"

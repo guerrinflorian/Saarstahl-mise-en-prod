@@ -27,6 +27,7 @@ const journal = require('./core/journal');
 const stats = require('./core/stats');
 const references = require('./core/references');
 const webservice = require('./core/webservice');
+const tfs = require('./core/tfs');
 
 const MODE_DEV = process.argv.includes('--dev');
 
@@ -1531,6 +1532,13 @@ function handlersDeploiement() {
         signal,
         surProgression: (avancement) => emettre('deploiement:progression', avancement)
       });
+      if (!signal.annule && !plan.simulation) {
+        const tfsAvertissement = await avertissementTfsFront(plan);
+        if (tfsAvertissement) {
+          controle.problemes.push(tfsAvertissement);
+          controle.avertissements.push(tfsAvertissement);
+        }
+      }
 
       // Le résultat vaut jeton : si le plan n'a pas bougé, l'exécution le
       // réutilisera au lieu de relire toute la production une seconde fois.
@@ -1875,6 +1883,78 @@ function handlersHistorique() {
 }
 
 // ---------------------------------------------------------------------------
+// TFS : fichiers en attente d'archivage
+// ---------------------------------------------------------------------------
+
+let tfConnu = null;
+const statutsTfs = new Map();
+const DUREE_STATUT_TFS = 30 * 1000;
+
+async function cheminTf(actuels) {
+  const force = actuels.options.tfs.chemin;
+  if (!tfConnu || tfConnu.force !== force) {
+    tfConnu = {
+      force,
+      ...(await tfs.localiserTf({ cheminForce: force, msbuild: msbuildConnu ? msbuildConnu.chemin : '' }))
+    };
+  }
+  return tfConnu;
+}
+
+/**
+ * Changements en attente sous un dossier. Mis en cache trente secondes :
+ * tf.exe met quelques secondes à répondre, et le préflight puis l'exécution
+ * le demanderaient deux fois de suite.
+ *
+ * @returns {Promise<{ actif:boolean, ok:boolean, changements:object[], erreur:string|null }>}
+ */
+async function statutTfs(dossier) {
+  const actuels = reglages();
+  if (!actuels.options.tfs.actif) return { actif: false, ok: true, changements: [], erreur: null };
+  if (process.platform !== 'win32') return { actif: true, ok: false, changements: [], erreur: 'vérification TFS disponible sous Windows seulement' };
+  const cle = String(dossier || '').toLowerCase();
+  const connu = statutsTfs.get(cle);
+  if (connu && Date.now() - connu.date < DUREE_STATUT_TFS) return connu.resultat;
+  const tf = await cheminTf(actuels);
+  const resultat = tf.chemin
+    ? { actif: true, ...(await tfs.statut(tf.chemin, dossier)) }
+    : { actif: true, ok: false, changements: [], erreur: tf.erreur };
+  statutsTfs.set(cle, { date: Date.now(), resultat });
+  return resultat;
+}
+
+/**
+ * Avertissement du front : parmi les fichiers qui partent, ceux qui sont
+ * extraits sans être archivés dans TFS.
+ */
+async function avertissementTfsFront(plan) {
+  if (plan.operation === deploy.OPERATION_SUPPRESSION) return null;
+  const etat = await statutTfs(plan.racineLocale);
+  if (!etat.actif) return null;
+  if (!etat.ok) {
+    return {
+      niveau: deploy.AVERTISSEMENT,
+      code: 'tfs-inverifiable',
+      message: `Vérification TFS impossible : ${etat.erreur}.`,
+      conseil: 'Vérifiez à la main dans Visual Studio (Team Explorer, Modifications en attente) que tout est archivé.',
+      fichiers: []
+    };
+  }
+  const enAttente = new Map(etat.changements.map((c) => [c.chemin.toLowerCase(), c]));
+  const concernes = plan.fichiers
+    .map((f) => (f.local ? enAttente.get(String(f.local.absolu).toLowerCase()) : null))
+    .filter(Boolean);
+  if (!concernes.length) return null;
+  return {
+    niveau: deploy.AVERTISSEMENT,
+    code: 'tfs',
+    message: `${concernes.length} fichier(s) que vous mettez en production ne sont pas archivés dans TFS.`,
+    conseil: 'Archivez-les avant ou juste après : sinon, le prochain qui récupère les sources et redéploie effacera ces modifications.',
+    fichiers: concernes.map((c) => `${c.nom} (${c.changement})`)
+  };
+}
+
+// ---------------------------------------------------------------------------
 // WebServices
 // ---------------------------------------------------------------------------
 
@@ -1921,6 +2001,7 @@ function compilationPourRenderer(nom) {
   const entree = compilationsWs.get(nom);
   if (!entree) return null;
   const { resultat, comparaison, paquets, ws, date } = entree;
+  if (comparaison && !comparaison.binConserve) comparaison.binConserve = [];
   return {
     nom,
     date,
@@ -1937,11 +2018,17 @@ function compilationPourRenderer(nom) {
     versionProd: ws.versionProd,
     binLocalModifie: resultat.binLocalModifie,
     paquets,
+    tfs: entree.tfs || null,
     comparaison: comparaison
       ? {
           fichiers: comparaison.fichiers.map(fichierWsPourRenderer),
           conserves: comparaison.conserves,
           selection: webservice.selectionParDefaut(comparaison.fichiers),
+          api: comparaison.api || null,
+          config: comparaison.config || null,
+          references: comparaison.fichiers.length
+            ? webservice.verifierReferences(comparaison, new Set(webservice.selectionParDefaut(comparaison.fichiers)))
+            : [],
           erreur: comparaison.erreur || null
         }
       : null
@@ -2070,6 +2157,54 @@ async function controlesWs(entree) {
       fichiers: []
     });
   }
+  const compilation = compilationsWs.get(entree.nom);
+  const comparaison = compilation && compilation.comparaison;
+  if (comparaison && comparaison.config) {
+    const c = comparaison.config;
+    const manquantes = c.appSettings.manquantesEnProd.map((k) => `appSettings : ${k}`)
+      .concat(c.connectionStrings.manquantesEnProd.map((k) => `connectionStrings : ${k}`));
+    const webConfigPart = entree.plan.fichiers.some((f) => f.chemin.toLowerCase() === 'web.config');
+    if (manquantes.length && !webConfigPart) {
+      problemes.push({
+        niveau: deploy.AVERTISSEMENT,
+        code: 'config-manquante',
+        message: `${entree.nom} : ${manquantes.length} clé(s) du Web.config compilé n'existent pas dans celui de production.`,
+        conseil: 'Ajoutez-les à la main dans le Web.config de production, avec les valeurs de production : sinon le WebService plantera au premier appel qui les lit.',
+        fichiers: manquantes
+      });
+    }
+  }
+  if (comparaison && comparaison.api && comparaison.api.retirees.length) {
+    problemes.push({
+      niveau: deploy.AVERTISSEMENT,
+      code: 'api-retiree',
+      message: `${entree.nom} : ${comparaison.api.retirees.length} méthode(s) exposée(s) disparaissent ou changent de paramètres.`,
+      conseil: 'Un client (GPNet, une application mobile…) qui les appelle encore recevra une erreur. Vérifiez que plus personne ne les utilise.',
+      fichiers: comparaison.api.retirees
+    });
+  }
+  if (comparaison) {
+    const references = webservice.verifierReferences(comparaison, new Set(entree.plan.fichiers.map((f) => f.cle)));
+    if (references.length) {
+      problemes.push({
+        niveau: deploy.AVERTISSEMENT,
+        code: 'references',
+        message: `${entree.nom} : ${references.length} DLL nécessaire(s) absente(s) ou dans une autre version dans le bin de production.`,
+        conseil: 'Cochez la DLL correspondante si elle est dans la compilation, ou ajoutez une redirection de version dans le Web.config. Sinon : « Impossible de charger le fichier ou l\'assembly » au démarrage.',
+        fichiers: references.map((r) => `${r.dll} → ${r.reference} ${r.attendue}${r.trouvee ? ` (trouvée : ${r.trouvee})` : ' (absente)'}`)
+      });
+    }
+  }
+  if (compilation && compilation.tfs && compilation.tfs.ok && compilation.tfs.changements.length) {
+    problemes.push({
+      niveau: deploy.AVERTISSEMENT,
+      code: 'tfs',
+      message: `${entree.nom} : ${compilation.tfs.changements.length} fichier(s) source ne sont pas archivés dans TFS.`,
+      conseil: 'Ils sont compilés dans ce qui part en production. Archivez-les, sinon le prochain qui récupère les sources et republie effacera ces modifications.',
+      fichiers: compilation.tfs.changements.map((c) => `${c.nom} (${c.changement})`)
+    });
+  }
+
   const sensibles = entree.plan.fichiers.filter((f) => f.sensible);
   if (sensibles.length) {
     problemes.push({
@@ -2200,6 +2335,8 @@ function handlersWebServices() {
     return succes({
       racines,
       configuration: actuels.webservices.configuration,
+      urlTest: actuels.webservices.urlTest || null,
+      tfsActif: actuels.options.tfs.actif,
       msbuild: { chemin: msbuildConnu.chemin, source: msbuildConnu.source, version: msbuildConnu.version, erreur: msbuildConnu.erreur },
       webservices: inventaire.webservices.map((ws) => ({
         nom: ws.nom,
@@ -2272,6 +2409,7 @@ function handlersWebServices() {
         comparaison = await webservice.comparerSortie({
           sortie: resultat.sortie,
           prod: ws.dossierProd,
+          assemblyName: ws.assemblyName,
           concurrence: actuels.options.lecturesSimultanees
         });
       } catch (err) {
@@ -2279,7 +2417,23 @@ function handlersWebServices() {
       }
     }
 
-    compilationsWs.set(nom, { ws, resultat, comparaison, paquets, date: new Date().toISOString() });
+    // Fichiers en attente dans TFS : ceux du WS et ceux des bibliothèques
+    // qu'il référence, qui partent aussi dans son bin.
+    let etatTfs = null;
+    if (actuels.options.tfs.actif) {
+      const racine = racinesWsTrouvees ? racinesWsTrouvees.locale : path.dirname(ws.dossierProjet);
+      const brut = await statutTfs(racine);
+      const dossiers = [ws.dossierProjet, ...(ws.projetsReferences || [])];
+      etatTfs = {
+        ok: brut.ok,
+        erreur: brut.erreur,
+        changements: brut.ok
+          ? dossiers.flatMap((d) => tfs.sousDossier(brut.changements, d)).filter((c, i, t) => t.findIndex((x) => x.chemin === c.chemin) === i)
+          : []
+      };
+    }
+
+    compilationsWs.set(nom, { ws, resultat, comparaison, paquets, tfs: etatTfs, date: new Date().toISOString() });
     carnet.ecrire(
       resultat.ok ? 'INFO' : 'ERREUR',
       `compilation de ${nom} ${resultat.ok ? 'réussie' : 'en échec'} en ${Math.round(resultat.duree / 1000)} s` +
@@ -2292,6 +2446,40 @@ function handlersWebServices() {
   gerer('ws:annulerCompilation', () => {
     annulerCompilationWs();
     return succes({});
+  });
+
+  // Les dépendances dépendent de ce qui est coché : recalculées à chaque
+  // changement de sélection, tout est déjà en mémoire.
+  gerer('ws:references', (parametres = {}) => {
+    const entree = compilationsWs.get(String(parametres.nom || ''));
+    if (!entree || !entree.comparaison || !entree.comparaison.fichiers) return succes({ references: [] });
+    if (!entree.comparaison.binConserve) entree.comparaison.binConserve = [];
+    const selection = new Set(Array.isArray(parametres.cles) ? parametres.cles : []);
+    return succes({ references: webservice.verifierReferences(entree.comparaison, selection) });
+  });
+
+  gerer('ws:matrice', async () => {
+    if (!inventaireWs) return echec('Liste des WebServices non chargée.', 'Rechargez la liste.');
+    const actuels = reglages();
+    const matrice = await webservice.matriceDll(
+      inventaireWs.webservices.map((w) => ({ nom: w.nom, dossierProd: w.dossierProd })),
+      Math.min(4, actuels.options.lecturesSimultanees)
+    );
+    return succes({ matrice });
+  });
+
+  gerer('ws:tester', async (parametres = {}) => {
+    const actuels = reglages();
+    const url = webservice.urlDeTest(actuels.webservices.urlTest, String(parametres.nom || ''));
+    if (!url) {
+      return echec(
+        'Aucune adresse de test configurée.',
+        'Renseignez « Adresse de test » dans Réglages → WebServices, par exemple http://serveur/{ws}/'
+      );
+    }
+    const test = await webservice.testerUrl(url);
+    carnet.ecrire(test.ok ? 'INFO' : 'ALERTE', `test de ${parametres.nom} : ${url} → ${test.ok ? 'répond' : 'ne répond pas'} (${test.statut || test.erreur})`);
+    return succes({ test });
   });
 
   gerer('ws:oublier', (parametres = {}) => {
@@ -2438,8 +2626,20 @@ function handlersWebServices() {
         if (appOffline && appOffline.erreurRetrait) {
           carnet.ecrire('ERREUR', `app_offline.htm NON RETIRÉ de ${entree.plan.racineProd} : ${appOffline.erreurRetrait}`);
         }
+        // Le WS répond-il encore ? Seulement après une écriture réelle.
+        let test = null;
+        const url = webservice.urlDeTest(actuels.webservices.urlTest, entree.nom);
+        if (!simulation && url && !r.echecs) {
+          emettre('ws:progression', { nom: entree.nom, phase: 'test', index, total: plans.length });
+          test = await webservice.testerUrl(url);
+          carnet.ecrire(
+            test.ok ? 'INFO' : 'ERREUR',
+            `${entree.nom} après mise en production : ${url} → ${test.ok ? 'répond' : 'NE RÉPOND PAS'} (${test.statut || test.erreur})`
+          );
+        }
         resultats.push({
           nom: entree.nom,
+          test,
           manifeste: resultat.manifeste,
           chemins: resultat.chemins,
           rapport: r,

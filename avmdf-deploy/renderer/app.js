@@ -1227,6 +1227,7 @@ function App() {
 
       ${ecran === 'historique'
         ? html`<${Historique}
+            espace=${espace}
             onFermer=${() => setEcran(null)}
             onEchec=${(reponse) => notifierEchec(reponse, 'Historique indisponible.')}
             onNotifier=${notifier}

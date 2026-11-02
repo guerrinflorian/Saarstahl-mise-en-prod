@@ -1705,6 +1705,29 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               portent la configuration de production. Regardez l'écart avant de les cocher. Un fichier
               présent seulement en production n'est jamais supprimé.
             </p>
+            <p>Sous la liste, trois contrôles :</p>
+            <ul>
+              <li>
+                <strong>Web.config : clés.</strong> Les noms des <span class="mono">appSettings</span> et des
+                <span class="mono">connectionStrings</span> (jamais leurs valeurs) du Web.config compilé et de celui de
+                production. Une clé qui n'existe qu'en développement est à ajouter à la main en production, sinon le
+                WebService plante au premier appel qui la lit.
+              </li>
+              <li>
+                <strong>API exposée.</strong> Les méthodes publiques des contrôleurs et services, lues directement dans la
+                DLL en production et dans la DLL compilée. En vert, ce qui est ajouté ; en rouge, ce qui disparaît ou
+                change de paramètres : un client qui l'appelle encore aurait une erreur.
+              </li>
+              <li>
+                <strong>DLL nécessaires.</strong> Chaque DLL cochée trouvera-t-elle, dans le bin de production, les DLL dont
+                elle a besoin et dans la bonne version (redirections du Web.config comprises) ? C'est l'erreur « Impossible de
+                charger le fichier ou l'assembly » attrapée avant la mise en production. Recalculé à chaque case cochée.
+              </li>
+            </ul>
+            <p>
+              <strong>TFS.</strong> Après la compilation, l'outil dit quels fichiers du WebService et des bibliothèques qu'il
+              utilise sont extraits sans être archivés dans TFS : ils partent en production, mais personne d'autre ne les a.
+            </p>
           <//>
           <${Etape} numero="4" titre="Mettre en production">
             <p>
@@ -1722,8 +1745,21 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             </p>
           <//>
           <p>
-            Le <strong>tableau de bord</strong> suit l'espace choisi en haut à gauche : en WebServices, il
-            ne compte que les passages des WebServices ; en Front, que ceux du front.
+            <strong>Le WebService répond-il ?</strong> Avec une adresse de test dans les réglages
+            (<span class="mono">http://serveur/{ws}/</span>), l'outil appelle chaque WebService juste après sa mise en
+            production et le dit dans le rapport. Le bouton <strong>Tester</strong> fait la même chose à tout moment.
+          </p>
+          <p>
+            <strong>DLL partagées</strong>, en haut de la liste : un tableau de la version de DefinitionGlobale, Outils,
+            OutilsWebService… dans chaque WebService en production. Une ligne rouge : pas la même version partout.
+          </p>
+          <p>
+            Le <strong>tableau de bord</strong> et l'<strong>historique</strong> suivent l'espace choisi en haut à gauche ;
+            l'historique se filtre aussi d'un clic entre Front, WebServices et Tout.
+          </p>
+          <p>
+            <strong>Côté Front aussi</strong>, les contrôles avant une mise en production signalent les fichiers qui partent
+            alors qu'ils sont extraits sans être archivés dans TFS.
           </p>
         <//>
 

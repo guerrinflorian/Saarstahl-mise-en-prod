@@ -92,6 +92,8 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
   const [diff, setDiff] = useState(null);
   const [bibliothequesOuvertes, setBibliothequesOuvertes] = useState(false);
   const [menu, setMenu] = useState(null);
+  const [matrice, setMatrice] = useState(null);
+  const [tests, setTests] = useState({});
   const arretDemande = useRef(false);
 
   // -- Inventaire -------------------------------------------------------------
@@ -274,6 +276,33 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
     }
   }
 
+  async function ouvrirMatrice() {
+    setMatrice({ etat: 'chargement' });
+    const reponse = await window.avmdf.webservices.matrice();
+    if (!reponse.ok) {
+      setMatrice(null);
+      notifierEchec(reponse, 'Lecture des DLL impossible.');
+      return;
+    }
+    setMatrice({ etat: 'pret', donnees: reponse.matrice });
+  }
+
+  async function tester(nom) {
+    setTests((t) => ({ ...t, [nom]: { enCours: true } }));
+    const reponse = await window.avmdf.webservices.tester(nom);
+    if (!reponse.ok) {
+      setTests((t) => ({ ...t, [nom]: null }));
+      notifierEchec(reponse, 'Test impossible.');
+      return;
+    }
+    setTests((t) => ({ ...t, [nom]: reponse.test }));
+    notifier({
+      type: reponse.test.ok ? 'succes' : 'erreur',
+      titre: reponse.test.ok ? `${nom} répond.` : `${nom} ne répond pas.`,
+      texte: `${reponse.test.url} : ${reponse.test.statut ? 'HTTP ' + reponse.test.statut : reponse.test.erreur} en ${Math.round(reponse.test.duree / 100) / 10} s`
+    });
+  }
+
   async function actionMenu(action, ws) {
     const dernier = ws.passages && ws.passages[0];
     let reponse = { ok: true };
@@ -290,6 +319,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
     else if (action === 'prod') reponse = await window.avmdf.systeme.reveler(ws.dossierProd);
     else if (action === 'archive' && dernier) reponse = await window.avmdf.systeme.reveler(dernier.dossierSauvegarde);
     else if (action === 'historique') onOuvrirHistorique();
+    else if (action === 'tester') tester(ws.nom);
     else if (action === 'copier') {
       const texte = `${ws.nom} ${ws.versionProd || '?'} -> ${ws.versionLocale || '?'}`;
       reponse = await window.avmdf.systeme.copier(texte);
@@ -335,6 +365,15 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
             onClick=${() => charger({ rafraichirMsbuild: true })}
           >
             ${inventaire.etat === 'chargement' ? 'Lecture…' : 'Recharger'}
+          </button>
+          <button
+            type="button"
+            class="btn btn-mini btn-plat"
+            disabled=${!donnees || !webservices.length}
+            title="Version de chaque DLL partagée (DefinitionGlobale, Outils…) dans chaque WebService en production"
+            onClick=${ouvrirMatrice}
+          >
+            DLL partagées
           </button>
         </div>
 
@@ -486,6 +525,10 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
               onArreter=${arreterCompilation}
               onDiff=${(fichier) => ouvrirDiff(wsActif.nom, fichier)}
               onReveler=${(chemin) => window.avmdf.systeme.reveler(chemin)}
+              urlTest=${donnees.urlTest}
+              tfsActif=${donnees.tfsActif}
+              test=${tests[wsActif.nom]}
+              onTester=${() => tester(wsActif.nom)}
             />`
           : html`<div class="etat-vide">
               <div class="etat-vide-icone"><${IconeServeur} /></div>
@@ -569,6 +612,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
           menu=${menu}
           coche=${coches.has(menu.ws.nom)}
           occupe=${Boolean(enCompilation)}
+          urlTest=${donnees && donnees.urlTest}
           onFermer=${() => setMenu(null)}
           onAction=${(action) => {
             const ws = menu.ws;
@@ -612,6 +656,10 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
         />`
       : null}
 
+    ${matrice
+      ? html`<${MatriceDll} matrice=${matrice} onFermer=${() => setMatrice(null)} />`
+      : null}
+
     ${diff
       ? html`<div class="voile" role="dialog" aria-modal="true" aria-label="Écart avec la production">
           <div class="modale modale-plein">
@@ -650,12 +698,33 @@ function DetailWebService({
   onCompiler,
   onArreter,
   onDiff,
-  onReveler
+  onReveler,
+  urlTest,
+  tfsActif,
+  test,
+  onTester
 }) {
   const [journalOuvert, setJournalOuvert] = useState(false);
   const [passagesOuverts, setPassagesOuverts] = useState(false);
   const [sourcesOuvertes, setSourcesOuvertes] = useState(false);
   const dernierPassage = ws.passages && ws.passages.length ? ws.passages[0] : null;
+
+  // Les DLL nécessaires dépendent de ce qui est coché : recalculé à chaque
+  // changement de sélection, côté processus principal où tout est en mémoire.
+  const [references, setReferences] = useState(null);
+  useEffect(() => {
+    if (!compilation || !compilation.ok || !compilation.comparaison) {
+      setReferences(null);
+      return undefined;
+    }
+    let abandonne = false;
+    window.avmdf.webservices.references(ws.nom, Array.from(selection)).then((reponse) => {
+      if (!abandonne && reponse.ok) setReferences(reponse.references);
+    });
+    return () => {
+      abandonne = true;
+    };
+  }, [compilation, selection, ws.nom]);
   const [identiquesOuverts, setIdentiquesOuverts] = useState(false);
   const [conservesOuverts, setConservesOuverts] = useState(false);
   const boiteJournal = useRef(null);
@@ -701,6 +770,21 @@ function DetailWebService({
         <span title=${ws.dossierProd}>${ws.dossierProd}</span>
       </div>
       <div style="flex:1"></div>
+      ${urlTest
+        ? html`<button
+            type="button"
+            class="btn btn-plat"
+            disabled=${test && test.enCours}
+            title="Appelle l'adresse de test du WebService en production"
+            onClick=${onTester}
+          >
+            ${test && test.enCours
+              ? 'Test…'
+              : test
+                ? html`<span class=${test.ok ? 'compteur-nouveau' : 'rouge'}>${test.ok ? '● répond' : '● ne répond pas'}</span>`
+                : 'Tester'}
+          </button>`
+        : null}
       ${enCours
         ? html`<button type="button" class="btn" onClick=${onArreter}>Arrêter</button>`
         : html`<button
@@ -864,6 +948,23 @@ function DetailWebService({
                 </div>`
               : null}
 
+            ${compilation && compilation.ok && tfsActif
+              ? !compilation.tfs
+                ? null
+                : !compilation.tfs.ok
+                  ? html`<div class="attenue" style="margin-top:8px">TFS : vérification impossible (${compilation.tfs.erreur}).</div>`
+                  : compilation.tfs.changements.length
+                    ? html`<div class="encart encart-alerte" style="margin-top:8px">
+                        <strong>${compilation.tfs.changements.length} fichier(s) non archivé(s) dans TFS</strong>, compilé(s) dans ce qui va
+                        partir. Archivez-les, sinon le prochain qui récupère les sources et republie effacera ces modifications.
+                        <ul class="mono">
+                          ${compilation.tfs.changements.slice(0, 12).map((c) => html`<li key=${c.chemin} title=${c.chemin}>${c.nom} <span class="attenue">(${c.changement})</span></li>`)}
+                          ${compilation.tfs.changements.length > 12 ? html`<li>… et ${compilation.tfs.changements.length - 12} autres</li>` : null}
+                        </ul>
+                      </div>`
+                    : html`<div class="attenue" style="margin-top:8px">TFS : tout est archivé (WebService et bibliothèques qu'il utilise).</div>`
+              : null}
+
             ${journal.length || enCours
               ? html`<div style="margin-top:6px">
                   <button type="button" class="btn btn-mini btn-plat" onClick=${() => setJournalOuvert(!journalOuvert)}>
@@ -981,6 +1082,8 @@ function DetailWebService({
                           <button type="button" class="btn btn-mini" style="margin-left:8px" onClick=${onCocher}>Le cocher</button>
                         </div>`
                       : null}
+
+                    <${ControlesWebService} comparaison=${comparaison} references=${references} />
 
                     ${identiques.length
                       ? html`<div style="margin-top:8px">
@@ -1240,6 +1343,18 @@ function RapportWebServices({ rapport, onFermer, onReveler, onOuvrirHistorique }
                   : null}
               </div>
               ${r.erreur ? html`<div class="encart encart-danger" style="margin:6px 0">${r.erreur}</div>` : null}
+              ${r.test
+                ? r.test.ok
+                  ? html`<div class="encart encart-succes" style="margin:6px 0">
+                      <strong>Le WebService répond</strong> (HTTP ${r.test.statut}, ${Math.round(r.test.duree / 100) / 10} s) :
+                      <span class="mono">${r.test.url}</span>
+                    </div>`
+                  : html`<div class="encart encart-danger" style="margin:6px 0">
+                      <strong>Le WebService ne répond pas</strong> (${r.test.statut ? 'HTTP ' + r.test.statut : r.test.erreur}) :
+                      <span class="mono">${r.test.url}</span>. Regardez le journal d'événements IIS, ou revenez en arrière depuis
+                      l'historique (bouton en bas).
+                    </div>`
+                : null}
               ${appOffline && appOffline.erreurRetrait
                 ? html`<div class="encart encart-danger" style="margin:6px 0">
                     <strong>app_offline.htm n'a pas pu être retiré : le WS est resté en maintenance.</strong>
@@ -1301,7 +1416,7 @@ function RapportWebServices({ rapport, onFermer, onReveler, onOuvrirHistorique }
 
 const MARGE_MENU = 8;
 
-function MenuWebService({ menu, coche, occupe, onFermer, onAction }) {
+function MenuWebService({ menu, coche, occupe, urlTest, onFermer, onAction }) {
   const boite = useRef(null);
   const [position, setPosition] = useState(null);
   const ws = menu.ws;
@@ -1350,6 +1465,7 @@ function MenuWebService({ menu, coche, occupe, onFermer, onAction }) {
       titre: dernier ? dernier.dossierSauvegarde : 'Aucun passage par MEPFront pour ce WebService'
     },
     { separateur: true },
+    { action: 'tester', libelle: 'Tester : le WebService répond-il ?', actif: Boolean(urlTest), titre: urlTest ? '' : 'Renseignez l\'adresse de test dans Réglages → WebServices' },
     { action: 'historique', libelle: 'Ouvrir l\'historique', actif: true },
     { action: 'copier', libelle: 'Copier « nom version prod -> version locale »', actif: true }
   ];
@@ -1377,6 +1493,140 @@ function MenuWebService({ menu, coche, occupe, onFermer, onAction }) {
               ${entree.libelle}
             </button>`
       )}
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Contrôles affichés à l'étape 3 : Web.config, API, DLL nécessaires
+// ---------------------------------------------------------------------------
+
+function ControlesWebService({ comparaison, references }) {
+  const config = comparaison.config;
+  const api = comparaison.api;
+  const manquantes = config
+    ? config.appSettings.manquantesEnProd.map((k) => ['appSettings', k]).concat(config.connectionStrings.manquantesEnProd.map((k) => ['connectionStrings', k]))
+    : [];
+  const enTrop = config
+    ? config.appSettings.seulementEnProd.map((k) => ['appSettings', k]).concat(config.connectionStrings.seulementEnProd.map((k) => ['connectionStrings', k]))
+    : [];
+
+  return html`
+    <div class="ws-controles">
+      <div class="ws-controle">
+        <div class="ws-controle-titre">Web.config : clés</div>
+        ${!config
+          ? html`<div class="attenue">Pas de Web.config dans la compilation.</div>`
+          : config.prodAbsent
+            ? html`<div class="attenue">Pas de Web.config en production.</div>`
+            : manquantes.length
+              ? html`<div class="encart encart-alerte">
+                  <strong>${manquantes.length} clé(s) à ajouter à la main dans le Web.config de production</strong>, avec les valeurs de
+                  production : elles existent en développement mais pas en production.
+                  <ul class="mono">${manquantes.map(([section, k]) => html`<li key=${section + k}>${k} <span class="attenue">(${section})</span></li>`)}</ul>
+                </div>`
+              : html`<div class="attenue">Toutes les clés du Web.config compilé existent en production (seuls les noms sont comparés, jamais les valeurs).</div>`}
+        ${enTrop.length
+          ? html`<div class="attenue" style="margin-top:4px">
+              ${enTrop.length} clé(s) n'existent qu'en production, c'est souvent normal :${' '}
+              <span class="mono">${enTrop.map(([, k]) => k).join(', ')}</span>
+            </div>`
+          : null}
+        ${config && config.sourceExterne
+          ? html`<div class="attenue" style="margin-top:4px">Une section est dans un fichier séparé (configSource) : elle n'est pas comparée.</div>`
+          : null}
+      </div>
+
+      <div class="ws-controle">
+        <div class="ws-controle-titre">API exposée</div>
+        ${!api
+          ? html`<div class="attenue">API non lue (DLL du WebService absente ou illisible).</div>`
+          : api.sansProd
+            ? html`<div class="attenue">${api.total} méthode(s) exposée(s) ; pas de version en production à comparer.</div>`
+            : !api.ajoutees.length && !api.retirees.length
+              ? html`<div class="attenue">Aucune méthode exposée ajoutée ni retirée (${api.total} au total).</div>`
+              : html`<div class="ws-api mono">
+                  ${api.retirees.map((m) => html`<div key=${'-' + m} class="rouge" title="Retirée ou paramètres changés : un client qui l'appelle encore aura une erreur">− ${m}</div>`)}
+                  ${api.ajoutees.map((m) => html`<div key=${'+' + m} class="compteur-nouveau">+ ${m}</div>`)}
+                </div>
+                <div class="attenue" style="margin-top:4px">
+                  Contrôleurs et services, méthodes publiques ; (n) = nombre de paramètres.
+                </div>`}
+      </div>
+
+      <div class="ws-controle">
+        <div class="ws-controle-titre">DLL nécessaires</div>
+        ${references === null
+          ? html`<div class="attenue">Vérification…</div>`
+          : references.length
+            ? html`<div class="encart encart-alerte">
+                <strong>${references.length} DLL nécessaire(s) absente(s) ou dans une autre version</strong> dans le bin de production,
+                avec les fichiers cochés. Cochez la DLL si elle est dans la liste, ou prévoyez une redirection de version dans le Web.config.
+                <ul class="mono">
+                  ${references.map(
+                    (r) => html`<li key=${r.dll + r.reference}>
+                      ${r.reference} ${r.attendue} ${r.trouvee ? html`<span class="attenue">(en prod : ${r.trouvee})</span>` : html`<span class="rouge">(absente)</span>`}
+                      <span class="attenue"> ← ${r.dll}</span>
+                    </li>`
+                  )}
+                </ul>
+              </div>`
+            : html`<div class="attenue">Chaque DLL cochée trouvera ses dépendances dans le bin de production.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Tableau des DLL partagées
+// ---------------------------------------------------------------------------
+
+function MatriceDll({ matrice, onFermer }) {
+  const donnees = matrice.donnees;
+  return html`
+    <div class="voile" role="dialog" aria-modal="true" aria-label="DLL partagées entre WebServices">
+      <div class="modale modale-large">
+        <${EnTeteModale} icone=${IconeServeur} surtitre="WebServices en production" titre="DLL partagées" onFermer=${onFermer} />
+        <div class="modale-corps">
+          ${matrice.etat === 'chargement'
+            ? html`<div class="attenue">Lecture des bin de production…</div>`
+            : !donnees.dlls.length
+              ? html`<div class="attenue">Aucune DLL commune à plusieurs WebServices (hors bibliothèques tierces).</div>`
+              : html`
+                  <p class="attenue" style="margin-top:0">
+                    Version de chaque DLL présente dans au moins deux WebServices (hors System, Microsoft, Newtonsoft, Syncfusion…).
+                    Les lignes en rouge n'ont pas la même version partout.
+                  </p>
+                  <div style="overflow:auto">
+                    <table class="tableau ws-matrice">
+                      <thead>
+                        <tr>
+                          <th>DLL</th>
+                          ${donnees.webservices.map((nom) => html`<th key=${nom}>${nom}</th>`)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${donnees.dlls.map((dll) => {
+                          const versions = Object.values(dll.versions).filter(Boolean);
+                          const frequences = new Map();
+                          for (const v of versions) frequences.set(v, (frequences.get(v) || 0) + 1);
+                          const majoritaire = [...frequences.entries()].sort((a, b) => b[1] - a[1])[0];
+                          return html`<tr key=${dll.nom} class=${dll.divergent ? 'ws-divergent' : ''}>
+                            <td class="mono">${dll.nom}</td>
+                            ${donnees.webservices.map((nom) => {
+                              const v = dll.versions[nom];
+                              return html`<td key=${nom} class=${'mono' + (v && majoritaire && v !== majoritaire[0] ? ' rouge' : '')}>
+                                ${v || html`<span class="attenue">-</span>`}
+                              </td>`;
+                            })}
+                          </tr>`;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                `}
+        </div>
+      </div>
     </div>
   `;
 }

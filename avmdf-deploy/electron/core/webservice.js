@@ -42,6 +42,7 @@ const iconv = require('iconv-lite');
 
 const { cheminLong, hashFichier, parcourir, pool, raisonLisible } = require('./fsindex');
 const { estSousRacine } = require('./avmdf');
+const assembly = require('./assembly');
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -286,11 +287,20 @@ function lireProjet(contenu, cheminProjet) {
   const web =
     Boolean(types && types[1].toLowerCase().includes(GUID_APPLICATION_WEB)) ||
     /Microsoft\.WebApplication\.targets/i.test(contenu);
+  // Projets référencés (OutilsWebService…) : leurs fichiers en attente dans
+  // TFS partent aussi en production, dans le bin du WebService.
+  const references = [];
+  const motif = /<ProjectReference\s+Include="([^"]+)"/gi;
+  let trouve;
+  while ((trouve = motif.exec(contenu))) {
+    references.push(path.win32.dirname(path.win32.join(path.win32.dirname(cheminProjet), trouve[1])));
+  }
   return {
     nomProjet: nomFichier,
     assemblyName: assembly ? assembly[1] : nomFichier,
     web,
-    langue: /\.csproj$/i.test(cheminProjet) ? 'cs' : 'vb'
+    langue: /\.csproj$/i.test(cheminProjet) ? 'cs' : 'vb',
+    projetsReferences: references
   };
 }
 
@@ -380,7 +390,8 @@ async function listerWebServices({ racineLocale, racineProd, concurrence = 6 }) 
       enProd,
       web: infos.web,
       assemblyName: infos.assemblyName,
-      langue: infos.langue
+      langue: infos.langue,
+      projetsReferences: infos.projetsReferences
     };
 
     if (!enProd) {
@@ -868,7 +879,7 @@ async function compiler(parametres) {
  * @param {{ sortie:string, prod:string, concurrence?:number, signal?:object }} parametres
  * @returns {Promise<{ fichiers:object[], conserves:string[], ignores:object[] }>}
  */
-async function comparerSortie({ sortie, prod, concurrence = 6, signal = { annule: false } }) {
+async function comparerSortie({ sortie, prod, assemblyName = null, concurrence = 6, signal = { annule: false } }) {
   const [gauche, droite] = await Promise.all([
     parcourir(sortie, { fichiersExclus: EXCLUS_SORTIE, concurrence, signal }),
     parcourir(prod, { fichiersExclus: ['app_offline.htm'], concurrence, signal })
@@ -895,12 +906,19 @@ async function comparerSortie({ sortie, prod, concurrence = 6, signal = { annule
         prod: null
       };
       entree.local.hash = await hashFichier(local.absolu);
-      const assembly = local.extension === '.dll' || local.extension === '.exe';
-      if (assembly) entree.local.version = versionDe(await lireVersionDll(local.absolu));
+      const estAssembly = local.extension === '.dll' || local.extension === '.exe';
+      if (estAssembly) {
+        entree.local.version = versionDe(await lireVersionDll(local.absolu));
+        entree.local.meta = await assembly.analyserFichier(local.absolu);
+      }
       if (enProd) {
         entree.prod = { absolu: enProd.absolu, taille: enProd.taille, mtimeMs: enProd.mtimeMs, hash: null };
         entree.prod.hash = await hashFichier(enProd.absolu);
-        if (assembly) entree.prod.version = versionDe(await lireVersionDll(enProd.absolu));
+        if (estAssembly) {
+          entree.prod.version = versionDe(await lireVersionDll(enProd.absolu));
+          entree.prod.meta =
+            entree.prod.hash === entree.local.hash ? entree.local.meta : await assembly.analyserFichier(enProd.absolu);
+        }
         entree.statut = entree.prod.hash === entree.local.hash ? STATUT_IDENTIQUE : STATUT_MODIFIE;
       }
       fichiers.push(entree);
@@ -916,7 +934,246 @@ async function comparerSortie({ sortie, prod, concurrence = 6, signal = { annule
   const ordre = (a, b) => a.chemin.localeCompare(b.chemin, 'fr', { sensitivity: 'base' });
   fichiers.sort(ordre);
   conserves.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
-  return { fichiers, conserves, ignores: gauche.ignores.concat(droite.ignores) };
+
+  // DLL présentes seulement en production : elles restent dans le bin, et
+  // comptent pour savoir si les dépendances seront trouvées.
+  const binConserve = [];
+  for (const [cle, entree] of droite.entrees) {
+    if (gauche.entrees.has(cle) || !/^bin\\[^\\]+\.(dll|exe)$/i.test(entree.chemin)) continue;
+    const meta = await assembly.analyserFichier(entree.absolu);
+    if (meta) binConserve.push({ chemin: entree.chemin, meta });
+  }
+
+  // Écart d'API de l'assembly du WebService lui-même.
+  let api = null;
+  if (assemblyName) {
+    const principal = fichiers.find((f) => f.chemin.toLowerCase() === `bin\\${assemblyName.toLowerCase()}.dll`);
+    if (principal && principal.local.meta) {
+      api = assembly.comparerApi(principal.prod ? principal.prod.meta : null, principal.local.meta);
+      api.sansProd = !principal.prod;
+    }
+  }
+
+  // Clés du Web.config : ce qui manque en production.
+  const configLocal = fichiers.find((f) => f.chemin.toLowerCase() === 'web.config');
+  let config = null;
+  if (configLocal) {
+    const lire = async (chemin) => (chemin ? decoderTexte(await fsp.readFile(cheminLong(chemin))) : null);
+    try {
+      // Les deux textes restent sur l'entrée : la vérification des
+      // dépendances lit les redirections de celui qui sera en production.
+      configLocal.local.texte = await lire(configLocal.local.absolu);
+      if (configLocal.prod) configLocal.prod.texte = await lire(configLocal.prod.absolu);
+      config = comparerConfig(configLocal.prod ? configLocal.prod.texte : null, configLocal.local.texte);
+    } catch (err) {
+      config = null;
+    }
+  }
+
+  return { fichiers, conserves, binConserve, api, config, ignores: gauche.ignores.concat(droite.ignores) };
+}
+
+// ---------------------------------------------------------------------------
+// Web.config
+// ---------------------------------------------------------------------------
+
+/** Les `<add …/>` d'une section, par nom d'attribut clé. */
+function clesSection(texte, section, attribut) {
+  const cles = new Map();
+  if (!texte) return cles;
+  const sansCommentaires = texte.replace(/<!--[\s\S]*?-->/g, '');
+  const bloc = new RegExp(`<${section}\\b[^>]*>([\\s\\S]*?)</${section}>`, 'i').exec(sansCommentaires);
+  if (!bloc) return cles;
+  const motif = new RegExp(`<add\\b[^>]*\\b${attribut}\\s*=\\s*"([^"]*)"[^>]*>`, 'gi');
+  let trouve;
+  while ((trouve = motif.exec(bloc[1]))) cles.set(trouve[1].toLowerCase(), trouve[1]);
+  return cles;
+}
+
+/** Redirections de version déclarées (`bindingRedirect`). */
+function lireRedirections(texte) {
+  const redirections = new Map();
+  if (!texte) return redirections;
+  const sansCommentaires = texte.replace(/<!--[\s\S]*?-->/g, '');
+  const blocs = sansCommentaires.match(/<dependentAssembly\b[\s\S]*?<\/dependentAssembly>/gi) || [];
+  for (const bloc of blocs) {
+    const nom = /<assemblyIdentity\b[^>]*\bname\s*=\s*"([^"]+)"/i.exec(bloc);
+    const redirection = /<bindingRedirect\b[^>]*\boldVersion\s*=\s*"([^"]+)"[^>]*\bnewVersion\s*=\s*"([^"]+)"/i.exec(bloc);
+    if (nom && redirection) {
+      const [min, max] = redirection[1].split('-');
+      redirections.set(nom[1].toLowerCase(), { min: min.trim(), max: (max || min).trim(), nouvelle: redirection[2].trim() });
+    }
+  }
+  return redirections;
+}
+
+/**
+ * Compare les noms (jamais les valeurs) des `appSettings` et des
+ * `connectionStrings` du Web.config compilé et de celui de production. Le
+ * Web.config ne part pas en production : une clé ajoutée en développement
+ * doit y être reportée à la main, sinon le WebService plante au premier appel
+ * qui la lit.
+ */
+function comparerConfig(texteProd, texteCompile) {
+  const ecart = (section, attribut) => {
+    const prod = clesSection(texteProd, section, attribut);
+    const compile = clesSection(texteCompile, section, attribut);
+    return {
+      manquantesEnProd: [...compile.keys()].filter((k) => !prod.has(k)).map((k) => compile.get(k)),
+      seulementEnProd: [...prod.keys()].filter((k) => !compile.has(k)).map((k) => prod.get(k))
+    };
+  };
+  const sourceExterne = (texte) => /<(appSettings|connectionStrings)\b[^>]*\bconfigSource\s*=/i.test(texte || '');
+  return {
+    prodAbsent: !texteProd,
+    sourceExterne: sourceExterne(texteProd) || sourceExterne(texteCompile),
+    appSettings: ecart('appSettings', 'key'),
+    connectionStrings: ecart('connectionStrings', 'name')
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Dépendances entre DLL
+// ---------------------------------------------------------------------------
+
+/** Assemblies fournis par le framework .NET (GAC) : jamais attendus dans le bin. */
+const FRAMEWORK = /^(mscorlib|netstandard|System|System\..+|Microsoft\.CSharp|Microsoft\.VisualBasic|Microsoft\.VisualC|WindowsBase|PresentationCore|PresentationFramework|Accessibility|Microsoft\.JScript)$/i;
+
+function versionDansIntervalle(version, min, max) {
+  return comparerVersions(version, min) >= 0 && comparerVersions(version, max) <= 0;
+}
+
+/**
+ * Vérifie, pour la sélection donnée, que chaque DLL qui part trouvera dans le
+ * bin de production les DLL dont elle a besoin, dans la bonne version (ou par
+ * une redirection déclarée dans le Web.config qui sera en production).
+ *
+ * @param {object} comparaison résultat de `comparerSortie`
+ * @param {Set<string>} selection clés des fichiers qui partent
+ * @returns {Array<{ dll:string, reference:string, attendue:string, trouvee:string|null }>}
+ */
+function verifierReferences(comparaison, selection) {
+  const bin = new Map();
+  const noter = (meta) => {
+    if (meta && meta.nom) bin.set(meta.nom.toLowerCase(), meta.version);
+  };
+  for (const conserve of comparaison.binConserve || []) noter(conserve.meta);
+  for (const f of comparaison.fichiers) {
+    if (!/^bin\\[^\\]+\.(dll|exe)$/i.test(f.chemin)) continue;
+    noter(selection.has(f.cle) ? f.local.meta : f.prod ? f.prod.meta : null);
+  }
+
+  // Le Web.config qui sera en production : le compilé s'il part, sinon l'actuel.
+  const config = comparaison.fichiers.find((f) => f.chemin.toLowerCase() === 'web.config');
+  const texteConfig = config ? (selection.has(config.cle) ? config.local.texte : config.prod ? config.prod.texte : null) : null;
+  const redirections = lireRedirections(texteConfig);
+
+  const problemes = [];
+  for (const f of comparaison.fichiers) {
+    if (!selection.has(f.cle) || !f.local.meta || !/^bin\\/i.test(f.chemin)) continue;
+    for (const reference of f.local.meta.references) {
+      const cle = reference.nom.toLowerCase();
+      const presente = bin.get(cle);
+      if (presente === undefined) {
+        if (FRAMEWORK.test(reference.nom)) continue;
+        problemes.push({ dll: f.chemin, reference: reference.nom, attendue: reference.version, trouvee: null });
+        continue;
+      }
+      if (comparerVersions(presente, reference.version) === 0) continue;
+      const redirection = redirections.get(cle);
+      if (redirection && redirection.nouvelle === presente && versionDansIntervalle(reference.version, redirection.min, redirection.max)) {
+        continue;
+      }
+      // Une version plus récente sans redirection est le cas le plus courant
+      // de « Impossible de charger le fichier ou l'assembly ».
+      problemes.push({ dll: f.chemin, reference: reference.nom, attendue: reference.version, trouvee: presente });
+    }
+  }
+  return problemes;
+}
+
+// ---------------------------------------------------------------------------
+// DLL partagées entre WebServices
+// ---------------------------------------------------------------------------
+
+/** Bibliothèques tierces connues : leur version est l'affaire de NuGet, pas de la comparaison. */
+const TIERCES = /^(System\.|Microsoft\.|Newtonsoft\.|Syncfusion\.|Interop\.|EntityFramework|Antlr|WebGrease|Owin|log4net|NLog)/i;
+
+/**
+ * Version de chaque DLL partagée (présente dans au moins deux WebServices,
+ * hors bibliothèques tierces) dans le bin de chaque WS en production.
+ *
+ * @param {Array<{nom:string, dossierProd:string}>} webservices
+ * @returns {Promise<{ webservices:string[], dlls:Array<{ nom:string, versions:Object<string,string|null>, divergent:boolean }> }>}
+ */
+async function matriceDll(webservices, concurrence = 4) {
+  const parWs = new Map();
+  await pool(webservices, concurrence, async (ws) => {
+    const contenu = (await listerDossier(path.join(ws.dossierProd, 'bin'))) || [];
+    parWs.set(ws.nom, contenu.filter((e) => e.isFile() && /\.dll$/i.test(e.name) && !TIERCES.test(e.name)).map((e) => e.name));
+  });
+  const compte = new Map();
+  for (const noms of parWs.values()) for (const nom of noms) compte.set(nom.toLowerCase(), (compte.get(nom.toLowerCase()) || 0) + 1);
+  const partagees = [...compte.entries()].filter(([, n]) => n >= 2).map(([nom]) => nom);
+
+  const dlls = [];
+  for (const nom of partagees) {
+    const versions = {};
+    await pool(webservices, concurrence, async (ws) => {
+      const reel = (parWs.get(ws.nom) || []).find((n) => n.toLowerCase() === nom);
+      if (!reel) {
+        versions[ws.nom] = null;
+        return;
+      }
+      const meta = await assembly.analyserFichier(path.join(ws.dossierProd, 'bin', reel));
+      versions[ws.nom] = meta ? meta.version : versionDe(await lireVersionDll(path.join(ws.dossierProd, 'bin', reel)));
+    });
+    const distinctes = new Set(Object.values(versions).filter(Boolean));
+    const nomAffiche = [...parWs.values()].flat().find((n) => n.toLowerCase() === nom) || nom;
+    dlls.push({ nom: nomAffiche, versions, divergent: distinctes.size > 1 });
+  }
+  dlls.sort((a, b) => Number(b.divergent) - Number(a.divergent) || a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+  return { webservices: webservices.map((w) => w.nom), dlls };
+}
+
+// ---------------------------------------------------------------------------
+// Le WebService répond-il ?
+// ---------------------------------------------------------------------------
+
+/** Adresse de test d'un WS : `{ws}` est remplacé par son nom. */
+function urlDeTest(modele, nom) {
+  const propre = String(modele || '').trim();
+  if (!propre) return null;
+  return propre.includes('{ws}') ? propre.split('{ws}').join(encodeURIComponent(nom)) : propre.replace(/\/?$/, '/') + encodeURIComponent(nom) + '/';
+}
+
+/**
+ * Appelle l'adresse du WebService. Toute réponse sous 500 veut dire que
+ * l'application a démarré (un 404 sur la racine d'une Web API est normal) ;
+ * une erreur 500 ou une absence de réponse veut dire qu'elle ne tourne pas.
+ * Le premier appel après une copie de DLL est lent : IIS recompile et
+ * redémarre, d'où un délai généreux.
+ *
+ * @returns {Promise<{ url:string, ok:boolean, statut:number|null, duree:number, erreur:string|null }>}
+ */
+function testerUrl(url, delai = 60000) {
+  const debut = Date.now();
+  return new Promise((resoudre) => {
+    let module;
+    try {
+      module = new URL(url).protocol === 'https:' ? require('https') : require('http');
+    } catch (err) {
+      resoudre({ url, ok: false, statut: null, duree: 0, erreur: 'adresse invalide' });
+      return;
+    }
+    const requete = module.get(url, { timeout: delai, rejectUnauthorized: false }, (reponse) => {
+      reponse.resume();
+      const statut = reponse.statusCode;
+      resoudre({ url, ok: statut < 500, statut, duree: Date.now() - debut, erreur: statut >= 500 ? `erreur ${statut}` : null });
+    });
+    requete.on('timeout', () => requete.destroy(new Error('pas de réponse dans le délai')));
+    requete.on('error', (err) => resoudre({ url, ok: false, statut: null, duree: Date.now() - debut, erreur: err.message }));
+  });
 }
 
 /** Sélection proposée : ce qui change, sauf Web.config et Global.asax. */
@@ -1038,6 +1295,12 @@ module.exports = {
   compiler,
   comparerSortie,
   selectionParDefaut,
+  comparerConfig,
+  lireRedirections,
+  verifierReferences,
+  matriceDll,
+  urlDeTest,
+  testerUrl,
   archiverDossierComplet,
   nomDeTravail
 };
