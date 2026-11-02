@@ -58,6 +58,8 @@ const ETAT_PRET = 'pret';
 const ETAT_VERSION_IDENTIQUE = 'version-identique';
 const ETAT_VERSION_ANCIENNE = 'version-ancienne';
 const ETAT_VERSION_INCONNUE = 'version-inconnue';
+/** Même numéro qu'en production et aucun source modifié depuis : rien à livrer. */
+const ETAT_A_JOUR = 'a-jour';
 
 const STATUT_MODIFIE = 'modifie';
 const STATUT_NOUVEAU = 'nouveau';
@@ -264,6 +266,32 @@ function etatVersions(versionLocale, versionProd) {
   return { etat: ETAT_PRET, raison: '' };
 }
 
+/**
+ * Même numéro d'assembly ne veut pas dire même code : on a pu modifier un
+ * contrôleur sans monter la version. Les sources modifiés depuis la DLL en
+ * production font la différence entre « à jour » (rien à livrer) et
+ * « numéro à changer » (du code attend, mais il partirait sous l'ancien
+ * numéro).
+ *
+ * @param {{ total:number } | null} sources sources modifiés depuis la DLL en production
+ */
+function etatAvecSources(versionLocale, versionProd, sources) {
+  const resultat = etatVersions(versionLocale, versionProd);
+  if (resultat.etat !== ETAT_VERSION_IDENTIQUE || !sources) return resultat;
+  if (!sources.total) {
+    return {
+      etat: ETAT_A_JOUR,
+      raison: `Même version qu'en production (${versionProd}) et aucun fichier source modifié depuis : rien à mettre en production.`
+    };
+  }
+  return {
+    etat: ETAT_VERSION_IDENTIQUE,
+    raison:
+      `Même numéro d'assembly qu'en production (${versionProd}), mais ${sources.total} fichier(s) source modifié(s) depuis ` +
+      'la mise en production : ce code partirait sous l\'ancien numéro. Montez le numéro dans My Project avant de compiler.'
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Projets
 // ---------------------------------------------------------------------------
@@ -419,7 +447,7 @@ async function listerWebServices({ racineLocale, racineProd, concurrence = 6 }) 
     entree.versionLocaleDetail = locale;
     entree.versionProd = versionDe(prod);
     entree.versionProdDetail = prod;
-    const { etat, raison } = etatVersions(entree.versionLocale, entree.versionProd);
+    const { etat, raison } = etatAvecSources(entree.versionLocale, entree.versionProd, entree.sourcesModifiees);
     entree.etat = etat;
     entree.raison = raison;
     entree.selectionnable = etat === ETAT_PRET || etat === ETAT_VERSION_INCONNUE;
@@ -1320,6 +1348,8 @@ module.exports = {
   ETAT_VERSION_IDENTIQUE,
   ETAT_VERSION_ANCIENNE,
   ETAT_VERSION_INCONNUE,
+  ETAT_A_JOUR,
+  etatAvecSources,
   STATUT_MODIFIE,
   STATUT_NOUVEAU,
   STATUT_IDENTIQUE,

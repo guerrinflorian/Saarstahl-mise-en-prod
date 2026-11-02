@@ -2370,10 +2370,14 @@ function handlersWebServices() {
     // avant que l'on vient de la changer dans Visual Studio.
     const locale = await webservice.lireVersionLocale(ws.dossierProjet);
     ws.versionLocale = webservice.versionDe(locale);
-    const etat = webservice.etatVersions(ws.versionLocale, ws.versionProd);
+    const etat = webservice.etatAvecSources(ws.versionLocale, ws.versionProd, ws.sourcesModifiees);
     ws.etat = etat.etat;
     ws.raison = etat.raison;
-    if (etat.etat === webservice.ETAT_VERSION_IDENTIQUE || etat.etat === webservice.ETAT_VERSION_ANCIENNE) {
+    if (
+      etat.etat === webservice.ETAT_VERSION_IDENTIQUE ||
+      etat.etat === webservice.ETAT_VERSION_ANCIENNE ||
+      etat.etat === webservice.ETAT_A_JOUR
+    ) {
       return echec(etat.raison, 'Changez le numéro d\'assembly dans My Project, enregistrez, puis rechargez la liste.');
     }
 

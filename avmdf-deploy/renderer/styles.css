@@ -5894,3 +5894,18 @@ video.apercu-media {
   color: var(--danger);
   font-weight: 600;
 }
+
+.ws-etat-a-jour {
+  color: var(--texte-faible);
+}
+
+.ws-ligne-modifs {
+  margin-left: 4px;
+  font-family: var(--police-ui);
+  font-size: 11px;
+  color: var(--texte-faible);
+}
+
+.ws-ligne-modifs.rouge {
+  color: var(--danger);
+}

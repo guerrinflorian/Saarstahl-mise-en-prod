@@ -35,7 +35,8 @@ const html = htm.bind(h);
 
 const LIBELLES_ETAT = {
   pret: 'prêt',
-  'version-identique': 'version identique',
+  'a-jour': 'à jour',
+  'version-identique': 'n° à changer',
   'version-ancienne': 'version plus ancienne',
   'version-inconnue': 'version à vérifier'
 };
@@ -481,11 +482,21 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
                                 <span title="Version en production">${ws.versionProd || '?'}</span>
                                 <span class="fleche">→</span>
                                 <span
-                                  class=${ws.etat === 'pret' ? 'ws-version-neuve' : ws.etat === 'version-inconnue' ? '' : 'rouge'}
+                                  class=${ws.etat === 'pret' ? 'ws-version-neuve' : ws.etat === 'version-inconnue' || ws.etat === 'a-jour' ? '' : 'rouge'}
                                   title="Version locale (My Project)"
                                 >
                                   ${ws.versionLocale || '?'}
                                 </span>
+                                ${ws.sourcesModifiees && ws.sourcesModifiees.total
+                                  ? html`<span
+                                      class=${'ws-ligne-modifs' + (ws.etat === 'version-identique' ? ' rouge' : '')}
+                                      title="Fichiers source plus récents que la DLL en production"
+                                    >
+                                      · ${ws.sourcesModifiees.total} source${ws.sourcesModifiees.total > 1 ? "s" : ""} modifiée${ws.sourcesModifiees.total > 1 ? "s" : ""}
+                                    </span>`
+                                  : ws.dateProd
+                                    ? html`<span class="ws-ligne-modifs" title="Aucun fichier source plus récent que la DLL en production">· aucune modif</span>`
+                                    : null}
                               </div>
                             </div>
                             <div class="ws-ligne-etats">
@@ -539,6 +550,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
       <section class="panneau panneau-droit ws-detail" aria-label="Détail du WebService">
         ${wsActif
           ? html`<${DetailWebService}
+              key=${wsActif.nom}
               ws=${wsActif}
               configuration=${donnees.configuration}
               compilation=${compilations[wsActif.nom]}
@@ -734,7 +746,9 @@ function DetailWebService({
 }) {
   const [journalOuvert, setJournalOuvert] = useState(false);
   const [passagesOuverts, setPassagesOuverts] = useState(false);
-  const [sourcesOuvertes, setSourcesOuvertes] = useState(false);
+  // Même numéro mais du code modifié : la liste des fichiers est la raison du
+  // blocage, elle s'ouvre d'elle-même.
+  const [sourcesOuvertes, setSourcesOuvertes] = useState(ws.etat === 'version-identique');
   const dernierPassage = ws.passages && ws.passages.length ? ws.passages[0] : null;
 
   // Les DLL nécessaires dépendent de ce qui est coché : recalculé à chaque
@@ -773,7 +787,8 @@ function DetailWebService({
   const fichiers = comparaison ? comparaison.fichiers : [];
   const aDeployer = fichiers.filter((f) => f.statut !== 'identique');
   const identiques = fichiers.filter((f) => f.statut === 'identique');
-  const etapeVersion = ws.etat === 'pret' ? 'ok' : ws.etat === 'version-inconnue' ? 'alerte' : 'echec';
+  const etapeVersion =
+    ws.etat === 'pret' || ws.etat === 'a-jour' ? 'ok' : ws.etat === 'version-inconnue' ? 'alerte' : 'echec';
   const etapeCompilation = enCours ? 'encours' : !compilation ? 'attente' : compilation.ok ? 'ok' : 'echec';
   const etapeComparaison = !comparaison ? 'attente' : comparaison.erreur ? 'echec' : 'ok';
 
@@ -925,7 +940,7 @@ function DetailWebService({
               : null}
 
             ${ws.raison
-              ? html`<div class=${'encart ' + (etapeVersion === 'echec' ? 'encart-danger' : 'encart-alerte')} style="margin-top:8px">
+              ? html`<div class=${'encart ' + (ws.etat === 'a-jour' ? '' : etapeVersion === 'echec' ? 'encart-danger' : 'encart-alerte')} style="margin-top:8px">
                   ${ws.raison}
                   ${etapeVersion === 'echec'
                     ? html`<div class="attenue" style="margin-top:4px">

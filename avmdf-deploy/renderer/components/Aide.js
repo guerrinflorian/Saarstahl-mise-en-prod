@@ -1673,6 +1673,13 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               l'avoir changée, cliquez sur <strong>Recharger</strong>.
             </p>
             <p>
+              Même numéro ne veut pas dire même code. La liste fait la différence :
+              <strong>à jour</strong> (gris) quand aucun fichier source n'a changé depuis la DLL en production, rien à
+              livrer ; <strong>n° à changer</strong> (rouge) quand des fichiers ont changé mais que le numéro est resté
+              le même : ce code partirait sous l'ancien numéro. Chaque ligne dit combien de sources ont été modifiés,
+              et le détail les liste.
+            </p>
+            <p>
             Pour juger un WebService avant de le compiler, l'étape Version dit aussi : la date de la DLL en
             production (à peu près celle de la dernière mise en production), le dernier passage par
             MEPFront (date, auteur, demande, versions, commentaire) et la liste des fichiers source modifiés

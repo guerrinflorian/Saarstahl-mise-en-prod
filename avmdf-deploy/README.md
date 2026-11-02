@@ -784,7 +784,10 @@ La version locale est lue dans `My Project\AssemblyInfo.vb` (`Properties\Assembl
 lignes en commentaire ignorées : `AssemblyVersion`, à défaut `AssemblyFileVersion`. La version en
 production est lue dans la ressource de version de `bin\<AssemblyName>.dll` (celle de l'onglet
 Détails de l'explorateur). Une version locale identique ou plus ancienne empêche de cocher le WS.
-Une version illisible est signalée mais ne bloque pas. La version est relue au moment de compiler,
+Une version illisible est signalée mais ne bloque pas. Même numéro ne veut pas dire même code
+(2.4.2) : à version égale, le WS est dit « à jour » si aucun fichier source n'est plus récent que la
+DLL en production, et « n° à changer » sinon (du code attend, il partirait sous l'ancien numéro).
+Les deux restent non cochables ; chaque ligne de la liste affiche le nombre de sources modifiés. La version est relue au moment de compiler,
 puis celle de la DLL compilée est revérifiée au contrôle préalable.
 
 ### Ce que l'on sait d'un WS avant de le compiler (2.3.1)
