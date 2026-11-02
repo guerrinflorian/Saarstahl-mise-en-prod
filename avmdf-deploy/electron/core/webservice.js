@@ -1166,14 +1166,62 @@ function testerUrl(url, delai = 60000) {
       resoudre({ url, ok: false, statut: null, duree: 0, erreur: 'adresse invalide' });
       return;
     }
-    const requete = module.get(url, { timeout: delai, rejectUnauthorized: false }, (reponse) => {
-      reponse.resume();
+    const requete = module.get(url, { timeout: delai, rejectUnauthorized: false, headers: { Accept: 'application/json' } }, (reponse) => {
       const statut = reponse.statusCode;
-      resoudre({ url, ok: statut < 500, statut, duree: Date.now() - debut, erreur: statut >= 500 ? `erreur ${statut}` : null });
+      const morceaux = [];
+      let taille = 0;
+      reponse.on('data', (morceau) => {
+        taille += morceau.length;
+        if (taille <= 256 * 1024) morceaux.push(morceau);
+      });
+      reponse.on('end', () => {
+        resoudre({
+          url,
+          ok: statut < 500,
+          statut,
+          duree: Date.now() - debut,
+          erreur: statut >= 500 ? `erreur ${statut}` : null,
+          infos: lireInfosApi(Buffer.concat(morceaux).toString('utf8'))
+        });
+      });
+      reponse.on('error', (err) => resoudre({ url, ok: false, statut, duree: Date.now() - debut, erreur: err.message }));
     });
     requete.on('timeout', () => requete.destroy(new Error('pas de réponse dans le délai')));
     requete.on('error', (err) => resoudre({ url, ok: false, statut: null, duree: Date.now() - debut, erreur: err.message }));
   });
+}
+
+/**
+ * Lit la réponse de la route `api/Informations` des WebServices :
+ * {"Donnees":[{"Nom":"WSChargement","Version":"2.0.0.3","ModeCompilation":"RELEASE"}], …}
+ * C'est le WebService lui-même qui dit quelle version IIS a chargée et en
+ * quel mode : la preuve que la nouvelle DLL tourne, pas seulement qu'elle a
+ * été copiée. Toute autre réponse donne `null`.
+ *
+ * @returns {{ nom:string|null, version:string|null, mode:string|null } | null}
+ */
+function lireInfosApi(texte) {
+  let objet;
+  try {
+    objet = JSON.parse(String(texte || '').replace(/^\uFEFF/, ''));
+  } catch (err) {
+    return null;
+  }
+  const valeur = (o, cle) => {
+    if (!o || typeof o !== 'object') return null;
+    const trouvee = Object.keys(o).find((k) => k.toLowerCase() === cle);
+    return trouvee !== undefined ? o[trouvee] : null;
+  };
+  const donnees = valeur(objet, 'donnees');
+  const ligne = Array.isArray(donnees) ? donnees[0] : donnees && typeof donnees === 'object' ? donnees : objet;
+  const version = valeur(ligne, 'version');
+  if (!version) return null;
+  const mode = valeur(ligne, 'modecompilation');
+  return {
+    nom: valeur(ligne, 'nom') || null,
+    version: String(version),
+    mode: mode ? String(mode).toUpperCase() : null
+  };
 }
 
 /** Sélection proposée : ce qui change, sauf Web.config et Global.asax. */
@@ -1301,6 +1349,7 @@ module.exports = {
   matriceDll,
   urlDeTest,
   testerUrl,
+  lireInfosApi,
   archiverDossierComplet,
   nomDeTravail
 };

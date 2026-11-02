@@ -294,13 +294,13 @@ export function Reglages({
               <${Champ}
                 libelle="Adresse de test"
                 pour="ws-url"
-                aide="Appelée juste après chaque mise en production réelle, et par le bouton « Tester ». {ws} est remplacé par le nom du WebService. Toute réponse sous 500 veut dire que le WS tourne. Vide : pas de test."
+                aide="{ws} est remplacé par le nom du WebService. La route api/Informations répond la version chargée par IIS et le mode (RELEASE / DEBUG) : affichés dans la liste, et vérifiés juste après chaque mise en production. Toute réponse sous 500 veut dire que le WS tourne. Vide : pas de test."
               >
                 <input
                   type="text"
                   id="ws-url"
                   spellcheck="false"
-                  placeholder="http://VMSVRIIS01/{ws}/"
+                  placeholder="https://vmsvriis01.process.lo/{ws}/api/Informations"
                   value=${brouillon.webservices.urlTest}
                   onInput=${(e) => majWs('urlTest', e.target.value)}
                 />

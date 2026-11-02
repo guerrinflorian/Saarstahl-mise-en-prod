@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VERSION_CONFIG = 6;
+const VERSION_CONFIG = 7;
 
 /**
  * Motifs ajoutés aux exclusions par la version 2 : l'application compare du
@@ -92,6 +92,9 @@ const RACINE_AVMDF_DEFAUT = 'Z:\\AvMdf';
  * local, `Z:\` + `WebService` en production - et chaque WS porte le même nom
  * des deux côtés. Un chemin complet est accepté aussi.
  */
+/** Le serveur IIS de production, le même pour tout le service. */
+const URL_TEST_DEFAUT = 'https://vmsvriis01.process.lo/{ws}/api/Informations';
+
 const WEBSERVICES_DEFAUT = {
   dossierLocal: 'WebService',
   dossierProd: 'WebService',
@@ -99,10 +102,11 @@ const WEBSERVICES_DEFAUT = {
   // connus de Visual Studio 2022, 2019, 2017 et 2015).
   msbuild: '',
   configuration: 'Release',
-  // Adresse appelée après la mise en production pour vérifier que le WS
-  // répond. `{ws}` est remplacé par son nom : http://serveur/{ws}/ . Vide :
-  // pas de test.
-  urlTest: ''
+  // Adresse appelée pour savoir si le WS tourne et quelle version IIS a
+  // chargée. `{ws}` est remplacé par son nom. La route api/Informations,
+  // présente dans les WebServices du service, répond la version et le mode
+  // de compilation. Vide : pas de test.
+  urlTest: URL_TEST_DEFAUT
 };
 
 // ---------------------------------------------------------------------------
@@ -340,7 +344,9 @@ function normaliser(brut, contexte = {}) {
       dossierProd: texte(ws.dossierProd) || WEBSERVICES_DEFAUT.dossierProd,
       msbuild: texte(ws.msbuild),
       configuration: texte(ws.configuration) || WEBSERVICES_DEFAUT.configuration,
-      urlTest: texte(ws.urlTest)
+      // v7 : l'adresse de test arrive préremplie. Une adresse vidée exprès
+      // après la v7 reste vide.
+      urlTest: versionSource < 7 && !texte(ws.urlTest) ? URL_TEST_DEFAUT : texte(ws.urlTest)
     }
   };
 }

@@ -1745,9 +1745,12 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             </p>
           <//>
           <p>
-            <strong>Le WebService répond-il ?</strong> Avec une adresse de test dans les réglages
-            (<span class="mono">http://serveur/{ws}/</span>), l'outil appelle chaque WebService juste après sa mise en
-            production et le dit dans le rapport. Le bouton <strong>Tester</strong> fait la même chose à tout moment.
+            <strong>Le WebService tourne-t-il, et quelle version ?</strong> L'outil appelle la route
+            <span class="mono">${'https://vmsvriis01.process.lo/{ws}/api/Informations'}</span> (modifiable dans les
+            réglages) de chaque WebService. Elle répond la version qu'IIS a réellement chargée et le mode de compilation.
+            Dans la liste, un WS qui ne répond pas ou qui tourne en DEBUG est signalé, et l'étape Version montre la
+            version chargée à côté de celle de la DLL. Juste après une mise en production, le rapport dit si le WS annonce
+            bien la nouvelle version, en RELEASE. Le bouton <strong>Tester</strong> refait l'appel à tout moment.
           </p>
           <p>
             <strong>DLL partagées</strong>, en haut de la liste : un tableau de la version de DefinitionGlobale, Outils,

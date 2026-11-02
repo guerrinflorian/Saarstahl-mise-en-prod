@@ -124,7 +124,8 @@ contextBridge.exposeInMainWorld('avmdf', {
     /** Version de chaque DLL partagée dans le bin de chaque WebService en production. */
     matrice: () => ipcRenderer.invoke('ws:matrice'),
     /** Appelle l'adresse de test du WebService. */
-    tester: (nom) => ipcRenderer.invoke('ws:tester', { nom }),
+    tester: (nom, options = {}) =>
+      ipcRenderer.invoke('ws:tester', { nom, silencieux: Boolean(options.silencieux), delai: options.delai }),
     /** Contrôles préalables : rien n'est écrit. */
     preflight: (parametres) => ipcRenderer.invoke('ws:preflight', parametres),
     executer: (parametres) => ipcRenderer.invoke('ws:executer', parametres),

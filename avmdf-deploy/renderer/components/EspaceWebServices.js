@@ -47,6 +47,14 @@ function formaterDuree(ms) {
   return `${Math.floor(secondes / 60)} min ${String(secondes % 60).padStart(2, '0')} s`;
 }
 
+/** Deux numéros de version différents ? (parties manquantes = 0) */
+function webservicesVersionDifferente(a, b) {
+  const parties = (v) => String(v || '').split('.').map((x) => Number.parseInt(x, 10) || 0).concat([0, 0, 0, 0]).slice(0, 4);
+  const x = parties(a);
+  const y = parties(b);
+  return x.some((n, i) => n !== y[i]);
+}
+
 function etatCompilation(compilation, enCours) {
   if (enCours) return { classe: 'encours', texte: 'compilation…' };
   if (!compilation) return null;
@@ -107,6 +115,16 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
       }
       setInventaire({ etat: 'pret', donnees: reponse });
       if (onRacines) onRacines(reponse.racines);
+      // Chaque WS est interrogé en fond : la version qu'IIS a réellement
+      // chargée, et le mode de compilation, s'affichent dès qu'ils arrivent.
+      if (reponse.urlTest) {
+        for (const ws of reponse.webservices) {
+          setTests((t) => ({ ...t, [ws.nom]: { enCours: true } }));
+          window.avmdf.webservices.tester(ws.nom, { silencieux: true, delai: 15000 }).then((r) => {
+            setTests((t) => ({ ...t, [ws.nom]: r.ok ? r.test : null }));
+          });
+        }
+      }
       // Les compilations encore en mémoire côté processus principal sont
       // reprises : changer d'onglet ne fait rien perdre.
       const reprises = {};
@@ -296,9 +314,14 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
       return;
     }
     setTests((t) => ({ ...t, [nom]: reponse.test }));
+    const infos = reponse.test.infos;
     notifier({
-      type: reponse.test.ok ? 'succes' : 'erreur',
-      titre: reponse.test.ok ? `${nom} répond.` : `${nom} ne répond pas.`,
+      type: reponse.test.ok && !(infos && infos.mode === 'DEBUG') ? 'succes' : 'erreur',
+      titre: reponse.test.ok
+        ? infos
+          ? `${nom} répond : version ${infos.version}${infos.mode ? ', ' + infos.mode : ''}.`
+          : `${nom} répond.`
+        : `${nom} ne répond pas.`,
       texte: `${reponse.test.url} : ${reponse.test.statut ? 'HTTP ' + reponse.test.statut : reponse.test.erreur} en ${Math.round(reponse.test.duree / 100) / 10} s`
     });
   }
@@ -467,6 +490,11 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
                             </div>
                             <div class="ws-ligne-etats">
                               <span class=${'ws-etat ws-etat-' + ws.etat} title=${ws.raison || ''}>${LIBELLES_ETAT[ws.etat] || ws.etat}</span>
+                              ${tests[ws.nom] && !tests[ws.nom].enCours && !tests[ws.nom].ok
+                                ? html`<span class="ws-etat ws-etat-version-ancienne" title=${tests[ws.nom].url + ' : ' + (tests[ws.nom].erreur || '')}>ne répond pas</span>`
+                                : tests[ws.nom] && tests[ws.nom].infos && tests[ws.nom].infos.mode === 'DEBUG'
+                                  ? html`<span class="ws-etat ws-etat-version-ancienne" title="Le WS en production annonce un mode de compilation DEBUG">DEBUG en prod</span>`
+                                  : null}
                               ${etatC
                                 ? html`<span class=${'ws-compil ws-compil-' + etatC.classe}>${etatC.texte}</span>`
                                 : enFile
@@ -816,6 +844,20 @@ function DetailWebService({
               </div>
             </div>
             <div class="ws-infos attenue">
+              ${test && test.infos
+                ? html`<div>
+                    Chargée par IIS (api/Informations) :
+                    <span class=${'mono' + (test.infos.mode === 'DEBUG' ? ' rouge' : '')}>
+                      ${test.infos.version}${test.infos.mode ? ' · ' + test.infos.mode : ''}
+                    </span>
+                    ${ws.versionProd && webservicesVersionDifferente(test.infos.version, ws.versionProd)
+                      ? html`<span class="rouge"> · différente de la DLL en production (${ws.versionProd}) : IIS n'a peut-être pas rechargé le WS</span>`
+                      : null}
+                    ${test.infos.mode === 'DEBUG' ? html`<span class="rouge"> · le WS tourne en DEBUG en production</span>` : null}
+                  </div>`
+                : test && !test.enCours && !test.ok
+                  ? html`<div class="rouge">Ne répond pas : ${test.url} (${test.erreur || 'HTTP ' + test.statut})</div>`
+                  : null}
               ${ws.dateProd
                 ? html`<div>DLL en production datée du <span class="mono">${formaterDate(ws.dateProd)}</span></div>`
                 : null}
@@ -1345,10 +1387,21 @@ function RapportWebServices({ rapport, onFermer, onReveler, onOuvrirHistorique }
               ${r.erreur ? html`<div class="encart encart-danger" style="margin:6px 0">${r.erreur}</div>` : null}
               ${r.test
                 ? r.test.ok
-                  ? html`<div class="encart encart-succes" style="margin:6px 0">
-                      <strong>Le WebService répond</strong> (HTTP ${r.test.statut}, ${Math.round(r.test.duree / 100) / 10} s) :
-                      <span class="mono">${r.test.url}</span>
-                    </div>`
+                  ? r.test.versionOk === false || (r.test.infos && r.test.infos.mode === 'DEBUG')
+                    ? html`<div class="encart encart-danger" style="margin:6px 0">
+                        <strong>Le WebService répond, mais annonce la version ${r.test.infos.version}${r.test.infos.mode ? ' en ' + r.test.infos.mode : ''}</strong>
+                        ${r.test.versionOk === false ? html` au lieu de ${r.test.versionAttendue}` : null}.
+                        ${r.test.versionOk === false
+                          ? ' IIS n\'a peut-être pas encore rechargé la DLL : retestez dans quelques secondes (bouton « Tester »), sinon recyclez le pool d\'applications.'
+                          : ' Le WS a été compilé en DEBUG : vérifiez la configuration dans Réglages → WebServices.'}
+                      </div>`
+                    : html`<div class="encart encart-succes" style="margin:6px 0">
+                        <strong>Le WebService répond</strong>
+                        ${r.test.infos
+                          ? html` et annonce la version <span class="mono">${r.test.infos.version}</span>${r.test.infos.mode ? ' en ' + r.test.infos.mode : ''} : la nouvelle DLL tourne.`
+                          : html` (HTTP ${r.test.statut}).`}
+                        <span class="attenue"> ${Math.round(r.test.duree / 100) / 10} s · <span class="mono">${r.test.url}</span></span>
+                      </div>`
                   : html`<div class="encart encart-danger" style="margin:6px 0">
                       <strong>Le WebService ne répond pas</strong> (${r.test.statut ? 'HTTP ' + r.test.statut : r.test.erreur}) :
                       <span class="mono">${r.test.url}</span>. Regardez le journal d'événements IIS, ou revenez en arrière depuis

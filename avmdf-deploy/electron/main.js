@@ -2474,11 +2474,20 @@ function handlersWebServices() {
     if (!url) {
       return echec(
         'Aucune adresse de test configurée.',
-        'Renseignez « Adresse de test » dans Réglages → WebServices, par exemple http://serveur/{ws}/'
+        'Renseignez « Adresse de test » dans Réglages → WebServices, par exemple https://serveur/{ws}/api/Informations'
       );
     }
-    const test = await webservice.testerUrl(url);
-    carnet.ecrire(test.ok ? 'INFO' : 'ALERTE', `test de ${parametres.nom} : ${url} → ${test.ok ? 'répond' : 'ne répond pas'} (${test.statut || test.erreur})`);
+    // Silencieux : la lecture de la liste interroge chaque WS pour afficher la
+    // version chargée par IIS ; inutile d'en remplir le journal.
+    const delai = Math.min(60000, Math.max(2000, Number(parametres.delai) || 60000));
+    const test = await webservice.testerUrl(url, delai);
+    if (!parametres.silencieux) {
+      carnet.ecrire(
+        test.ok ? 'INFO' : 'ALERTE',
+        `test de ${parametres.nom} : ${url} → ${test.ok ? 'répond' : 'ne répond pas'} (${test.statut || test.erreur})` +
+          (test.infos ? ` - version ${test.infos.version} ${test.infos.mode || ''}` : '')
+      );
+    }
     return succes({ test });
   });
 
@@ -2632,9 +2641,16 @@ function handlersWebServices() {
         if (!simulation && url && !r.echecs) {
           emettre('ws:progression', { nom: entree.nom, phase: 'test', index, total: plans.length });
           test = await webservice.testerUrl(url);
+          // La route api/Informations dit quelle version IIS a vraiment
+          // chargée : c'est la preuve que la nouvelle DLL tourne.
+          test.versionAttendue = entree.versionCompilee || null;
+          if (test.infos && test.versionAttendue) {
+            test.versionOk = webservice.comparerVersions(test.infos.version, test.versionAttendue) === 0;
+          }
           carnet.ecrire(
-            test.ok ? 'INFO' : 'ERREUR',
-            `${entree.nom} après mise en production : ${url} → ${test.ok ? 'répond' : 'NE RÉPOND PAS'} (${test.statut || test.erreur})`
+            test.ok && test.versionOk !== false ? 'INFO' : 'ERREUR',
+            `${entree.nom} après mise en production : ${url} → ${test.ok ? 'répond' : 'NE RÉPOND PAS'} (${test.statut || test.erreur})` +
+              (test.infos ? ` - version annoncée ${test.infos.version} ${test.infos.mode || ''}, attendue ${test.versionAttendue}` : '')
           );
         }
         resultats.push({

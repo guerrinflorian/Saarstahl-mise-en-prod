@@ -821,9 +821,14 @@ sont comptés ; en Front, tous les autres.
   sera en production : signalé. Les assemblies du framework (GAC) ne sont pas attendues dans le bin.
 - **DLL partagées** : tableau des versions de chaque DLL présente dans au moins deux bin de
   production, hors bibliothèques tierces (System, Microsoft, Newtonsoft, Syncfusion…).
-- **Test après mise en production** : `webservices.urlTest` (`{ws}` remplacé par le nom). Une
-  réponse HTTP sous 500 vaut « répond » ; une erreur 500 ou pas de réponse en 60 s vaut « ne répond
-  pas », dit dans le rapport et le journal.
+- **Test après mise en production** : `webservices.urlTest` (`{ws}` remplacé par le nom), prérempli
+  depuis la 2.4.1 avec `https://vmsvriis01.process.lo/{ws}/api/Informations` (version 7 des
+  réglages). Une réponse HTTP sous 500 vaut « répond » ; une erreur 500 ou pas de réponse en 60 s
+  vaut « ne répond pas ». Quand la réponse est celle de la route Informations
+  (`{"Donnees":[{"Nom":…,"Version":"2.0.0.3","ModeCompilation":"RELEASE"}],…}`), la version
+  annoncée est comparée à la version compilée : le rapport dit si la nouvelle DLL tourne vraiment,
+  et signale un mode DEBUG. La liste interroge aussi chaque WS en fond (15 s au plus) pour
+  afficher la version chargée par IIS.
 
 ### TFS (2.4.0)
 
