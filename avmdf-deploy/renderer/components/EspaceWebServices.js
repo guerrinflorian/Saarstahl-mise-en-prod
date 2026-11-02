@@ -103,6 +103,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
   const [menu, setMenu] = useState(null);
   const [matrice, setMatrice] = useState(null);
   const [tests, setTests] = useState({});
+  const [codeDe, setCodeDe] = useState(null);
   const arretDemande = useRef(false);
 
   // -- Inventaire -------------------------------------------------------------
@@ -344,6 +345,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
     else if (action === 'archive' && dernier) reponse = await window.avmdf.systeme.reveler(dernier.dossierSauvegarde);
     else if (action === 'historique') onOuvrirHistorique();
     else if (action === 'tester') tester(ws.nom);
+    else if (action === 'code') setCodeDe(ws);
     else if (action === 'copier') {
       const texte = `${ws.nom} ${ws.versionProd || '?'} -> ${ws.versionLocale || '?'}`;
       reponse = await window.avmdf.systeme.copier(texte);
@@ -569,6 +571,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
               tfsActif=${donnees.tfsActif}
               test=${tests[wsActif.nom]}
               onTester=${() => tester(wsActif.nom)}
+              onCode=${() => setCodeDe(wsActif)}
             />`
           : html`<div class="etat-vide">
               <div class="etat-vide-icone"><${IconeServeur} /></div>
@@ -700,6 +703,15 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
       ? html`<${MatriceDll} matrice=${matrice} onFermer=${() => setMatrice(null)} />`
       : null}
 
+    ${codeDe
+      ? html`<${ComparateurCode}
+          ws=${codeDe}
+          notifier=${notifier}
+          onEchec=${(reponse) => notifierEchec(reponse, 'Comparaison du code impossible.')}
+          onFermer=${() => setCodeDe(null)}
+        />`
+      : null}
+
     ${diff
       ? html`<div class="voile" role="dialog" aria-modal="true" aria-label="Écart avec la production">
           <div class="modale modale-plein">
@@ -711,7 +723,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
             />
             <div class="historique-diff">
               <${GardeRendu}>
-                <${VueDiff} diff=${diff.donnees} onOuvrirExterne=${() => {}} onNotifier=${notifier} inversable=${false} />
+                <${VueDiff} diff=${{ etat: 'pret', donnees: diff.donnees }} onOuvrirExterne=${() => {}} onNotifier=${notifier} inversable=${false} />
               <//>
             </div>
           </div>
@@ -742,7 +754,8 @@ function DetailWebService({
   urlTest,
   tfsActif,
   test,
-  onTester
+  onTester,
+  onCode
 }) {
   const [journalOuvert, setJournalOuvert] = useState(false);
   const [passagesOuverts, setPassagesOuverts] = useState(false);
@@ -813,6 +826,17 @@ function DetailWebService({
         <span title=${ws.dossierProd}>${ws.dossierProd}</span>
       </div>
       <div style="flex:1"></div>
+      <button
+        type="button"
+        class="btn btn-plat"
+        disabled=${!ws.referenceSources}
+        title=${ws.referenceSources
+          ? `Le code VB local comparé, fichier par fichier et ligne à ligne, aux sources livrées le ${new Date(ws.referenceSources.date).toLocaleString('fr-FR')}`
+          : 'Pas encore de sources livrées : elles sont archivées à chaque mise en production par l\'outil. En attendant, compilez : la liste des méthodes modifiées s\'affiche sous les fichiers.'}
+        onClick=${onCode}
+      >
+        <${IconeCouches} /> Code ↔ prod
+      </button>
       ${urlTest
         ? html`<button
             type="button"
@@ -976,6 +1000,12 @@ function DetailWebService({
                       Version compilée <span class="mono ws-version-neuve">${compilation.versionCompilee || '?'}</span>
                       ${compilation.sortie
                         ? html` · <button type="button" class="btn btn-mini btn-plat" onClick=${() => onReveler(compilation.sortie)}>Ouvrir le dossier compilé</button>`
+                        : null}
+                      ${compilation.sourcesFigees
+                        ? html`<div class="attenue" style="font-size:12px">
+                            Les sources compilées sont mises de côté : elles rejoindront l'archive AVMDF à la mise en production, et
+                            serviront de référence pour « Code ↔ prod ».
+                          </div>`
                         : null}
                     </div>`
                   : html`<div class="encart encart-danger">
@@ -1533,6 +1563,12 @@ function MenuWebService({ menu, coche, occupe, urlTest, onFermer, onAction }) {
       titre: dernier ? dernier.dossierSauvegarde : 'Aucun passage par MEPFront pour ce WebService'
     },
     { separateur: true },
+    {
+      action: 'code',
+      libelle: 'Comparer le code avec la production',
+      actif: Boolean(ws.referenceSources),
+      titre: ws.referenceSources ? '' : 'Les sources sont archivées à chaque mise en production par l\'outil : disponible après la prochaine'
+    },
     { action: 'tester', libelle: 'Tester : le WebService répond-il ?', actif: Boolean(urlTest), titre: urlTest ? '' : 'Renseignez l\'adresse de test dans Réglages → WebServices' },
     { action: 'historique', libelle: 'Ouvrir l\'historique', actif: true },
     { action: 'copier', libelle: 'Copier « nom version prod -> version locale »', actif: true }
@@ -1623,6 +1659,29 @@ function ControlesWebService({ comparaison, references }) {
       </div>
 
       <div class="ws-controle">
+        <div class="ws-controle-titre">Code modifié, méthode par méthode</div>
+        ${!comparaison.methodes || !comparaison.methodes.length
+          ? html`<div class="attenue">Aucune de nos DLL ne change, ou leur code est identique à celui de la production.</div>`
+          : comparaison.methodes.map(
+              (m) => html`<div key=${m.dll} style="margin-bottom:6px">
+                <div class="mono">${m.dll}</div>
+                ${!m.modifiees.length && !m.ajoutees.length && !m.retirees.length
+                  ? html`<div class="attenue">Même code que la production : la DLL a seulement été recompilée.</div>`
+                  : html`<div class="ws-api mono">
+                      ${m.modifiees.map((x) => html`<div key=${'m' + x}><span class="compteur-modifie">M</span> ${x}</div>`)}
+                      ${m.ajoutees.map((x) => html`<div key=${'a' + x}><span class="compteur-nouveau">+</span> ${x}</div>`)}
+                      ${m.retirees.map((x) => html`<div key=${'r' + x} class="rouge">− ${x}</div>`)}
+                    </div>`}
+              </div>`
+            )}
+        <div class="attenue" style="margin-top:4px">
+          Lu dans le code compilé de la DLL en production et de la DLL compilée : on sait quelles méthodes changent, pas
+          quelles lignes. Pour les lignes : « Code ↔ prod » en haut, dès qu'une mise en production par l'outil a archivé les
+          sources.
+        </div>
+      </div>
+
+      <div class="ws-controle">
         <div class="ws-controle-titre">DLL nécessaires</div>
         ${references === null
           ? html`<div class="attenue">Vérification…</div>`
@@ -1694,6 +1753,103 @@ function MatriceDll({ matrice, onFermer }) {
                   </div>
                 `}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Comparateur de code : sources locales ↔ sources livrées en production
+// ---------------------------------------------------------------------------
+
+const LIBELLES_CODE = { modifie: 'modifié', nouveau: 'nouveau en local', orphelin: 'absent en local' };
+
+function ComparateurCode({ ws, notifier, onEchec, onFermer }) {
+  const [etat, setEtat] = useState({ etape: 'chargement' });
+  const [choisi, setChoisi] = useState(null);
+  const [diff, setDiff] = useState(null);
+
+  useEffect(() => {
+    let abandonne = false;
+    window.avmdf.webservices.code(ws.nom).then((reponse) => {
+      if (abandonne) return;
+      if (!reponse.ok) {
+        onEchec(reponse);
+        onFermer();
+        return;
+      }
+      setEtat({ etape: 'pret', reponse });
+      const premier = reponse.fichiers.find((f) => f.texte) || reponse.fichiers[0];
+      if (premier) choisir(premier);
+    });
+    return () => {
+      abandonne = true;
+    };
+  }, [ws.nom]);
+
+  async function choisir(fichier) {
+    setChoisi(fichier.cle);
+    setDiff({ chargement: true });
+    const reponse = await window.avmdf.webservices.codeDiff(ws.nom, fichier.cle);
+    if (!reponse.ok) {
+      setDiff(null);
+      onEchec(reponse);
+      return;
+    }
+    setDiff({ donnees: reponse.diff });
+  }
+
+  const reponse = etat.reponse;
+  return html`
+    <div class="voile" role="dialog" aria-modal="true" aria-label="Code local et code en production">
+      <div class="modale modale-plein">
+        <${EnTeteModale} icone=${IconeCouches} surtitre=${'WebService ' + ws.nom} titre="Code local ↔ code en production" onFermer=${onFermer}>
+          ${reponse
+            ? html`<span class="attenue">
+                référence : mise en production du ${new Date(reponse.reference.date).toLocaleString('fr-FR')}
+                ${reponse.reference.auteur ? ' par ' + reponse.reference.auteur : ''} · ${reponse.reference.demande}
+                ${reponse.reference.version ? ' · version ' + reponse.reference.version : ''}
+              </span>`
+            : null}
+        <//>
+        ${etat.etape === 'chargement'
+          ? html`<div class="modale-corps"><div class="attenue">Comparaison des sources…</div></div>`
+          : html`
+              ${reponse.decalage ? html`<div class="encart encart-alerte" style="margin:8px 12px 0">${reponse.decalage}</div>` : null}
+              <div class="code-corps">
+                <div class="code-liste">
+                  <div class="code-liste-entete attenue">
+                    ${formaterNombre(reponse.fichiers.length)} fichier(s) différent(s) · ${formaterNombre(reponse.identiques)} identique(s)
+                  </div>
+                  ${!reponse.fichiers.length
+                    ? html`<div class="etat-vide">
+                        <div class="etat-vide-titre">Le code local est celui de la production.</div>
+                        <div class="etat-vide-texte">Aucun fichier source ne diffère des sources livrées.</div>
+                      </div>`
+                    : reponse.fichiers.map(
+                        (f) => html`<button
+                          type="button"
+                          key=${f.cle}
+                          class=${'code-fichier' + (choisi === f.cle ? ' actif' : '')}
+                          title=${LIBELLES_CODE[f.statut] || f.statut}
+                          onClick=${() => choisir(f)}
+                        >
+                          <span class=${'marqueur marqueur-' + f.statut}>${MARQUEURS[f.statut] || '?'}</span>
+                          <span class="mono code-fichier-chemin">${f.chemin}</span>
+                        </button>`
+                      )}
+                </div>
+                <div class="historique-diff code-diff">
+                  ${diff && diff.donnees
+                    ? html`<${GardeRendu}>
+                        <${VueDiff} diff=${{ etat: 'pret', donnees: diff.donnees }} onOuvrirExterne=${() => {}} onNotifier=${notifier} inversable=${false} />
+                      <//>`
+                    : html`<div class="etat-vide">
+                        <div class="etat-vide-texte">${diff && diff.chargement ? 'Lecture…' : 'Choisissez un fichier à gauche.'}</div>
+                      </div>`}
+                </div>
+              </div>
+            `}
       </div>
     </div>
   `;

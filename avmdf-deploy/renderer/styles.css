@@ -5909,3 +5909,59 @@ video.apercu-media {
 .ws-ligne-modifs.rouge {
   color: var(--danger);
 }
+
+/* Comparateur de code des WebServices */
+.code-corps {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.code-liste {
+  width: 360px;
+  flex: none;
+  overflow: auto;
+  border-right: 1px solid var(--separateur);
+  background: var(--panneau);
+}
+
+.code-liste-entete {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--separateur);
+  font-size: 12px;
+}
+
+.code-fichier {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--texte);
+  text-align: left;
+  cursor: pointer;
+}
+
+.code-fichier:hover {
+  background: var(--survol);
+}
+
+.code-fichier.actif {
+  background: var(--survol-fort);
+  border-left-color: var(--accent);
+}
+
+.code-fichier-chemin {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.code-diff {
+  flex: 1;
+  min-width: 0;
+}

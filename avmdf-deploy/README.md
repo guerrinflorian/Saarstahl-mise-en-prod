@@ -833,6 +833,24 @@ sont comptés ; en Front, tous les autres.
   et signale un mode DEBUG. La liste interroge aussi chaque WS en fond (15 s au plus) pour
   afficher la version chargée par IIS.
 
+### Comparer le code avec la production (2.5.0)
+
+En production il n'y a que des DLL. Deux moyens de voir ce qui change dans le code :
+
+- **Méthode par méthode, dans les DLL** : `assembly.empreintesMethodes` relit le corps IL de chaque
+  méthode, instruction par instruction, en remplaçant les jetons (appels, champs, types, chaînes)
+  par ce qu'ils désignent : deux compilations du même code donnent la même empreinte même si la
+  numérotation interne a bougé. Les types et membres générés par le compilateur (fermetures,
+  lambdas) sont écartés. Calculé à la compilation pour chacune de nos DLL modifiées (hors
+  bibliothèques tierces) : méthodes modifiées, ajoutées, retirées.
+- **Ligne à ligne, dans les sources** : à chaque compilation, les sources du projet et des projets
+  qu'il référence (sans `bin`, `obj`, `packages`…) sont figées dans `%TEMP%\MEPFront-WS\<WS>-sources`
+  avant MSBuild. À la mise en production réelle, elles sont copiées dans
+  `<sprint>\_donnees-outil\sources\<WS>_<horodatage>` et le manifeste les cite
+  (`webservice.sources`). « Code ↔ prod » compare les sources locales à celles de la dernière mise
+  en production non défaite par un retour arrière (`referenceSources`), et signale quand la
+  production a changé depuis (version de la DLL différente de celle de la référence).
+
 ### TFS (2.4.0)
 
 `electron/core/tfs.js` lance `tf.exe status <dossier> /recursive /format:brief /noprompt` et lit les

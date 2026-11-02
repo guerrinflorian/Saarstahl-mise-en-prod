@@ -320,8 +320,12 @@ function lireProjet(contenu, cheminProjet) {
   const references = [];
   const motif = /<ProjectReference\s+Include="([^"]+)"/gi;
   let trouve;
+  // Chemins Windows en exploitation ; chemins POSIX quand on exerce le module
+  // ailleurs (tests).
+  const p = cheminProjet.includes('\\') ? path.win32 : path.posix;
   while ((trouve = motif.exec(contenu))) {
-    references.push(path.win32.dirname(path.win32.join(path.win32.dirname(cheminProjet), trouve[1])));
+    const inclus = p === path.posix ? trouve[1].replace(/\\/g, '/') : trouve[1];
+    references.push(p.dirname(p.join(p.dirname(cheminProjet), inclus)));
   }
   return {
     nomProjet: nomFichier,
@@ -998,7 +1002,208 @@ async function comparerSortie({ sortie, prod, assemblyName = null, concurrence =
     }
   }
 
-  return { fichiers, conserves, binConserve, api, config, ignores: gauche.ignores.concat(droite.ignores) };
+  // Code modifié, méthode par méthode, dans chaque DLL de nos projets qui
+  // change (les bibliothèques tierces sont l'affaire de NuGet).
+  const methodes = [];
+  for (const f of fichiers) {
+    if (f.statut !== STATUT_MODIFIE || !/^bin\\[^\\]+\.dll$/i.test(f.chemin)) continue;
+    if (TIERCES.test(path.basename(f.chemin)) || !f.local.meta || !f.prod || !f.prod.meta) continue;
+    try {
+      const ecart = assembly.comparerMethodes(
+        await fsp.readFile(cheminLong(f.prod.absolu)),
+        await fsp.readFile(cheminLong(f.local.absolu))
+      );
+      if (ecart) methodes.push({ dll: f.chemin, ...ecart });
+    } catch (err) {
+      /* DLL illisible : la comparaison fichier par fichier reste */
+    }
+  }
+
+  return { fichiers, conserves, binConserve, api, config, methodes, ignores: gauche.ignores.concat(droite.ignores) };
+}
+
+// ---------------------------------------------------------------------------
+// Sources livrées : le code VB qui tourne en production
+// ---------------------------------------------------------------------------
+
+/** Fichiers sources qui se lisent ligne à ligne dans le comparateur. */
+const EXTENSIONS_SOURCES_TEXTE = new Set([
+  '.vb', '.cs', '.config', '.asax', '.aspx', '.ascx', '.asmx', '.svc', '.master', '.xml', '.json', '.cshtml', '.vbhtml',
+  '.js', '.css', '.resx', '.settings', '.vbproj', '.csproj', '.sql', '.txt', '.htm', '.html', '.xsd', '.tt', '.edmx'
+]);
+
+/**
+ * Dossiers de sources qui composent un WebService : son projet et les
+ * projets qu'il référence (OutilsWebService…), chacun avec son chemin
+ * relatif au dossier des WebServices - c'est sous ce nom qu'il est rangé.
+ */
+function dossiersSources(ws, racineLocale) {
+  const dossiers = [ws.dossierProjet, ...(ws.projetsReferences || [])];
+  const vus = new Set();
+  const resultat = [];
+  for (const dossier of dossiers) {
+    const cle = dossier.toLowerCase();
+    if (vus.has(cle)) continue;
+    vus.add(cle);
+    let relatif = racineLocale ? path.relative(racineLocale, dossier) : '';
+    if (!relatif || relatif.startsWith('..') || path.isAbsolute(relatif)) relatif = path.basename(dossier);
+    resultat.push({ dossier, relatif: relatif.split(/[\\/]+/).join('\\') });
+  }
+  return resultat;
+}
+
+async function inventaireSources(dossiers, concurrence = 4) {
+  const entrees = new Map();
+  for (const { dossier, relatif } of dossiers) {
+    const lu = await parcourir(dossier, {
+      dossiersExclus: DOSSIERS_HORS_SOURCES,
+      fichiersExclus: FICHIERS_HORS_SOURCES,
+      concurrence
+    });
+    for (const entree of lu.entrees.values()) {
+      const chemin = relatif + '\\' + entree.chemin;
+      entrees.set(chemin.toLowerCase(), { ...entree, chemin });
+    }
+  }
+  return entrees;
+}
+
+/**
+ * Copie les sources d'un WebService (projet et bibliothèques référencées,
+ * sans bin ni obj) dans un dossier. Sert deux fois : à la compilation, vers
+ * le dossier temporaire, pour figer exactement ce qui a été compilé ; à la
+ * mise en production, de là vers les archives AVMDF.
+ */
+async function copierSources({ dossiers, destination, concurrence = 4 }) {
+  const bilan = { fichiers: 0, octets: 0, erreurs: [] };
+  const entrees = await inventaireSources(dossiers, concurrence);
+  await pool(Array.from(entrees.values()), concurrence, async (entree) => {
+    const cible = path.join(destination, ...entree.chemin.split(/[\\/]/));
+    try {
+      await fsp.mkdir(cheminLong(path.dirname(cible)), { recursive: true });
+      await fsp.copyFile(cheminLong(entree.absolu), cheminLong(cible));
+      const etat = await fsp.stat(cheminLong(entree.absolu));
+      await fsp.utimes(cheminLong(cible), etat.atime, etat.mtime);
+      bilan.fichiers += 1;
+      bilan.octets += entree.taille;
+    } catch (err) {
+      bilan.erreurs.push(`${entree.chemin} : ${raisonLisible(err)}`);
+    }
+  });
+  return bilan;
+}
+
+/** Copie un dossier de sources déjà figé (dossier temporaire → archives). */
+async function copierDossier({ source, destination, concurrence = 4 }) {
+  const bilan = { fichiers: 0, octets: 0, erreurs: [] };
+  const { entrees, racineInaccessible } = await parcourir(source, { concurrence });
+  if (racineInaccessible) {
+    bilan.erreurs.push(`${source} : ${racineInaccessible}`);
+    return bilan;
+  }
+  await pool(Array.from(entrees.values()), concurrence, async (entree) => {
+    const cible = path.join(destination, ...entree.chemin.split(/[\\/]/));
+    try {
+      await fsp.mkdir(cheminLong(path.dirname(cible)), { recursive: true });
+      const temporaire = cible + '.avmdf-tmp';
+      await fsp.copyFile(cheminLong(entree.absolu), cheminLong(temporaire));
+      await fsp.rename(cheminLong(temporaire), cheminLong(cible));
+      const etat = await fsp.stat(cheminLong(entree.absolu));
+      await fsp.utimes(cheminLong(cible), etat.atime, etat.mtime);
+      bilan.fichiers += 1;
+      bilan.octets += entree.taille;
+    } catch (err) {
+      bilan.erreurs.push(`${entree.chemin} : ${raisonLisible(err)}`);
+    }
+  });
+  return bilan;
+}
+
+/**
+ * Compare les sources locales d'un WebService aux sources livrées lors de
+ * sa dernière mise en production.
+ *
+ * @returns {Promise<{ fichiers: object[], identiques: number }>}
+ *   statut : modifie, nouveau (seulement en local), orphelin (seulement dans les sources livrées)
+ */
+async function comparerSources({ dossiers, reference, concurrence = 4 }) {
+  const locales = await inventaireSources(dossiers, concurrence);
+  const livre = await parcourir(reference, { concurrence });
+  if (livre.racineInaccessible) {
+    throw Object.assign(new Error(`sources livrées illisibles (${livre.racineInaccessible}) : ${reference}`), { code: 'EREF' });
+  }
+  const livrees = new Map();
+  for (const entree of livre.entrees.values()) livrees.set(entree.chemin.toLowerCase(), entree);
+
+  const fichiers = [];
+  let identiques = 0;
+  const texte = (chemin) => EXTENSIONS_SOURCES_TEXTE.has(path.extname(chemin).toLowerCase());
+  await pool(Array.from(locales.entries()), concurrence, async ([cle, local]) => {
+    const prod = livrees.get(cle);
+    const fiche = {
+      cle,
+      chemin: local.chemin,
+      texte: texte(local.chemin),
+      local: { absolu: local.absolu, taille: local.taille, mtimeMs: local.mtimeMs },
+      prod: prod ? { absolu: prod.absolu, taille: prod.taille, mtimeMs: prod.mtimeMs } : null,
+      statut: STATUT_NOUVEAU
+    };
+    if (prod) {
+      const meme = prod.taille === local.taille && (await hashFichier(prod.absolu)) === (await hashFichier(local.absolu));
+      if (meme) {
+        identiques += 1;
+        return;
+      }
+      fiche.statut = STATUT_MODIFIE;
+    }
+    fichiers.push(fiche);
+  });
+  for (const [cle, prod] of livrees) {
+    if (locales.has(cle)) continue;
+    fichiers.push({
+      cle,
+      chemin: prod.chemin,
+      texte: texte(prod.chemin),
+      local: null,
+      prod: { absolu: prod.absolu, taille: prod.taille, mtimeMs: prod.mtimeMs },
+      statut: 'orphelin'
+    });
+  }
+  fichiers.sort((a, b) => a.chemin.localeCompare(b.chemin, 'fr', { sensitivity: 'base' }));
+  return { fichiers, identiques };
+}
+
+/**
+ * Les sources qui tournent en production : celles de la dernière mise en
+ * production par l'outil, en sautant celles qui ont été défaites par un
+ * retour arrière.
+ *
+ * @param {object[]} manifestes manifestes de ce WebService, du plus récent au plus ancien
+ */
+function referenceSources(manifestes) {
+  const restaures = new Set(
+    manifestes
+      .filter((m) => m.operation === 'restauration' && m.restaureDepuis && !m.simulation)
+      .map((m) => String(m.restaureDepuis).toLowerCase())
+  );
+  for (const m of manifestes) {
+    if (m.simulation || m.operation === 'restauration') continue;
+    if (restaures.has(String(m.chemin || '').toLowerCase())) continue;
+    if (m.webservice && m.webservice.sources) {
+      return {
+        chemin: m.webservice.sources,
+        date: m.date,
+        auteur: m.auteur || null,
+        demande: m.demande,
+        sprint: m.sprint,
+        version: m.webservice.versionApres || null
+      };
+    }
+    // Une mise en production plus récente, sans sources : celles d'avant ne
+    // décrivent plus la production.
+    return null;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,6 +1579,11 @@ module.exports = {
   comparerSortie,
   selectionParDefaut,
   comparerConfig,
+  dossiersSources,
+  copierSources,
+  copierDossier,
+  comparerSources,
+  referenceSources,
   lireRedirections,
   verifierReferences,
   matriceDll,

@@ -1970,6 +1970,8 @@ let msbuildConnu = null;
 let compilationWsEnCours = null;
 /** Dossiers WebService réellement trouvés au dernier inventaire. */
 let racinesWsTrouvees = null;
+/** Dernière comparaison du code local avec les sources livrées, par WebService. */
+const comparaisonsCode = new Map();
 
 function dossierTravailWs() {
   return path.join(app.getPath('temp'), 'MEPFront-WS');
@@ -2019,12 +2021,14 @@ function compilationPourRenderer(nom) {
     binLocalModifie: resultat.binLocalModifie,
     paquets,
     tfs: entree.tfs || null,
+    sourcesFigees: Boolean(entree.sources),
     comparaison: comparaison
       ? {
           fichiers: comparaison.fichiers.map(fichierWsPourRenderer),
           conserves: comparaison.conserves,
           selection: webservice.selectionParDefaut(comparaison.fichiers),
           api: comparaison.api || null,
+          methodes: comparaison.methodes || [],
           config: comparaison.config || null,
           references: comparaison.fichiers.length
             ? webservice.verifierReferences(comparaison, new Set(webservice.selectionParDefaut(comparaison.fichiers)))
@@ -2098,6 +2102,7 @@ async function construirePlansWs(parametres) {
       nom,
       versionProd,
       versionCompilee: entree.resultat.versionCompilee,
+      sourcesFigees: entree.sources || null,
       plan: {
         projet: nom,
         racineLocale: entree.resultat.sortie,
@@ -2307,11 +2312,13 @@ function handlersWebServices() {
     // Dernier passage de chaque WS par l'outil, lu dans les manifestes. Un
     // partage d'archives injoignable ne doit pas empêcher la liste.
     const passages = new Map();
+    const manifestesParWs = new Map();
     try {
       const { manifestes } = await listerManifestesEnCache(actuels);
       for (const m of manifestes) {
         if (m.type !== 'webservice' || m.simulation) continue;
         const cle = String(m.projet || '').toLowerCase();
+        manifestesParWs.set(cle, (manifestesParWs.get(cle) || []).concat([m]));
         const liste = passages.get(cle) || [];
         liste.push({
           date: m.date,
@@ -2330,6 +2337,12 @@ function handlersWebServices() {
       }
     } catch (err) {
       /* historique illisible : la liste reste utile sans lui */
+    }
+    // Sources qui tournent en production, d'après la dernière mise en
+    // production par l'outil (retours arrière compris).
+    for (const ws of inventaire.webservices) {
+      const reference = webservice.referenceSources(manifestesParWs.get(ws.nom.toLowerCase()) || []);
+      ws.referenceSources = reference && avmdf.estSousRacine(reference.chemin, actuels.racines.avmdf) ? reference : null;
     }
 
     return succes({
@@ -2352,6 +2365,7 @@ function handlersWebServices() {
         dateProd: ws.dateProd || null,
         sourcesModifiees: ws.sourcesModifiees || { fichiers: [], total: 0 },
         passages: (passages.get(ws.nom.toLowerCase()) || []).slice(0, 10),
+        referenceSources: ws.referenceSources || null,
         compilation: compilationPourRenderer(ws.nom)
       })),
       bibliotheques: inventaire.bibliotheques.map((b) => ({ nom: b.nom, projet: b.projet, web: b.web, raison: b.raison })),
@@ -2390,6 +2404,21 @@ function handlersWebServices() {
     if (!msbuildConnu.chemin) return echec(msbuildConnu.erreur, 'Indiquez le chemin de MSBuild.exe dans Réglages → WebServices.');
 
     const paquets = await webservice.verifierPaquets(ws.dossierProjet);
+
+    // Les sources sont figées juste avant la compilation : ce sont exactement
+    // celles qui partiront, et elles iront dans les archives avec le passage.
+    const sourcesFigees = path.join(dossierTravailWs(), webservice.nomDeTravail(nom) + '-sources');
+    let bilanSources = null;
+    try {
+      await fsp.rm(fsindex.cheminLong(sourcesFigees), { recursive: true, force: true });
+      bilanSources = await webservice.copierSources({
+        dossiers: webservice.dossiersSources(ws, racinesWsTrouvees ? racinesWsTrouvees.locale : null),
+        destination: sourcesFigees
+      });
+    } catch (err) {
+      bilanSources = { fichiers: 0, octets: 0, erreurs: [err.message] };
+    }
+
     const signal = { annule: false };
     compilationWsEnCours = signal;
     carnet.ecrire('INFO', `compilation ${actuels.webservices.configuration} de ${nom} (${ws.projet})`);
@@ -2437,7 +2466,15 @@ function handlersWebServices() {
       };
     }
 
-    compilationsWs.set(nom, { ws, resultat, comparaison, paquets, tfs: etatTfs, date: new Date().toISOString() });
+    compilationsWs.set(nom, {
+      ws,
+      resultat,
+      comparaison,
+      paquets,
+      tfs: etatTfs,
+      sources: bilanSources && !bilanSources.erreurs.length && bilanSources.fichiers ? sourcesFigees : null,
+      date: new Date().toISOString()
+    });
     carnet.ecrire(
       resultat.ok ? 'INFO' : 'ERREUR',
       `compilation de ${nom} ${resultat.ok ? 'réussie' : 'en échec'} en ${Math.round(resultat.duree / 1000)} s` +
@@ -2460,6 +2497,85 @@ function handlersWebServices() {
     if (!entree.comparaison.binConserve) entree.comparaison.binConserve = [];
     const selection = new Set(Array.isArray(parametres.cles) ? parametres.cles : []);
     return succes({ references: webservice.verifierReferences(entree.comparaison, selection) });
+  });
+
+  // Le code VB qui tourne en production, comparé au code local : à partir
+  // des sources archivées à la dernière mise en production par l'outil.
+  gerer('ws:code', async (parametres = {}) => {
+    const nom = String(parametres.nom || '');
+    const ws = inventaireWs && inventaireWs.webservices.find((w) => w.nom === nom);
+    if (!ws) return echec(`WebService inconnu : ${nom}`, 'Rechargez la liste des WebServices.');
+    const reference = ws.referenceSources;
+    if (!reference) {
+      return echec(
+        `Pas encore de sources livrées pour ${nom}.`,
+        'Elles sont archivées à chaque mise en production faite avec l\'outil : la comparaison ligne à ligne sera possible après la prochaine. En attendant, la compilation liste les méthodes modifiées.'
+      );
+    }
+    let comparaison;
+    try {
+      comparaison = await webservice.comparerSources({
+        dossiers: webservice.dossiersSources(ws, racinesWsTrouvees ? racinesWsTrouvees.locale : null),
+        reference: reference.chemin
+      });
+    } catch (err) {
+      return echec(`Comparaison du code impossible : ${err.message}`, 'Vérifiez l\'accès au dossier des archives.', err);
+    }
+    comparaisonsCode.set(nom, comparaison);
+    // La production a pu bouger depuis, par une copie à la main.
+    const decalage =
+      reference.version && ws.versionProd && webservice.comparerVersions(reference.version, ws.versionProd) !== 0
+        ? `La production est en ${ws.versionProd}, mais les sources de référence sont celles de la ${reference.version} : une mise en production a sans doute été faite à la main depuis.`
+        : null;
+    return succes({
+      reference,
+      decalage,
+      identiques: comparaison.identiques,
+      fichiers: comparaison.fichiers.map((f) => ({
+        cle: f.cle,
+        chemin: f.chemin,
+        statut: f.statut,
+        texte: f.texte,
+        tailleLocale: f.local ? f.local.taille : null,
+        tailleProd: f.prod ? f.prod.taille : null
+      }))
+    });
+  });
+
+  gerer('ws:codeDiff', async (parametres = {}) => {
+    const actuels = reglages();
+    const comparaison = comparaisonsCode.get(String(parametres.nom || ''));
+    const fichier = comparaison && comparaison.fichiers.find((f) => f.cle === parametres.cle);
+    if (!fichier) return echec('Fichier inconnu.', 'Relancez la comparaison du code.');
+    const lire = async (chemin) => {
+      if (!chemin) return null;
+      try {
+        return await fsp.readFile(fsindex.cheminLong(chemin));
+      } catch (err) {
+        return null;
+      }
+    };
+    const [prod, local] = await Promise.all([lire(fichier.prod && fichier.prod.absolu), lire(fichier.local && fichier.local.absolu)]);
+    const extension = path.extname(fichier.chemin).toLowerCase();
+    const resultat = textdiff.comparerTampons(prod, local, {
+      ignorerEspaces: actuels.options.ignorerEspaces,
+      extensionTexte: fichier.texte
+    });
+    const enveloppe = {
+      cle: fichier.cle,
+      chemin: fichier.chemin,
+      statut: fichier.statut,
+      titreGauche: 'En production (sources livrées)',
+      titreDroite: 'Local',
+      absent: { sauvegarde: !prod, prod: !local },
+      ...resultat
+    };
+    if (resultat.type === 'texte') {
+      enveloppe.groupes = textdiff.grouper(resultat.lignes);
+      delete enveloppe.lignes;
+    }
+    completerBinaire(enveloppe, extension, prod, local, {});
+    return succes({ diff: enveloppe });
   });
 
   gerer('ws:matrice', async () => {
@@ -2611,6 +2727,22 @@ function handlersWebServices() {
             resultats.push({ nom: suivant.nom, nonTraite: true, erreur: 'Non traité : le WebService précédent a échoué à l\'archivage.' });
           }
           break;
+        }
+
+        // 1 bis. Les sources compilées rejoignent les archives : c'est la
+        // référence qui permettra de comparer le code ligne à ligne avec la
+        // production, la prochaine fois.
+        if (!simulation && entree.sourcesFigees) {
+          const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const cible = path.join(entree.plan.dossierTraces, avmdf.DOSSIER_OUTIL, 'sources', `${entree.nom}_${horodatage}`);
+          if (avmdf.estSousRacine(cible, actuels.racines.avmdf)) {
+            const copie = await webservice.copierDossier({ source: entree.sourcesFigees, destination: cible });
+            if (!copie.erreurs.length) {
+              entree.plan.complements.webservice.sources = cible;
+            } else {
+              carnet.ecrire('ALERTE', `${entree.nom} : sources non archivées (${copie.erreurs.slice(0, 3).join(' ; ')})`);
+            }
+          }
         }
 
         // 2. La copie, le manifeste, le récapitulatif : ceux du front.

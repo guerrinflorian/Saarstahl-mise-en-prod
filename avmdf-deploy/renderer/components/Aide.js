@@ -1726,6 +1726,13 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
                 change de paramètres : un client qui l'appelle encore aurait une erreur.
               </li>
               <li>
+                <strong>Code modifié, méthode par méthode.</strong> Pour chacune de nos DLL qui change, la liste des
+                méthodes dont le code compilé diffère de celui de la production (M), des méthodes ajoutées (+) et
+                retirées (−). Lu dans les DLL elles-mêmes : ça marche tout de suite, pour tous les WebServices, mais dit
+                quelles méthodes changent, pas quelles lignes. « Même code que la production » : la DLL a seulement été
+                recompilée.
+              </li>
+              <li>
                 <strong>DLL nécessaires.</strong> Chaque DLL cochée trouvera-t-elle, dans le bin de production, les DLL dont
                 elle a besoin et dans la bonne version (redirections du Web.config comprises) ? C'est l'erreur « Impossible de
                 charger le fichier ou l'assembly » attrapée avant la mise en production. Recalculé à chaque case cochée.
@@ -1751,6 +1758,14 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
               DLL changent. Le fichier est retiré à la fin, même en cas d'erreur.
             </p>
           <//>
+          <p>
+            <strong>Code ↔ prod : le vrai écart, ligne à ligne.</strong> À chaque compilation, les sources du WebService et
+            des bibliothèques qu'il utilise (sans bin ni obj) sont mises de côté ; à la mise en production, elles rejoignent
+            l'archive AVMDF du passage. Ce sont les sources qui tournent en production. Le bouton <strong>Code ↔ prod</strong>,
+            en haut du détail (ou le clic droit), compare ensuite le code local à ces sources : fichiers modifiés, nouveaux,
+            absents, et l'écart ligne à ligne dans le comparateur du front. Disponible après la première mise en production
+            d'un WebService par l'outil ; un retour arrière ramène la référence au passage précédent.
+          </p>
           <p>
             <strong>Le WebService tourne-t-il, et quelle version ?</strong> L'outil appelle la route
             <span class="mono">${'https://vmsvriis01.process.lo/{ws}/api/Informations'}</span> (modifiable dans les

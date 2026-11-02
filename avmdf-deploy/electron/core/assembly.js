@@ -134,7 +134,7 @@ function localiserMetadonnees(tampon) {
   if (cli < 0) return null;
   const racine = versDecalage(tampon.readUInt32LE(cli + 8));
   if (racine < 0 || tampon.readUInt32LE(racine) !== 0x424a5342) return null; // « BSJB »
-  return racine;
+  return { racine, versDecalage };
 }
 
 /** Lit les en-têtes de flux (#~, #Strings, #Blob…) de la racine de métadonnées. */
@@ -162,8 +162,9 @@ function lireFlux(tampon, racine) {
  * @returns {{ tables: Object<number, object[]>, chaine: (i:number)=>string, blob: (i:number)=>Buffer }}
  */
 function lireTables(tampon) {
-  const racine = localiserMetadonnees(tampon);
-  if (racine === null) return null;
+  const localise = localiserMetadonnees(tampon);
+  if (localise === null) return null;
+  const { racine, versDecalage } = localise;
   const flux = lireFlux(tampon, racine);
   const tablesFlux = flux['#~'] || flux['#-'];
   const chaines = flux['#Strings'];
@@ -246,7 +247,28 @@ function lireTables(tampon) {
     return tampon.subarray(q, q + longueur);
   };
 
-  return { tables, chaine, blob };
+  // Tas des chaînes littérales du code (ldstr) : UTF-16, préfixé de sa longueur.
+  const chainesUtilisateur = flux['#US'];
+  const chaineUtilisateur = (index) => {
+    if (!chainesUtilisateur) return '';
+    let q = chainesUtilisateur.debut + index;
+    const premier = tampon[q];
+    let longueur;
+    if ((premier & 0x80) === 0) {
+      longueur = premier;
+      q += 1;
+    } else if ((premier & 0xc0) === 0x80) {
+      longueur = ((premier & 0x3f) << 8) | tampon[q + 1];
+      q += 2;
+    } else {
+      longueur = ((premier & 0x1f) << 24) | (tampon[q + 1] << 16) | (tampon[q + 2] << 8) | tampon[q + 3];
+      q += 4;
+    }
+    // Le dernier octet est un drapeau, pas un caractère.
+    return tampon.toString('utf16le', q, q + Math.max(0, longueur - 1));
+  };
+
+  return { tables, chaine, blob, chaineUtilisateur, versDecalage };
 }
 
 /** Nombre de paramètres d'une signature de méthode (II.23.2.1). */
@@ -358,4 +380,180 @@ function comparerApi(avant, apres) {
   };
 }
 
-module.exports = { analyser, analyserFichier, comparerApi, lireTables, nombreParametres };
+// ---------------------------------------------------------------------------
+// Code des méthodes
+// ---------------------------------------------------------------------------
+
+// Taille de l'opérande de chaque instruction IL (ECMA-335 III). « j » : jeton
+// de métadonnées (4 octets), remplacé par le nom qu'il désigne avant
+// comparaison - deux compilations numérotent différemment les mêmes membres.
+const OPERANDES_1 = new Map();
+const OPERANDES_2 = new Map();
+const poser = (table, codes, taille) => codes.forEach((c) => table.set(c, taille));
+poser(OPERANDES_1, [0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x1f, 0xde], 1);
+for (let c = 0x2b; c <= 0x37; c += 1) OPERANDES_1.set(c, 1);
+poser(OPERANDES_1, [0x20, 0x22, 0xdd], 4);
+for (let c = 0x38; c <= 0x44; c += 1) OPERANDES_1.set(c, 4);
+poser(OPERANDES_1, [0x21, 0x23], 8);
+poser(OPERANDES_1, [0x27, 0x28, 0x29, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x79, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f, 0x80, 0x81, 0x8c, 0x8d, 0x8f, 0xa3, 0xa4, 0xa5, 0xc2, 0xc6, 0xd0], 'j');
+OPERANDES_1.set(0x45, 'switch');
+poser(OPERANDES_2, [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e], 2);
+poser(OPERANDES_2, [0x12, 0x19], 1);
+poser(OPERANDES_2, [0x06, 0x07, 0x15, 0x16, 0x1c], 'j');
+
+/** Types et membres générés par le compilateur (fermetures, itérateurs…). */
+const GENERE = /[<>$]|^_Closure|^_Lambda|^VB\$|^\$/;
+
+/**
+ * Empreinte du code de chaque méthode d'un assembly.
+ *
+ * Le corps IL de chaque méthode est relu instruction par instruction ; les
+ * jetons (appels, champs, types, chaînes) sont remplacés par ce qu'ils
+ * désignent, de sorte que deux compilations du même code donnent la même
+ * empreinte même si les numéros internes ont bougé.
+ *
+ * @param {Buffer} tampon
+ * @returns {Map<string, string> | null} « Espace.Classe.Methode(n) » → empreinte
+ */
+function empreintesMethodes(tampon) {
+  let lu;
+  try {
+    lu = lireTables(tampon);
+  } catch (err) {
+    return null;
+  }
+  if (!lu) return null;
+  const crypto = require('crypto');
+  const { tables, chaine, blob, chaineUtilisateur, versDecalage } = lu;
+  const types = tables[T.TypeDef];
+  const methodes = tables[T.MethodDef];
+
+  // Type propriétaire de chaque méthode.
+  const proprietaire = new Array(methodes.length);
+  for (let i = 0; i < types.length; i += 1) {
+    const fin = i + 1 < types.length ? types[i + 1].methodes - 1 : methodes.length;
+    for (let m = types[i].methodes - 1; m < fin && m < methodes.length; m += 1) proprietaire[m] = i;
+  }
+  const nomTypeDef = (i) => {
+    const t = types[i];
+    const espace = chaine(t.espace);
+    return (espace ? espace + '.' : '') + chaine(t.nom);
+  };
+
+  const nomJeton = (jeton) => {
+    const table = jeton >>> 24;
+    const ligne = (jeton & 0xffffff) - 1;
+    try {
+      switch (table) {
+        case 0x70:
+          return 'str:' + chaineUtilisateur(jeton & 0xffffff);
+        case 0x01:
+          return 'type:' + chaine(tables[T.TypeRef][ligne].nom);
+        case 0x02:
+          return 'type:' + nomTypeDef(ligne);
+        case 0x04:
+          return 'champ:' + chaine(tables[T.Field][ligne].nom);
+        case 0x06:
+          return 'methode:' + (proprietaire[ligne] !== undefined ? nomTypeDef(proprietaire[ligne]) + '.' : '') + chaine(methodes[ligne].nom);
+        case 0x0a:
+          return 'membre:' + chaine(tables[T.MemberRef][ligne].nom);
+        default:
+          return 'jeton:' + table.toString(16);
+      }
+    } catch (err) {
+      return 'jeton:?';
+    }
+  };
+
+  const empreintes = new Map();
+  for (let m = 0; m < methodes.length; m += 1) {
+    const methode = methodes[m];
+    const t = proprietaire[m];
+    if (t === undefined) continue;
+    const nomType = chaine(types[t].nom);
+    const nomMethode = chaine(methode.nom);
+    if (nomType === '<Module>' || GENERE.test(nomType) || GENERE.test(nomMethode)) continue;
+
+    let cle = `${nomTypeDef(t)}.${nomMethode}(${nombreParametres(blob(methode.signature))})`;
+    for (let n = 2; empreintes.has(cle); n += 1) cle = cle.replace(/(#\d+)?$/, '#' + n);
+
+    if (!methode.rva) {
+      empreintes.set(cle, 'sans-corps');
+      continue;
+    }
+    const debut = versDecalage(methode.rva);
+    if (debut < 0) continue;
+    let code;
+    let taille;
+    if ((tampon[debut] & 0x3) === 0x2) {
+      taille = tampon[debut] >> 2;
+      code = debut + 1;
+    } else {
+      taille = tampon.readUInt32LE(debut + 4);
+      code = debut + (tampon[debut + 1] >> 4) * 4;
+    }
+
+    const hachage = crypto.createHash('sha1');
+    let p = code;
+    const fin = code + taille;
+    let lisible = true;
+    while (p < fin) {
+      let op = tampon[p];
+      let operande;
+      if (op === 0xfe) {
+        op = 0xfe00 | tampon[p + 1];
+        operande = OPERANDES_2.get(tampon[p + 1]) || 0;
+        p += 2;
+      } else {
+        operande = OPERANDES_1.has(op) ? OPERANDES_1.get(op) : 0;
+        p += 1;
+      }
+      hachage.update(op.toString(16) + ';');
+      if (operande === 'j') {
+        hachage.update(nomJeton(tampon.readUInt32LE(p)) + ';');
+        p += 4;
+      } else if (operande === 'switch') {
+        const n = tampon.readUInt32LE(p);
+        hachage.update(tampon.subarray(p, p + 4 + 4 * n));
+        p += 4 + 4 * n;
+      } else if (operande) {
+        hachage.update(tampon.subarray(p, p + operande));
+        p += operande;
+      }
+      if (p > tampon.length) {
+        lisible = false;
+        break;
+      }
+    }
+    empreintes.set(cle, lisible ? hachage.digest('hex') : 'illisible');
+  }
+  return empreintes;
+}
+
+/**
+ * Méthodes dont le code a changé entre deux versions d'un assembly.
+ * @returns {{ modifiees:string[], ajoutees:string[], retirees:string[] } | null}
+ */
+function comparerMethodes(tamponAvant, tamponApres) {
+  const avant = empreintesMethodes(tamponAvant);
+  const apres = empreintesMethodes(tamponApres);
+  if (!avant || !apres) return null;
+  const modifiees = [];
+  const ajoutees = [];
+  for (const [cle, empreinte] of apres) {
+    if (!avant.has(cle)) ajoutees.push(cle);
+    else if (avant.get(cle) !== empreinte) modifiees.push(cle);
+  }
+  const retirees = [...avant.keys()].filter((cle) => !apres.has(cle));
+  return { modifiees: modifiees.sort(), ajoutees: ajoutees.sort(), retirees: retirees.sort() };
+}
+
+module.exports = {
+  analyser,
+  analyserFichier,
+  comparerApi,
+  lireTables,
+  nombreParametres,
+  empreintesMethodes,
+  comparerMethodes
+};
