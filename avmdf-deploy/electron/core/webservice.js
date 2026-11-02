@@ -764,6 +764,100 @@ function arreterProcessus(enfant) {
  * @param {{annule:boolean, surAnnulation?:Function}} [parametres.signal]
  * @returns {Promise<object>}
  */
+// ---------------------------------------------------------------------------
+// Fichiers intermédiaires (obj\<configuration>)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dossiers `obj\<configuration>` du WebService et des projets qu'il
+ * référence. `OutDir` envoie le résultat dans le temporaire, mais MSBuild
+ * écrit toujours ses fichiers de travail (ressources, caches, liste des
+ * fichiers produits) dans le `obj\Release` de chaque projet. Le bin et
+ * `obj\Debug` du poste de développement, eux, ne sont jamais touchés.
+ */
+function dossiersIntermediaires(ws, configuration = 'Release') {
+  const projets = [ws.dossierProjet, ...(ws.projetsReferences || [])];
+  const vus = new Set();
+  return projets
+    .map((dossier) => path.join(dossier, 'obj', configuration))
+    .filter((dossier) => {
+      const cle = dossier.toLowerCase();
+      if (vus.has(cle)) return false;
+      vus.add(cle);
+      return true;
+    });
+}
+
+/**
+ * Retire l'attribut lecture seule des fichiers intermédiaires. Ils ne
+ * devraient jamais l'avoir ; ils l'ont quand le dossier `obj` a été ajouté
+ * par erreur au contrôle de source (TFS pose la lecture seule sur ce qu'il
+ * gère), et MSBuild échoue alors avec « accès refusé » (MSB3554, MSB3491).
+ *
+ * @returns {Promise<{ corriges: string[], erreurs: string[] }>}
+ */
+async function deverrouillerIntermediaires(dossiers) {
+  const bilan = { corriges: [], erreurs: [] };
+  for (const dossier of dossiers) {
+    const { entrees } = await parcourir(dossier, { concurrence: 4 });
+    for (const entree of entrees.values()) {
+      try {
+        const etat = await fsp.stat(cheminLong(entree.absolu));
+        if ((etat.mode & 0o200) === 0) {
+          await fsp.chmod(cheminLong(entree.absolu), 0o666);
+          bilan.corriges.push(entree.absolu);
+        }
+      } catch (err) {
+        bilan.erreurs.push(`${entree.absolu} : ${raisonLisible(err)}`);
+      }
+    }
+  }
+  return bilan;
+}
+
+/**
+ * Supprime les dossiers intermédiaires : MSBuild les recrée entièrement à la
+ * compilation suivante. C'est le remède quand la lecture seule n'était pas la
+ * cause (fichiers créés par un autre compte Windows, par exemple).
+ */
+async function viderIntermediaires(dossiers) {
+  const bilan = { supprimes: [], erreurs: [] };
+  for (const dossier of dossiers) {
+    try {
+      await deverrouillerIntermediaires([dossier]);
+      await fsp.rm(cheminLong(dossier), { recursive: true, force: true });
+      bilan.supprimes.push(dossier);
+    } catch (err) {
+      bilan.erreurs.push(`${dossier} : ${raisonLisible(err)}`);
+    }
+  }
+  return bilan;
+}
+
+/**
+ * Découpe une ligne d'erreur MSBuild :
+ * « origine(ligne,col): error CODE: message [projet] ».
+ */
+function lireErreurMsbuild(ligne) {
+  const trouve = /^\s*(.*?)(?:\((\d+)(?:,\d+)*\))?\s*:\s*(?:error|erreur)\s*([A-Z]+\d+)?\s*:\s*(.*?)(?:\s+\[[^\]]*\])?\s*$/i.exec(ligne);
+  if (!trouve) return { code: null, message: ligne.trim(), fichier: null, ligne: null };
+  const origine = trouve[1].trim();
+  // Les cibles de MSBuild lui-même ne disent rien d'utile : seul un fichier
+  // du projet mérite d'être cité.
+  const fichier = /\\MSBuild\\|Microsoft\.[A-Za-z.]+\.targets$/i.test(origine) ? null : origine || null;
+  return { code: trouve[3] || null, message: trouve[4].trim(), fichier, ligne: fichier && trouve[2] ? Number(trouve[2]) : null };
+}
+
+/** L'échec vient-il d'un accès refusé sur les fichiers intermédiaires ? */
+function diagnostiquer(erreurs, dossiers) {
+  const acces = erreurs.filter(
+    (e) => /^(MSB3554|MSB3491|MSB3101|MSB3021|MSB3027|MSB4018)$/i.test(e.code || '') || /acc[eè]s.*refus|access.*denied/i.test(e.message)
+  );
+  const touchesObj = acces.filter((e) => /[\\/]obj[\\/]/i.test(e.message));
+  if (!touchesObj.length) return null;
+  return { type: 'obj-acces', dossiers };
+}
+
 async function compiler(parametres) {
   const {
     msbuild,
@@ -783,19 +877,34 @@ async function compiler(parametres) {
     duree: 0,
     commande: null,
     erreurs: [],
+    erreursDetail: [],
     avertissements: 0,
     lignes: [],
     sortie: null,
     versionCompilee: null,
     binLocalModifie: [],
+    intermediaires: [],
+    deverrouilles: 0,
+    diagnostic: null,
     erreur: null
   };
+  // MSBuild répète chaque erreur et chaque avertissement dans son résumé de
+  // fin : on ne compte chaque ligne qu'une fois.
+  const erreursVues = new Set();
+  const avertissementsVus = new Set();
 
   await fsp.rm(cheminLong(dossierTravail), { recursive: true, force: true }).catch(() => {});
   await fsp.mkdir(cheminLong(dossierSortie), { recursive: true });
 
   const binLocal = path.join(ws.dossierProjet, 'bin');
   const avant = await empreinteDossier(binLocal);
+
+  // Fichiers intermédiaires en lecture seule : la cause la plus fréquente
+  // d'un « accès refusé » de MSBuild. Ils sont déverrouillés avant de
+  // compiler, sans risque - ils ne servent qu'à MSBuild.
+  resultat.intermediaires = dossiersIntermediaires(ws, configuration);
+  const deverrouillage = await deverrouillerIntermediaires(resultat.intermediaires).catch(() => ({ corriges: [] }));
+  resultat.deverrouilles = deverrouillage.corriges.length;
 
   const args = argumentsMsbuild({ projet: ws.projet, configuration, dossierSortie });
   resultat.commande = `"${msbuild}" ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`;
@@ -822,8 +931,16 @@ async function compiler(parametres) {
   const noterLigne = (ligne) => {
     resultat.lignes.push(ligne);
     if (resultat.lignes.length > 4000) resultat.lignes.splice(0, resultat.lignes.length - 4000);
-    if (/:\s*(error|erreur)\s+[A-Z]*\d*\s*:/i.test(ligne) && resultat.erreurs.length < 200) resultat.erreurs.push(ligne.trim());
-    if (/:\s*(warning|avertissement)\s+[A-Z]*\d*\s*:/i.test(ligne)) resultat.avertissements += 1;
+    const propre = ligne.trim();
+    if (/:\s*(error|erreur)\s*[A-Z]*\d*\s*:/i.test(ligne) && !erreursVues.has(propre) && resultat.erreurs.length < 200) {
+      erreursVues.add(propre);
+      resultat.erreurs.push(propre);
+      resultat.erreursDetail.push(lireErreurMsbuild(propre));
+    }
+    if (/:\s*(warning|avertissement)\s*[A-Z]*\d*\s*:/i.test(ligne) && !avertissementsVus.has(propre)) {
+      avertissementsVus.add(propre);
+      resultat.avertissements += 1;
+    }
     tampon.lot.push(ligne);
   };
 
@@ -865,10 +982,13 @@ async function compiler(parametres) {
     return resultat;
   }
   if (code !== 0) {
+    resultat.diagnostic = diagnostiquer(resultat.erreursDetail, resultat.intermediaires);
     if (!resultat.erreur) {
-      resultat.erreur = resultat.erreurs.length
-        ? `La compilation a échoué : ${resultat.erreurs.length} erreur(s).`
-        : `La compilation a échoué (code de sortie ${code}).`;
+      resultat.erreur = resultat.diagnostic
+        ? 'La compilation a échoué : MSBuild n\'a pas le droit d\'écrire ses fichiers de travail (obj\\' + configuration + ').'
+        : resultat.erreurs.length
+          ? `La compilation a échoué : ${resultat.erreurs.length} erreur(s).`
+          : `La compilation a échoué (code de sortie ${code}).`;
     }
     return resultat;
   }
@@ -1576,6 +1696,10 @@ module.exports = {
   argumentsMsbuild,
   decoderSortie,
   compiler,
+  dossiersIntermediaires,
+  deverrouillerIntermediaires,
+  viderIntermediaires,
+  lireErreurMsbuild,
   comparerSortie,
   selectionParDefaut,
   comparerConfig,

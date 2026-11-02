@@ -1697,7 +1697,9 @@ export function Aide({ onVue, onOuvrirReglages, onOuvrirHistorique, onOuvrirJour
             <p>
               Cochez un ou plusieurs WebServices, puis <strong>Compiler</strong>. MSBuild (celui de
               Visual Studio, trouvé tout seul) compile en Release dans un dossier temporaire. Le bin de
-              votre projet n'est jamais touché : il reste en Debug, plus besoin de recompiler après.
+              votre projet n'est jamais touché : il reste en Debug, plus besoin de recompiler après. Seuls les
+              fichiers de travail de MSBuild vont dans <span class="mono">${'obj\\Release'}</span> du projet ; si Windows en
+              refuse l'accès, l'outil l'explique et propose de vider ce dossier avant de recompiler.
               Les bibliothèques utilisées (OutilsWebService, OutilCryptage…) sont recompilées avec, et
               leur DLL part dans le bin du WebService.
             </p>

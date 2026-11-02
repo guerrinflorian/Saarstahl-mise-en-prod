@@ -2011,6 +2011,9 @@ function compilationPourRenderer(nom) {
     annule: resultat.annule,
     erreur: resultat.erreur,
     erreurs: resultat.erreurs,
+    erreursDetail: resultat.erreursDetail || [],
+    diagnostic: resultat.diagnostic || null,
+    deverrouilles: resultat.deverrouilles || 0,
     avertissements: resultat.avertissements,
     duree: resultat.duree,
     commande: resultat.commande,
@@ -2466,6 +2469,9 @@ function handlersWebServices() {
       };
     }
 
+    if (resultat.deverrouilles) {
+      carnet.ecrire('ALERTE', `${nom} : ${resultat.deverrouilles} fichier(s) de obj\\${actuels.webservices.configuration} étaient en lecture seule, déverrouillés avant la compilation`);
+    }
     compilationsWs.set(nom, {
       ws,
       resultat,
@@ -2482,6 +2488,34 @@ function handlersWebServices() {
         (resultat.binLocalModifie.length ? ` - ATTENTION, bin local modifié (${resultat.binLocalModifie.length} fichier(s))` : '')
     );
     return succes({ compilation: compilationPourRenderer(nom) });
+  }));
+
+  // Remède à un « accès refusé » sur les fichiers de travail de MSBuild :
+  // obj\<configuration> du WS et de ses bibliothèques est supprimé, MSBuild le
+  // recrée à la compilation suivante. Jamais rien d'autre que ces dossiers.
+  gerer('ws:viderObj', (parametres = {}) => exclusif('un nettoyage', async () => {
+    const actuels = reglages();
+    const nom = String(parametres.nom || '');
+    const ws = inventaireWs && inventaireWs.webservices.find((w) => w.nom === nom);
+    if (!ws) return echec(`WebService inconnu : ${nom}`, 'Rechargez la liste des WebServices.');
+    const configuration = actuels.webservices.configuration;
+    const racine = racinesWsTrouvees ? racinesWsTrouvees.locale : path.dirname(ws.dossierProjet);
+    const dossiers = webservice
+      .dossiersIntermediaires(ws, configuration)
+      .filter((d) => avmdf.estSousRacine(d, racine) && path.basename(path.dirname(d)).toLowerCase() === 'obj');
+    const bilan = await webservice.viderIntermediaires(dossiers);
+    carnet.ecrire(
+      bilan.erreurs.length ? 'ERREUR' : 'INFO',
+      `${nom} : obj\\${configuration} supprimé (${bilan.supprimes.length} dossier(s))` +
+        (bilan.erreurs.length ? ` - échecs : ${bilan.erreurs.join(' ; ')}` : '')
+    );
+    if (bilan.erreurs.length) {
+      return echec(
+        `Suppression impossible : ${bilan.erreurs[0]}`,
+        'Fermez Visual Studio s\'il compile ce projet, ou supprimez le dossier à la main avec un compte qui en a le droit.'
+      );
+    }
+    return succes({ supprimes: bilan.supprimes });
   }));
 
   gerer('ws:annulerCompilation', () => {

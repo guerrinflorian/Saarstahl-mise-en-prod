@@ -5965,3 +5965,32 @@ video.apercu-media {
   flex: 1;
   min-width: 0;
 }
+
+.ws-diagnostic {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dotted var(--danger-bord);
+  color: var(--texte-attenue);
+}
+
+.ws-diagnostic p {
+  margin: 0 0 6px;
+}
+
+.ws-erreurs {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.ws-erreurs li {
+  margin-bottom: 4px;
+}
+
+.ws-erreur-code {
+  margin-right: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--danger-bord);
+  border-radius: 2px;
+  font-size: 11px;
+}

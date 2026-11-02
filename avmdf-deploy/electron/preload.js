@@ -115,6 +115,8 @@ contextBridge.exposeInMainWorld('avmdf', {
     /** Compile un WebService en Release dans un dossier temporaire, puis le compare à la production. */
     compiler: (nom) => ipcRenderer.invoke('ws:compiler', { nom }),
     annulerCompilation: () => ipcRenderer.invoke('ws:annulerCompilation'),
+    /** Supprime obj\<configuration> du WS et de ses bibliothèques (MSBuild le recrée). */
+    viderObj: (nom) => ipcRenderer.invoke('ws:viderObj', { nom }),
     /** Oublie la compilation en mémoire d'un WebService. */
     oublier: (nom) => ipcRenderer.invoke('ws:oublier', { nom }),
     /** Écart ligne à ligne entre la production et le fichier compilé. */

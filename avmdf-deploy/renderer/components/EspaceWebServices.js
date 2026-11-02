@@ -296,6 +296,16 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
     }
   }
 
+  async function viderObjEtRecompiler(nom) {
+    const reponse = await window.avmdf.webservices.viderObj(nom);
+    if (!reponse.ok) {
+      notifierEchec(reponse, 'Nettoyage impossible.');
+      return;
+    }
+    notifier({ type: 'succes', titre: 'Fichiers de travail supprimés.', texte: 'Nouvelle compilation…', duree: 3000 });
+    compilerListe([nom]);
+  }
+
   async function ouvrirMatrice() {
     setMatrice({ etat: 'chargement' });
     const reponse = await window.avmdf.webservices.matrice();
@@ -572,6 +582,7 @@ export function EspaceWebServices({ simulation, onSimulation, notifier, notifier
               test=${tests[wsActif.nom]}
               onTester=${() => tester(wsActif.nom)}
               onCode=${() => setCodeDe(wsActif)}
+              onViderObj=${() => viderObjEtRecompiler(wsActif.nom)}
             />`
           : html`<div class="etat-vide">
               <div class="etat-vide-icone"><${IconeServeur} /></div>
@@ -755,7 +766,8 @@ function DetailWebService({
   tfsActif,
   test,
   onTester,
-  onCode
+  onCode,
+  onViderObj
 }) {
   const [journalOuvert, setJournalOuvert] = useState(false);
   const [passagesOuverts, setPassagesOuverts] = useState(false);
@@ -985,7 +997,12 @@ function DetailWebService({
                 ? html`<span class="attenue"> · ${formaterDuree(compilation.duree)}</span>`
                 : null}
               ${compilation && compilation.avertissements
-                ? html`<span class="attenue"> · ${formaterNombre(compilation.avertissements)} avertissement(s)</span>`
+                ? html`<span
+                    class="attenue"
+                    title="Les mêmes que dans Visual Studio pour ce projet (conflits de versions NuGet, architecture x86…). Ils ne bloquent rien ; le détail est dans le journal."
+                  >
+                    · ${formaterNombre(compilation.avertissements)} avertissement(s)
+                  </span>`
                 : null}
             </div>
             ${enCours
@@ -1011,12 +1028,56 @@ function DetailWebService({
                   : html`<div class="encart encart-danger">
                       <strong>${compilation.erreur || 'La compilation a échoué.'}</strong>
                       ${compilation.conseil ? html`<div>${compilation.conseil}</div>` : null}
-                      ${compilation.erreurs && compilation.erreurs.length
-                        ? html`<ul class="mono">
-                            ${compilation.erreurs.slice(0, 8).map((e, i) => html`<li key=${i}>${e}</li>`)}
-                          </ul>`
+                      ${compilation.diagnostic && compilation.diagnostic.type === 'obj-acces'
+                        ? html`<div class="ws-diagnostic">
+                            <p>
+                              Ce n'est pas votre code. MSBuild écrit ses fichiers de travail dans le dossier${' '}
+                              <span class="mono">obj\\${configuration}</span> de chaque projet, et Windows lui en refuse l'accès.
+                              ${compilation.deverrouilles
+                                ? ` L'outil a déjà retiré la lecture seule de ${compilation.deverrouilles} fichier(s), sans succès : ces fichiers appartiennent sans doute à un autre compte Windows, ou sont ouverts par un autre programme.`
+                                : ' Ces fichiers appartiennent sans doute à un autre compte Windows, ou sont ouverts par un autre programme.'}
+                            </p>
+                            <p>
+                              Ces dossiers ne contiennent que des fichiers temporaires, recréés à chaque compilation : on peut les
+                              supprimer sans rien perdre.
+                            </p>
+                            <ul class="mono">${compilation.diagnostic.dossiers.map((d) => html`<li key=${d}>${d}</li>`)}</ul>
+                            <button type="button" class="btn" disabled=${occupe} onClick=${onViderObj}>
+                              Vider obj\\${configuration} et recompiler
+                            </button>
+                            <div class="attenue" style="margin-top:6px">
+                              Si un dossier <span class="mono">obj</span> apparaît dans TFS (Explorateur du contrôle de code source),
+                              retirez-le : TFS met en lecture seule tout ce qu'il gère, et le problème reviendrait.
+                            </div>
+                          </div>`
                         : null}
+                      ${compilation.erreursDetail && compilation.erreursDetail.length
+                        ? html`<ul class="ws-erreurs">
+                            ${compilation.erreursDetail.slice(0, 10).map(
+                              (e, i) => html`<li key=${i}>
+                                ${e.code ? html`<span class="mono ws-erreur-code">${e.code}</span>` : null}
+                                ${e.fichier ? html`<span class="mono">${e.fichier}${e.ligne ? ` (ligne ${e.ligne})` : ''} : </span>` : null}
+                                ${e.message}
+                              </li>`
+                            )}
+                            ${compilation.erreursDetail.length > 10
+                              ? html`<li class="attenue">… et ${compilation.erreursDetail.length - 10} autres, dans le journal ci-dessous.</li>`
+                              : null}
+                          </ul>`
+                        : compilation.erreurs && compilation.erreurs.length
+                          ? html`<ul class="mono">
+                              ${compilation.erreurs.slice(0, 8).map((e, i) => html`<li key=${i}>${e}</li>`)}
+                            </ul>`
+                          : null}
                     </div>`}
+
+            ${compilation && compilation.ok && compilation.deverrouilles
+              ? html`<div class="attenue" style="margin-top:6px">
+                  ${compilation.deverrouilles} fichier(s) de <span class="mono">obj\\${configuration}</span> étaient en lecture
+                  seule : l'outil les a déverrouillés avant de compiler. Si ça se reproduit, vérifiez qu'aucun dossier
+                  <span class="mono">obj</span> n'est dans TFS.
+                </div>`
+              : null}
 
             ${compilation && compilation.paquets && compilation.paquets.manquants && compilation.paquets.manquants.length
               ? html`<div class="encart encart-alerte" style="margin-top:8px">

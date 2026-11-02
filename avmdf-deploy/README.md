@@ -878,7 +878,12 @@ MSBuild.exe <projet> /t:Build /p:Configuration=Release /p:OutDir=<temp>\MEPFront
 ```
 
 `OutDir` envoie tout, bibliothèques référencées comprises, dans le dossier temporaire : aucun bin du
-poste de développement n'est touché, il reste en Debug. L'outil le vérifie (empreinte du bin du
+poste de développement n'est touché, il reste en Debug. MSBuild écrit seulement ses fichiers de
+travail dans `obj\Release` de chaque projet (jamais `obj\Debug`). Depuis la 2.5.1, l'outil retire
+avant chaque compilation la lecture seule de ces fichiers (cas d'un dossier `obj` ajouté par erreur
+à TFS), compte une seule fois les erreurs et avertissements que MSBuild répète dans son résumé, et
+reconnaît un « accès refusé » sur `obj` (MSB3554, MSB3491…) : il l'explique et propose de vider
+`obj\Release` du WS et de ses bibliothèques avant de recompiler. L'outil le vérifie (empreinte du bin du
 projet avant / après) et le dit si jamais ce n'est pas le cas. Le site prêt à copier est
 `_PublishedWebsites\<projet>` - le même résultat qu'une publication vers un dossier, `Web.config`
 transformé compris. La sortie de MSBuild s'affiche au fil de l'eau, décodée en UTF-8 ou en page de
